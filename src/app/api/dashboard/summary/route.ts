@@ -109,7 +109,7 @@ export async function GET() {
       queryInflux<Record<string, unknown>>(`
         SELECT pulse_total
         FROM sensors
-        WHERE farm_id = '${FARM_ID}' AND device_id = '452271'
+        WHERE farm_id = '${FARM_ID}' AND device_id = '24e124136f452271'
         ORDER BY time DESC LIMIT 1
       `),
       queryInflux<WaterRow>(`
@@ -118,7 +118,7 @@ export async function GET() {
           MAX(pulse_total) - MIN(pulse_total) AS delta
         FROM sensors
         WHERE farm_id = '${FARM_ID}'
-          AND device_id = '452271'
+          AND device_id = '24e124136f452271'
           AND time > now() - INTERVAL '24 hours'
         GROUP BY bucket
         ORDER BY bucket ASC
