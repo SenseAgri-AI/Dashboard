@@ -79,7 +79,7 @@ export async function GET() {
 
   try {
     // Latest AM308 reading
-    const [latestRows, sparkRows, waterLatestRows, waterSparkRows] = await Promise.all([
+    const [latestRows, sparkRows, waterLastHourRows, waterSparkRows] = await Promise.all([
       queryInflux<Record<string, unknown>>(`
         SELECT
           AVG(temperature) AS temperature,
@@ -106,11 +106,16 @@ export async function GET() {
         GROUP BY bucket
         ORDER BY bucket ASC
       `),
-      queryInflux<Record<string, unknown>>(`
-        SELECT pulse_total
+      queryInflux<WaterRow>(`
+        SELECT
+          date_bin(INTERVAL '1 hour', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
+          MAX(pulse_total) - MIN(pulse_total) AS delta
         FROM sensors
-        WHERE farm_id = '${FARM_ID}' AND device_id = '24e124136f451854'
-        ORDER BY time DESC LIMIT 1
+        WHERE farm_id = '${FARM_ID}'
+          AND device_id = '24e124136f451854'
+          AND time > now() - INTERVAL '1 hour'
+        GROUP BY bucket
+        ORDER BY bucket ASC
       `),
       queryInflux<WaterRow>(`
         SELECT
@@ -136,8 +141,11 @@ export async function GET() {
     const co2Spark = sparkRows.map((r) => toNum(r.co2)).filter((v): v is number => v !== null);
     const tvocSpark = sparkRows.map((r) => toNum(r.tvoc)).filter((v): v is number => v !== null);
 
-    const waterCurrent = toNum((waterLatestRows[0] ?? {}).pulse_total);
+    // Use last-hour delta (litres consumed this hour) as the current reading
+    const waterLastHourDelta = toNum((waterLastHourRows[0] ?? {}).delta);
     const waterSpark = waterSparkRows.map((r) => toNum(r.delta)).filter((v): v is number => v !== null);
+    // Fall back to most recent sparkline point if last-hour query has no data
+    const waterCurrent = waterLastHourDelta ?? (waterSpark.length > 0 ? waterSpark[waterSpark.length - 1] : null);
 
     const tvocStats = stats(tvocSpark);
     const waterStats = stats(waterSpark);

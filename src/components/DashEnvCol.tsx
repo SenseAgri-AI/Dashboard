@@ -259,7 +259,7 @@ export default function DashEnvCol({ env }: { env: EnvData | null }) {
         name="Water consumption"
         current={water?.current ?? null}
         displayVal={waterDisplay}
-        unitLabel="pulses"
+        unitLabel="L / hr"
         smallReading
         sparkline={water?.sparkline ?? []}
         cfg={{
@@ -271,7 +271,7 @@ export default function DashEnvCol({ env }: { env: EnvData | null }) {
           bandColor: "#2A8E9A",
           gradId: "W",
         }}
-        note="±2σ rolling baseline · pulses until sensor calibration complete"
+        note="Litres per hour · 1 pulse = 1 litre · ±2σ rolling baseline"
       />
     </div>
   );
