@@ -81,10 +81,16 @@ export async function GET() {
     // Latest AM308 reading
     const [latestRows, sparkRows, waterLatestRows, waterSparkRows] = await Promise.all([
       queryInflux<Record<string, unknown>>(`
-        SELECT temperature, humidity, co2, tvoc, pressure
+        SELECT
+          AVG(temperature) AS temperature,
+          AVG(humidity)    AS humidity,
+          AVG(co2)         AS co2,
+          AVG(tvoc)        AS tvoc,
+          AVG(pressure)    AS pressure
         FROM sensors
-        WHERE farm_id = '${FARM_ID}' AND device_type = 'AM308-1'
-        ORDER BY time DESC LIMIT 1
+        WHERE farm_id = '${FARM_ID}'
+          AND device_type = 'AM308-1'
+          AND time > now() - INTERVAL '1 hour'
       `),
       queryInflux<SparkRow>(`
         SELECT
