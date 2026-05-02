@@ -6,7 +6,7 @@ import DashNav from "@/components/DashNav";
 import DashStatusBar from "@/components/DashStatusBar";
 import DashAlertRow, { type AlertItem } from "@/components/DashAlertRow";
 import DashEnvCol, { type EnvData } from "@/components/DashEnvCol";
-import DashMetricCol from "@/components/DashMetricCol";
+import DashMetricCol, { type ProductionData } from "@/components/DashMetricCol";
 import DashTrendsCarousel from "@/components/DashTrendsCarousel";
 
 interface DashboardSummary {
@@ -22,24 +22,36 @@ interface DashboardSummary {
 export default function DashboardPage() {
   const router = useRouter();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [production, setProduction] = useState<ProductionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchSummary = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     try {
-      const res = await fetch("/api/dashboard/summary");
-      if (res.status === 401) {
+      const [summaryRes, productionRes] = await Promise.all([
+        fetch("/api/dashboard/summary"),
+        fetch("/api/production"),
+      ]);
+
+      if (summaryRes.status === 401) {
         router.push("/login");
         return;
       }
-      if (!res.ok) {
-        const data = await res.json();
+
+      if (!summaryRes.ok) {
+        const data = await summaryRes.json();
         setError(data.error ?? "Failed to load sensor data");
         return;
       }
-      const data = await res.json();
-      setSummary(data);
+
+      const summaryData = await summaryRes.json();
+      setSummary(summaryData);
       setError(null);
+
+      if (productionRes.ok) {
+        const prodData = await productionRes.json();
+        setProduction(prodData);
+      }
     } catch {
       setError("Connection error — check your network");
     } finally {
@@ -48,10 +60,10 @@ export default function DashboardPage() {
   }, [router]);
 
   useEffect(() => {
-    fetchSummary();
-    const id = setInterval(fetchSummary, 60_000);
+    fetchAll();
+    const id = setInterval(fetchAll, 60_000);
     return () => clearInterval(id);
-  }, [fetchSummary]);
+  }, [fetchAll]);
 
   if (loading) {
     return (
@@ -109,7 +121,7 @@ export default function DashboardPage() {
           <DashEnvCol env={summary?.env ?? null} />
           <DashMetricCol
             env={summary?.env ?? null}
-            vapourPressure={summary?.metrics?.vapour_pressure ?? null}
+            production={production}
           />
           <DashTrendsCarousel />
         </div>

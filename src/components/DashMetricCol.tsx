@@ -1,20 +1,20 @@
 import type { EnvData } from "./DashEnvCol";
 
-const LockIcon = () => (
-  <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-    <rect x="3" y="7" width="10" height="7" rx="1" />
-    <path d="M5 7V5a3 3 0 016 0v2" />
-  </svg>
-);
+export interface ProductionData {
+  date: string;
+  eggs: { total: number; small: number; medium: number; large: number; xl: number; jumbo: number; damaged: number };
+  revenue: number;
+  hdep: number | null;
+  mortality: { today: number; cumulative: number; rate: number | null };
+  totalHens: number;
+  daily: { date: string; eggs: number; revenue: number; hdep: number | null }[];
+}
 
 function PendingCard({ label, note }: { label: string; note: string }) {
   return (
     <div className="sa-metric-card pending">
       <div className="sa-metric-lbl">{label}</div>
       <div className="sa-pending-dash">—</div>
-      <div className="sa-pending-badge">
-        <LockIcon /> Awaiting calibration
-      </div>
       <div className="sa-pending-note">{note}</div>
     </div>
   );
@@ -23,17 +23,16 @@ function PendingCard({ label, note }: { label: string; note: string }) {
 interface MetricCardProps {
   label: string;
   value: string;
-  valueClass?: string;
   sub?: string;
   statusText?: string;
-  statusClass?: "ok" | "warn";
+  statusClass?: "ok" | "warn" | "danger";
 }
 
-function MetricCard({ label, value, valueClass, sub, statusText, statusClass }: MetricCardProps) {
+function MetricCard({ label, value, sub, statusText, statusClass }: MetricCardProps) {
   return (
     <div className="sa-metric-card">
       <div className="sa-metric-lbl">{label}</div>
-      <div className={`sa-metric-val${valueClass ? ` ${valueClass}` : ""}`}>{value}</div>
+      <div className="sa-metric-val">{value}</div>
       {sub && <div className="sa-metric-sub">{sub}</div>}
       {statusText && (
         <div className={`sa-metric-status${statusClass ? ` ${statusClass}` : ""}`}>{statusText}</div>
@@ -44,83 +43,104 @@ function MetricCard({ label, value, valueClass, sub, statusText, statusClass }: 
 
 interface DashMetricColProps {
   env: EnvData | null;
-  vapourPressure: number | null;
+  production: ProductionData | null;
 }
 
-export default function DashMetricCol({ env, vapourPressure }: DashMetricColProps) {
-  // Vapour pressure display
-  const vpDisplay =
-    vapourPressure !== null && vapourPressure !== undefined
-      ? (Math.round(vapourPressure * 100) / 100).toFixed(2)
-      : null;
-  const vpStatus = vapourPressure !== null && vapourPressure !== undefined
-    ? vapourPressure > 1.5 ? "warn" : "ok"
-    : undefined;
-  const vpStatusText = vapourPressure !== null && vapourPressure !== undefined
-    ? vapourPressure > 1.5
-      ? "Elevated · heat load increasing"
-      : "Normal · within acceptable range"
-    : undefined;
+export default function DashMetricCol({ env, production }: DashMetricColProps) {
+  const waterCurrent = env?.water?.current ?? null;
+  const waterDisplay = waterCurrent !== null ? `${Math.round(waterCurrent).toLocaleString()} L` : null;
+
+  const hdepStatus: "ok" | "warn" | "danger" | undefined =
+    production?.hdep !== null && production?.hdep !== undefined
+      ? production.hdep >= 85 ? "ok" : production.hdep >= 70 ? "warn" : "danger"
+      : undefined;
+
+  const hdepStatusText =
+    production?.hdep !== null && production?.hdep !== undefined
+      ? production.hdep >= 85
+        ? "Normal production rate"
+        : production.hdep >= 70
+        ? "Below target — monitor flock"
+        : "Poor — investigate immediately"
+      : undefined;
+
+  const mortalityRate = production?.mortality?.rate ?? null;
+  const mortalityStatus: "ok" | "warn" | "danger" | undefined =
+    mortalityRate !== null
+      ? mortalityRate < 3 ? "ok" : mortalityRate < 6 ? "warn" : "danger"
+      : undefined;
+
+  const dataDate = production?.date
+    ? new Date(production.date).toLocaleDateString("en-ZA", { day: "numeric", month: "short" })
+    : null;
 
   return (
     <div className="sa-metric-col">
       <div className="sa-col-header">Welfare &amp; Financial</div>
 
-      <div className="sa-section-label">Welfare Metrics</div>
+      <div className="sa-section-label">Production</div>
 
-      <PendingCard
-        label="Hen-Day production %"
-        note="Connect egg count data source to unlock this metric"
-      />
-
-      <PendingCard
-        label="Water:Feed ratio"
-        note="Pulse meter calibration in progress — ratio unlocks automatically"
-      />
-
-      {vpDisplay !== null ? (
+      {production ? (
         <MetricCard
-          label="Vapour pressure"
-          value={`${vpDisplay}`}
-          sub="kPa · calculated from temp + RH"
-          statusText={vpStatusText}
-          statusClass={vpStatus}
+          label="Hen-Day %"
+          value={production.hdep !== null ? `${production.hdep.toFixed(1)}%` : "—"}
+          sub={dataDate ? `${dataDate} · ${production.totalHens.toLocaleString()} hens` : undefined}
+          statusText={hdepStatusText}
+          statusClass={hdepStatus}
         />
       ) : (
-        <PendingCard
-          label="Vapour pressure"
-          note="Awaiting sensor data — computed from temperature and humidity"
-        />
+        <PendingCard label="Hen-Day %" note="Loading production data…" />
       )}
 
-      <PendingCard
-        label="Feed conversion ratio"
-        note="Pulse meter calibration in progress — FCR unlocks automatically"
-      />
+      {production ? (
+        <MetricCard
+          label="Eggs today"
+          value={production.eggs.total.toLocaleString()}
+          sub={`L ${production.eggs.large} · M ${production.eggs.medium} · XL ${production.eggs.xl} · S ${production.eggs.small}`}
+        />
+      ) : (
+        <PendingCard label="Eggs today" note="Loading production data…" />
+      )}
 
-      <div className="sa-section-label" style={{ marginTop: 3 }}>
-        Financial Metrics
-      </div>
+      <div className="sa-section-label" style={{ marginTop: 3 }}>Financial</div>
 
-      <PendingCard
-        label="Revenue today"
-        note="Connect egg production records to enable financial tracking"
-      />
+      {production ? (
+        <MetricCard
+          label="Revenue today"
+          value={`R ${production.revenue.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          sub={dataDate ? `Based on ${dataDate} production` : undefined}
+        />
+      ) : (
+        <PendingCard label="Revenue today" note="Loading production data…" />
+      )}
 
-      <PendingCard
-        label="Eggs today"
-        note="Connect egg count data source to unlock this metric"
-      />
+      <div className="sa-section-label" style={{ marginTop: 3 }}>Welfare</div>
 
-      <PendingCard
-        label="Feed cost"
-        note="Unlocks with pulse meter calibration — cost from consumption rate"
-      />
+      {production ? (
+        <MetricCard
+          label="Mortality rate"
+          value={mortalityRate !== null ? `${mortalityRate.toFixed(2)}%` : "—"}
+          sub={`${production.mortality.cumulative} total · ${production.mortality.today} today`}
+          statusText={
+            mortalityRate !== null
+              ? mortalityRate < 3 ? "Within normal range" : mortalityRate < 6 ? "Elevated — monitor" : "High — investigate"
+              : undefined
+          }
+          statusClass={mortalityStatus}
+        />
+      ) : (
+        <PendingCard label="Mortality rate" note="Loading production data…" />
+      )}
 
-      <PendingCard
-        label="Economic efficiency ratio"
-        note="Requires feed cost — will show revenue-to-feed efficiency"
-      />
+      {waterDisplay !== null ? (
+        <MetricCard
+          label="Water consumed"
+          value={waterDisplay}
+          sub="Last 30-min interval · pulse meter"
+        />
+      ) : (
+        <PendingCard label="Water consumed" note="No meter data — check device connection" />
+      )}
     </div>
   );
 }

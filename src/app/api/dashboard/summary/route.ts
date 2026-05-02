@@ -21,7 +21,19 @@ interface SparkRow {
 
 interface WaterRow {
   bucket: string | Date;
-  delta?: number;
+  cumulative?: number;
+}
+
+const WATER_DEVICE_ID = "24e124136f451854";
+const WATER_LITRES_PER_PULSE = 10;
+
+function toPoint(bucket: string | Date, value: unknown): { time: string; value: number } | null {
+  const n = toNum(value);
+  if (n === null) return null;
+  return {
+    time: bucket instanceof Date ? bucket.toISOString() : new Date(bucket).toISOString(),
+    value: n,
+  };
 }
 
 function toNum(v: unknown): number | null {
@@ -35,6 +47,47 @@ function stats(vals: number[]): { mean: number; std: number } {
   const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
   const variance = vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length;
   return { mean, std: Math.sqrt(variance) };
+}
+
+function cumulativeWaterPoints(rows: WaterRow[]): { time: string; value: number; cumulative: number }[] {
+  let prev: number | null = null;
+  let runningTotal = 0;
+  return rows.flatMap((row) => {
+    const cumulative = toNum(row.cumulative);
+    const value =
+      cumulative !== null && prev !== null
+        ? Math.max(0, cumulative - prev) * WATER_LITRES_PER_PULSE
+        : null;
+    prev = cumulative;
+    if (value === null) return [];
+    runningTotal += value;
+    return [
+      {
+        time: row.bucket instanceof Date ? row.bucket.toISOString() : new Date(row.bucket).toISOString(),
+        value,
+        cumulative: runningTotal,
+      },
+    ];
+  });
+}
+
+function dailyWaterPoints(rows: WaterRow[]): { date: string; litres: number }[] {
+  let prev: number | null = null;
+  return rows.flatMap((row) => {
+    const cumulative = toNum(row.cumulative);
+    const litres =
+      cumulative !== null && prev !== null
+        ? Math.max(0, cumulative - prev) * WATER_LITRES_PER_PULSE
+        : null;
+    prev = cumulative;
+    if (litres === null) return [];
+    return [
+      {
+        date: row.bucket instanceof Date ? row.bucket.toISOString() : new Date(row.bucket).toISOString(),
+        litres,
+      },
+    ];
+  });
 }
 
 function alertMessage(
@@ -79,7 +132,7 @@ export async function GET() {
 
   try {
     // Latest AM308 reading
-    const [latestRows, sparkRows, waterLastHourRows, waterSparkRows] = await Promise.all([
+    const [latestRows, sparkRows, waterLastHourRows, waterSparkRows, waterDailyRows] = await Promise.all([
       queryInflux<Record<string, unknown>>(`
         SELECT
           AVG(temperature) AS temperature,
@@ -94,7 +147,7 @@ export async function GET() {
       `),
       queryInflux<SparkRow>(`
         SELECT
-          date_bin(INTERVAL '1 hour', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
+          date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
           AVG(temperature) AS temperature,
           AVG(humidity)    AS humidity,
           AVG(co2)         AS co2,
@@ -108,23 +161,34 @@ export async function GET() {
       `),
       queryInflux<WaterRow>(`
         SELECT
-          date_bin(INTERVAL '1 hour', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
-          MAX(pulse_total) - MIN(pulse_total) AS delta
+          date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
+          MAX(pulse_total) AS cumulative
         FROM sensors
         WHERE farm_id = '${FARM_ID}'
-          AND device_id = '24e124136f451854'
+          AND device_id = '${WATER_DEVICE_ID}'
           AND time > now() - INTERVAL '1 hour'
         GROUP BY bucket
         ORDER BY bucket ASC
       `),
       queryInflux<WaterRow>(`
         SELECT
-          date_bin(INTERVAL '1 hour', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
-          MAX(pulse_total) - MIN(pulse_total) AS delta
+          date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
+          MAX(pulse_total) AS cumulative
         FROM sensors
         WHERE farm_id = '${FARM_ID}'
-          AND device_id = '24e124136f451854'
-          AND time > now() - INTERVAL '24 hours'
+          AND device_id = '${WATER_DEVICE_ID}'
+          AND time > now() - INTERVAL '25 hours'
+        GROUP BY bucket
+        ORDER BY bucket ASC
+      `),
+      queryInflux<WaterRow>(`
+        SELECT
+          date_bin(INTERVAL '1 day', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
+          MAX(pulse_total) AS cumulative
+        FROM sensors
+        WHERE farm_id = '${FARM_ID}'
+          AND device_id = '${WATER_DEVICE_ID}'
+          AND time > now() - INTERVAL '9 days'
         GROUP BY bucket
         ORDER BY bucket ASC
       `),
@@ -136,19 +200,29 @@ export async function GET() {
     const co2 = toNum(latest.co2);
     const tvocCurrent = toNum(latest.tvoc);
 
-    const tempSpark = sparkRows.map((r) => toNum(r.temperature)).filter((v): v is number => v !== null);
-    const humiditySpark = sparkRows.map((r) => toNum(r.humidity)).filter((v): v is number => v !== null);
-    const co2Spark = sparkRows.map((r) => toNum(r.co2)).filter((v): v is number => v !== null);
-    const tvocSpark = sparkRows.map((r) => toNum(r.tvoc)).filter((v): v is number => v !== null);
+    const tempSpark = sparkRows.map((r) => toPoint(r.bucket, r.temperature)).filter((v): v is { time: string; value: number } => v !== null);
+    const humiditySpark = sparkRows.map((r) => toPoint(r.bucket, r.humidity)).filter((v): v is { time: string; value: number } => v !== null);
+    const co2Spark = sparkRows.map((r) => toPoint(r.bucket, r.co2)).filter((v): v is { time: string; value: number } => v !== null);
+    const tvocSpark = sparkRows.map((r) => toPoint(r.bucket, r.tvoc)).filter((v): v is { time: string; value: number } => v !== null);
+    const tvocVals = tvocSpark.map((pt) => pt.value);
 
-    // Use last-hour delta (litres consumed this hour) as the current reading
-    const waterLastHourDelta = toNum((waterLastHourRows[0] ?? {}).delta);
-    const waterSpark = waterSparkRows.map((r) => toNum(r.delta)).filter((v): v is number => v !== null);
+    // Consumption is derived from consecutive cumulative meter readings.
+    const waterLastHour = cumulativeWaterPoints(waterLastHourRows);
+    const waterLastHourDelta = waterLastHour.length > 0 ? waterLastHour[waterLastHour.length - 1].value : null;
+    const cutoff24h = Date.now() - 24 * 60 * 60 * 1000;
+    const waterSpark = cumulativeWaterPoints(waterSparkRows).filter(
+      (pt) => new Date(pt.time).getTime() >= cutoff24h
+    );
+    const waterVals = waterSpark.map((pt) => pt.value);
+    const cutoff7d = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const waterDaily = dailyWaterPoints(waterDailyRows).filter(
+      (pt) => new Date(pt.date).getTime() >= cutoff7d
+    );
     // Fall back to most recent sparkline point if last-hour query has no data
-    const waterCurrent = waterLastHourDelta ?? (waterSpark.length > 0 ? waterSpark[waterSpark.length - 1] : null);
+    const waterCurrent = waterLastHourDelta ?? (waterSpark.length > 0 ? waterSpark[waterSpark.length - 1].value : null);
 
-    const tvocStats = stats(tvocSpark);
-    const waterStats = stats(waterSpark);
+    const tvocStats = stats(tvocVals);
+    const waterStats = stats(waterVals);
 
     const ts = tempStatus(temp);
     const hs = humidityStatus(humidity);
@@ -172,6 +246,7 @@ export async function GET() {
         water: {
           current: waterCurrent,
           sparkline: waterSpark,
+          daily: waterDaily,
           mean: waterStats.mean,
           std: waterStats.std,
         },
@@ -208,7 +283,7 @@ export async function GET() {
           status: "neutral" as const,
           message:
             waterCurrent !== null
-              ? `Latest reading ${Math.round(waterCurrent).toLocaleString()} pulses. No significant deviation detected.`
+              ? `Latest 30 min ${Math.round(waterCurrent).toLocaleString()} litres. 1 pulse = ${WATER_LITRES_PER_PULSE} litres.`
               : "No water meter data available.",
         },
       ],
