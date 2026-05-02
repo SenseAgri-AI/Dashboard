@@ -9,10 +9,11 @@ const T3 = "#6B7C80";
 const LINE = "rgba(0,0,0,0.06)";
 
 const SLIDES = [
-  { title: "Egg count", sub: "7-day · production", note: "Today highlighted in teal" },
-  { title: "Revenue", sub: "7-day · financial", note: "7-day revenue trend — today highlighted" },
-  { title: "Hen-Day %", sub: "7-day · welfare derived", note: "Shaded band = normal zone 85–98%" },
-  { title: "Feed conversion", sub: "7-day · pulses/egg", note: "Uncalibrated — lower is better. Will convert to kg/egg once auger is calibrated" },
+  { title: "Egg count",        sub: "7-day · production",      note: "Today highlighted in teal" },
+  { title: "Revenue",          sub: "7-day · financial",        note: "7-day revenue trend — today highlighted" },
+  { title: "Hen-Day %",        sub: "7-day · welfare derived",  note: "Shaded band = normal zone 85–98%" },
+  { title: "Feed conversion",  sub: "7-day · pulses/egg",       note: "Uncalibrated — lower is better. Converts to kg/egg once auger calibrated" },
+  { title: "Feed per day",     sub: "7-day · raw pulses",       note: "Raw feed auger pulses — uncalibrated. Validates sensor activity per day" },
 ];
 
 function dayLabel(dateStr: string): string {
@@ -228,10 +229,15 @@ export default function DashTrendsCarousel({ production }: DashTrendsCarouselPro
   const hdepVals = daily.map((d) => d.hdep ?? 0);
   const lbls = daily.map((d) => dayLabel(d.date));
 
-  // FCR proxy: only days where both eggs and feed pulses are available
+  // FCR proxy — only days where both eggs and feed pulses are available
   const fcrDays = daily.filter((d) => d.fcr !== null);
   const fcrVals = fcrDays.map((d) => d.fcr!);
   const fcrLbls = fcrDays.map((d) => dayLabel(d.date));
+
+  // Raw feed pulses per day — all days that have sensor data
+  const feedDays = daily.filter((d) => d.feedPulses !== null);
+  const feedVals = feedDays.map((d) => d.feedPulses!);
+  const feedLbls = feedDays.map((d) => dayLabel(d.date));
 
   function renderSlide(idx: number) {
     switch (idx) {
@@ -264,6 +270,10 @@ export default function DashTrendsCarousel({ production }: DashTrendsCarouselPro
               formatVal={(v) => v.toFixed(2)}
             />
           : <PendingChart message="Loading feed conversion data…" />;
+      case 4:
+        return feedVals.length > 0
+          ? <BarChart vals={feedVals} lbls={feedLbls} color={T3} />
+          : <PendingChart message="Loading feed data…" />;
       default:
         return null;
     }
