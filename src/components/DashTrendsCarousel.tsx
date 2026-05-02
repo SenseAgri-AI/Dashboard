@@ -1,19 +1,26 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import {
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis,
+  CartesianGrid, ReferenceArea, ReferenceLine,
+  ResponsiveContainer, Cell, Tooltip,
+} from "recharts";
 import type { ProductionData } from "./DashMetricCol";
 
-const TEAL = "#2A8E9A";
-const GOLD = "#D4AF37";
-const T3 = "#6B7C80";
-const LINE = "rgba(0,0,0,0.06)";
+const TEAL  = "#2A8E9A";
+const GOLD  = "#D4AF37";
+const T3    = "#6B7C80";
+const GRID  = "rgba(0,0,0,0.05)";
+const TICK  = { fontSize: 9, fill: T3, fontFamily: "Inter,sans-serif" } as const;
+const AXIS_LINE = { stroke: "rgba(0,0,0,0.09)" };
 
 const SLIDES = [
-  { title: "Egg count",        sub: "7-day · production",      note: "Today highlighted in teal" },
-  { title: "Revenue",          sub: "7-day · financial",        note: "7-day revenue trend — today highlighted" },
-  { title: "Hen-Day %",        sub: "7-day · welfare derived",  note: "Shaded band = normal zone 85–98%" },
-  { title: "Feed conversion",  sub: "7-day · pulses/egg",       note: "Uncalibrated — lower is better. Converts to kg/egg once auger calibrated" },
-  { title: "Feed per day",     sub: "7-day · raw pulses",       note: "Raw feed auger pulses — uncalibrated. Validates sensor activity per day" },
+  { title: "Egg count",       sub: "7-day · production",     note: "Today highlighted in teal" },
+  { title: "Revenue",         sub: "7-day · financial",       note: "7-day revenue trend" },
+  { title: "Hen-Day %",       sub: "7-day · welfare derived", note: "Shaded band = normal zone 85–98%" },
+  { title: "Feed conversion", sub: "7-day · pulses/egg",      note: "Uncalibrated — lower is better. Converts to kg/egg once auger calibrated" },
+  { title: "Feed per day",    sub: "7-day · raw pulses",      note: "Raw feed auger pulses — uncalibrated. Validates sensor activity per day" },
 ];
 
 function dayLabel(dateStr: string): string {
@@ -21,194 +28,34 @@ function dayLabel(dateStr: string): string {
   return ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"][d.getDay()];
 }
 
-// ── Bar chart ────────────────────────────────────────────────────────────────
-
-interface BarChartProps {
-  vals: number[];
-  lbls: string[];
-  color: string;
-  highlightLast?: boolean;
-}
-
-function BarChart({ vals, lbls, color, highlightLast }: BarChartProps) {
-  const W = 290, H = 170, pL = 32, pB = 20, pT = 8;
-  const mn = Math.min(...vals) * 0.97;
-  const mx = Math.max(...vals) * 1.02;
-  const rng = mx - mn || 1;
-  const pH = H - pB - pT;
-  const bW = Math.floor((W - pL - (vals.length - 1) * 6) / vals.length);
-  const gap = 6;
-
-  const gridVals = [
-    Math.round(mn + rng * 0.33),
-    Math.round(mn + rng * 0.67),
-    Math.round(mx),
-  ];
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: `${H}px`, display: "block" }}>
-      {gridVals.map((v) => {
-        const y = pT + pH - ((v - mn) / rng) * pH;
-        return (
-          <g key={v}>
-            <line x1={pL} y1={y} x2={W} y2={y} stroke={LINE} strokeWidth="1" />
-            <text x={pL - 3} y={y + 3} fontSize="7" fill={T3} textAnchor="end" fontFamily="Inter,sans-serif">
-              {v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}
-            </text>
-          </g>
-        );
-      })}
-      {vals.map((v, i) => {
-        const bH = ((v - mn) / rng) * pH;
-        const x = pL + i * (bW + gap);
-        const y = pT + pH - bH;
-        const isToday = highlightLast && i === vals.length - 1;
-        return (
-          <g key={i}>
-            <rect x={x} y={y} width={bW} height={bH} fill={isToday ? color : "rgba(0,46,53,0.08)"} />
-            <text x={x + bW / 2} y={H} fontSize="8.5" fill={isToday ? color : T3} textAnchor="middle" fontFamily="Inter,sans-serif">
-              {lbls[i]}
-            </text>
-            {isToday && (
-              <text x={x + bW / 2} y={y - 5} fontSize="8" fill={color} textAnchor="middle" fontFamily="Inter,sans-serif">
-                {v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}
-              </text>
-            )}
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-// ── Line chart ───────────────────────────────────────────────────────────────
-
-interface LineChartProps {
-  vals: number[];
-  lbls: string[];
-  color: string;
-  unit?: string;
-  dashed?: boolean;
-  labelLast?: boolean;
-  formatVal?: (v: number) => string;
-}
-
-function LineChart({ vals, lbls, color, unit = "", dashed, labelLast, formatVal }: LineChartProps) {
-  const W = 290, H = 170, pL = 36, pB = 20, pT = 10;
-  const mn = Math.min(...vals) * 0.97;
-  const mx = Math.max(...vals) * 1.02;
-  const rng = mx - mn || 1;
-  const pW = W - pL, pH = H - pB - pT;
-  const step = pW / Math.max(vals.length - 1, 1);
-
-  const pts = vals.map((v, i) => `${pL + i * step},${pT + pH - ((v - mn) / rng) * pH}`).join(" ");
-  const lx = pL + (vals.length - 1) * step;
-  const ly = pT + pH - ((vals[vals.length - 1] - mn) / rng) * pH;
-  const fmt = formatVal ?? ((v: number) => `${v}${unit}`);
-
-  const gridVals = [0, 1, 2, 3].map((i) => mn + rng * i / 3);
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: `${H}px`, display: "block" }}>
-      {gridVals.map((v, i) => {
-        const y = pT + pH - (i / 3) * pH;
-        return (
-          <g key={i}>
-            <line x1={pL} y1={y} x2={W} y2={y} stroke={LINE} strokeWidth="1" />
-            <text x={pL - 4} y={y + 3} fontSize="7" fill={T3} textAnchor="end" fontFamily="Inter,sans-serif">
-              {fmt(v)}
-            </text>
-          </g>
-        );
-      })}
-      <polyline
-        points={pts}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        {...(dashed ? { strokeDasharray: "5,3", opacity: "0.6" } : {})}
-      />
-      <circle cx={lx} cy={ly} r="3" fill={color} {...(dashed ? { opacity: "0.6" } : {})} />
-      {lbls.map((l, i) => (
-        <text key={i} x={pL + i * step} y={H} fontSize="8.5" fill={i === lbls.length - 1 && labelLast ? color : T3} textAnchor="middle" fontFamily="Inter,sans-serif">
-          {l}
-        </text>
-      ))}
-      {labelLast && (
-        <text x={lx} y={ly - 7} fontSize="8" fill={color} textAnchor="middle" fontFamily="Inter,sans-serif">
-          {fmt(vals[vals.length - 1])}
-        </text>
-      )}
-      {dashed && (
-        <text x={W - 2} y={pT + 12} fontSize="7.5" fill={T3} textAnchor="end" fontFamily="Inter,sans-serif">
-          uncalibrated
-        </text>
-      )}
-    </svg>
-  );
-}
-
-// ── Band chart ───────────────────────────────────────────────────────────────
-
-interface BandChartProps {
-  vals: number[];
-  lbls: string[];
-  lo: number;
-  hi: number;
-  color: string;
-  unit?: string;
-}
-
-function BandChart({ vals, lbls, lo, hi, color, unit = "" }: BandChartProps) {
-  const W = 290, H = 170, pL = 34, pB = 20, pT = 10;
-  const mn = Math.min(Math.min(...vals), lo) * 0.97;
-  const mx = Math.max(Math.max(...vals), hi) * 1.02;
-  const rng = mx - mn || 1;
-  const pW = W - pL, pH = H - pB - pT;
-  const step = pW / Math.max(vals.length - 1, 1);
-
-  const toY = (v: number) => pT + pH - ((v - mn) / rng) * pH;
-  const loY = toY(lo), hiY = toY(hi);
-  const pts = vals.map((v, i) => `${pL + i * step},${toY(v)}`).join(" ");
-  const lx = pL + (vals.length - 1) * step;
-  const ly = toY(vals[vals.length - 1]);
-  const skip = lbls.length > 8 ? 2 : 1;
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: `${H}px`, display: "block" }}>
-      {[0, 1, 2, 3].map((i) => (
-        <line key={i} x1={pL} y1={pT + pH - (i / 3) * pH} x2={W} y2={pT + pH - (i / 3) * pH} stroke={LINE} strokeWidth="1" />
-      ))}
-      <rect x={pL} y={hiY} width={pW} height={loY - hiY} fill={color} opacity="0.07" />
-      <line x1={pL} y1={hiY} x2={W} y2={hiY} stroke={color} strokeWidth="0.5" strokeDasharray="4,4" opacity="0.4" />
-      <line x1={pL} y1={loY} x2={W} y2={loY} stroke={color} strokeWidth="0.5" strokeDasharray="4,4" opacity="0.4" />
-      <text x={pL - 3} y={hiY + 4} fontSize="7" fill={color} textAnchor="end" opacity="0.6" fontFamily="Inter,sans-serif">{hi}{unit}</text>
-      <text x={pL - 3} y={loY + 4} fontSize="7" fill={color} textAnchor="end" opacity="0.6" fontFamily="Inter,sans-serif">{lo}{unit}</text>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={lx} cy={ly} r="3" fill={color} />
-      {lbls.map((l, i) => {
-        if (i % skip !== 0) return null;
-        return (
-          <text key={i} x={pL + i * step} y={H} fontSize="8.5" fill={T3} textAnchor="middle" fontFamily="Inter,sans-serif">{l}</text>
-        );
-      })}
-    </svg>
-  );
-}
-
-// ── Pending slide ─────────────────────────────────────────────────────────────
-
 function PendingChart({ message }: { message: string }) {
   return (
-    <div style={{ height: 170, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center" }}>
       <span style={{ fontSize: 12, color: T3, fontFamily: "Inter,sans-serif" }}>{message}</span>
     </div>
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// Custom tooltip for carousel charts
+function ChartTooltip({ active, payload, label, formatter }: {
+  active?: boolean;
+  payload?: { value: number; color: string }[];
+  label?: string;
+  formatter?: (v: number) => string;
+}) {
+  if (!active || !payload?.length) return null;
+  const val = payload[0].value;
+  return (
+    <div style={{
+      background: "#002E35", color: "#fff", fontSize: 10,
+      padding: "4px 8px", fontFamily: "Inter,sans-serif",
+      border: "none", boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
+    }}>
+      <span style={{ opacity: 0.6, marginRight: 6 }}>{label}</span>
+      <strong>{formatter ? formatter(val) : val}</strong>
+    </div>
+  );
+}
 
 interface DashTrendsCarouselProps {
   production: ProductionData | null;
@@ -224,56 +71,129 @@ export default function DashTrendsCarousel({ production }: DashTrendsCarouselPro
   }, [next]);
 
   const daily = production?.daily ?? [];
-  const eggVals = daily.map((d) => d.eggs);
-  const revVals = daily.map((d) => d.revenue);
-  const hdepVals = daily.map((d) => d.hdep ?? 0);
-  const lbls = daily.map((d) => dayLabel(d.date));
-
-  // FCR proxy — only days where both eggs and feed pulses are available
-  const fcrDays = daily.filter((d) => d.fcr !== null);
-  const fcrVals = fcrDays.map((d) => d.fcr!);
-  const fcrLbls = fcrDays.map((d) => dayLabel(d.date));
-
-  // Raw feed pulses per day — all days that have sensor data
-  const feedDays = daily.filter((d) => d.feedPulses !== null);
-  const feedVals = feedDays.map((d) => d.feedPulses!);
-  const feedLbls = feedDays.map((d) => dayLabel(d.date));
+  const chartData = daily.map((d, i) => ({
+    ...d,
+    label: dayLabel(d.date),
+    isToday: i === daily.length - 1,
+  }));
 
   function renderSlide(idx: number) {
+    if (chartData.length === 0) return <PendingChart message="Loading data…" />;
+
     switch (idx) {
+      // ── Egg count bar chart ──────────────────────────────────────────────
       case 0:
-        return eggVals.length > 0
-          ? <BarChart vals={eggVals} lbls={lbls} color={TEAL} highlightLast />
-          : <PendingChart message="Loading egg count data…" />;
+        return (
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <CartesianGrid stroke={GRID} vertical={false} />
+              <XAxis dataKey="label" tick={TICK} tickLine={false} axisLine={AXIS_LINE} />
+              <YAxis tick={TICK} tickLine={false} axisLine={false} width={44}
+                tickFormatter={v => `${(v / 1000).toFixed(1)}k`} tickCount={4} />
+              <Tooltip content={<ChartTooltip formatter={v => `${Math.round(v).toLocaleString()} eggs`} />} cursor={{ fill: "rgba(0,46,53,0.04)" }} />
+              <Bar dataKey="eggs" radius={0} isAnimationActive={false}>
+                {chartData.map((entry, i) => (
+                  <Cell key={i} fill={entry.isToday ? TEAL : "rgba(0,46,53,0.09)"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        );
+
+      // ── Revenue area chart ───────────────────────────────────────────────
       case 1:
-        return revVals.length > 0
-          ? <LineChart
-              vals={revVals}
-              lbls={lbls}
-              color={GOLD}
-              labelLast
-              formatVal={(v) => `R${Math.round(v / 100) / 10}k`}
-            />
-          : <PendingChart message="Loading revenue data…" />;
-      case 2:
-        return hdepVals.length > 0
-          ? <BandChart vals={hdepVals} lbls={lbls} lo={85} hi={98} color={TEAL} unit="%" />
-          : <PendingChart message="Loading HDEP data…" />;
-      case 3:
-        return fcrVals.length > 1
-          ? <LineChart
-              vals={fcrVals}
-              lbls={fcrLbls}
-              color={T3}
-              dashed
-              labelLast
-              formatVal={(v) => v.toFixed(2)}
-            />
-          : <PendingChart message="Loading feed conversion data…" />;
-      case 4:
-        return feedVals.length > 0
-          ? <BarChart vals={feedVals} lbls={feedLbls} color={T3} />
-          : <PendingChart message="Loading feed data…" />;
+        return (
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id="sa-rev" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={GOLD} stopOpacity={0.28} />
+                  <stop offset="95%" stopColor={GOLD} stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke={GRID} vertical={false} />
+              <XAxis dataKey="label" tick={TICK} tickLine={false} axisLine={AXIS_LINE} />
+              <YAxis tick={TICK} tickLine={false} axisLine={false} width={50}
+                tickFormatter={v => `R${(v / 1000).toFixed(1)}k`} tickCount={4} />
+              <Tooltip content={<ChartTooltip formatter={v => `R ${v.toLocaleString("en-ZA", { minimumFractionDigits: 2 })}`} />} cursor={{ stroke: GOLD, strokeWidth: 1, strokeOpacity: 0.3 }} />
+              <Area type="monotone" dataKey="revenue" stroke={GOLD} strokeWidth={2}
+                fill="url(#sa-rev)" dot={false} activeDot={{ r: 3, fill: GOLD }} isAnimationActive={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        );
+
+      // ── HDEP band chart ──────────────────────────────────────────────────
+      case 2: {
+        const hdepData = chartData.filter(d => d.hdep !== null);
+        return (
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={hdepData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id="sa-hdep" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={TEAL} stopOpacity={0.28} />
+                  <stop offset="95%" stopColor={TEAL} stopOpacity={0.03} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke={GRID} vertical={false} />
+              <ReferenceArea y1={85} y2={98} fill={TEAL} fillOpacity={0.08} stroke="none" />
+              <ReferenceLine y={85} stroke={TEAL} strokeDasharray="4 3" strokeOpacity={0.35}
+                label={{ value: "85%", position: "insideTopRight", fontSize: 8, fill: TEAL, opacity: 0.5 }} />
+              <ReferenceLine y={98} stroke={TEAL} strokeDasharray="4 3" strokeOpacity={0.35}
+                label={{ value: "98%", position: "insideBottomRight", fontSize: 8, fill: TEAL, opacity: 0.5 }} />
+              <XAxis dataKey="label" tick={TICK} tickLine={false} axisLine={AXIS_LINE} />
+              <YAxis domain={[80, 100]} tick={TICK} tickLine={false} axisLine={false} width={38}
+                tickFormatter={v => `${v}%`} tickCount={5} />
+              <Tooltip content={<ChartTooltip formatter={v => `${v.toFixed(1)}%`} />} cursor={{ stroke: TEAL, strokeWidth: 1, strokeOpacity: 0.3 }} />
+              <Area type="monotone" dataKey="hdep" stroke={TEAL} strokeWidth={2}
+                fill="url(#sa-hdep)" dot={false} activeDot={{ r: 3, fill: TEAL }} isAnimationActive={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        );
+      }
+
+      // ── FCR proxy area (dashed) ──────────────────────────────────────────
+      case 3: {
+        const fcrData = chartData.filter(d => d.fcr !== null);
+        if (fcrData.length < 2) return <PendingChart message="Loading feed conversion data…" />;
+        return (
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={fcrData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id="sa-fcr" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={T3} stopOpacity={0.18} />
+                  <stop offset="95%" stopColor={T3} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke={GRID} vertical={false} />
+              <XAxis dataKey="label" tick={TICK} tickLine={false} axisLine={AXIS_LINE} />
+              <YAxis tick={TICK} tickLine={false} axisLine={false} width={38} tickCount={4}
+                tickFormatter={v => v.toFixed(1)} />
+              <Tooltip content={<ChartTooltip formatter={v => `${v.toFixed(2)} pulses/egg`} />} cursor={{ stroke: T3, strokeWidth: 1, strokeOpacity: 0.3 }} />
+              <Area type="monotone" dataKey="fcr" stroke={T3} strokeWidth={2} strokeDasharray="6 3"
+                fill="url(#sa-fcr)" dot={false} activeDot={{ r: 3, fill: T3 }} isAnimationActive={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        );
+      }
+
+      // ── Raw feed pulses bar chart ────────────────────────────────────────
+      case 4: {
+        const feedData = chartData.filter(d => d.feedPulses !== null);
+        if (feedData.length === 0) return <PendingChart message="Loading feed data…" />;
+        return (
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={feedData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <CartesianGrid stroke={GRID} vertical={false} />
+              <XAxis dataKey="label" tick={TICK} tickLine={false} axisLine={AXIS_LINE} />
+              <YAxis tick={TICK} tickLine={false} axisLine={false} width={44}
+                tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`} tickCount={4} />
+              <Tooltip content={<ChartTooltip formatter={v => `${Math.round(v).toLocaleString()} pulses`} />} cursor={{ fill: "rgba(0,46,53,0.04)" }} />
+              <Bar dataKey="feedPulses" fill={T3} fillOpacity={0.55} radius={0} isAnimationActive={false} />
+            </BarChart>
+          </ResponsiveContainer>
+        );
+      }
+
       default:
         return null;
     }
@@ -295,12 +215,8 @@ export default function DashTrendsCarousel({ production }: DashTrendsCarouselPro
         </div>
         <div className="sa-carousel-footer">
           {SLIDES.map((_, i) => (
-            <button
-              key={i}
-              className={`sa-c-dot${i === cur ? " active" : ""}`}
-              onClick={() => setCur(i)}
-              aria-label={`Go to slide ${i + 1}`}
-            />
+            <button key={i} className={`sa-c-dot${i === cur ? " active" : ""}`}
+              onClick={() => setCur(i)} aria-label={`Go to slide ${i + 1}`} />
           ))}
         </div>
       </div>
