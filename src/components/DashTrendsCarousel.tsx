@@ -12,8 +12,7 @@ const SLIDES = [
   { title: "Egg count", sub: "7-day · production", note: "Today highlighted in teal" },
   { title: "Revenue", sub: "7-day · financial", note: "7-day revenue trend — today highlighted" },
   { title: "Hen-Day %", sub: "7-day · welfare derived", note: "Shaded band = normal zone 85–98%" },
-  { title: "Water:Feed ratio", sub: "14-day · welfare signal", note: "Shaded band = normal range 1.7–2.1×" },
-  { title: "Feed conversion", sub: "7-day · pulses/egg", note: "Uncalibrated pulses — lower is better" },
+  { title: "Feed conversion", sub: "7-day · pulses/egg", note: "Uncalibrated — lower is better. Will convert to kg/egg once auger is calibrated" },
 ];
 
 function dayLabel(dateStr: string): string {
@@ -229,6 +228,11 @@ export default function DashTrendsCarousel({ production }: DashTrendsCarouselPro
   const hdepVals = daily.map((d) => d.hdep ?? 0);
   const lbls = daily.map((d) => dayLabel(d.date));
 
+  // FCR proxy: only days where both eggs and feed pulses are available
+  const fcrDays = daily.filter((d) => d.fcr !== null);
+  const fcrVals = fcrDays.map((d) => d.fcr!);
+  const fcrLbls = fcrDays.map((d) => dayLabel(d.date));
+
   function renderSlide(idx: number) {
     switch (idx) {
       case 0:
@@ -250,22 +254,16 @@ export default function DashTrendsCarousel({ production }: DashTrendsCarouselPro
           ? <BandChart vals={hdepVals} lbls={lbls} lo={85} hi={98} color={TEAL} unit="%" />
           : <PendingChart message="Loading HDEP data…" />;
       case 3:
-        return (
-          <BandChart
-            vals={[1.88, 1.92, 1.95, 1.90, 1.87, 1.94, 1.96, 1.93, 1.90, 1.88, 1.94, 1.97, 1.94, 1.94]}
-            lbls={["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]}
-            lo={1.7} hi={2.1} color={TEAL} unit="×"
-          />
-        );
-      case 4:
-        return (
-          <LineChart
-            vals={[102, 98, 105, 96, 99, 103, 98]}
-            lbls={["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]}
-            color={T3}
-            dashed
-          />
-        );
+        return fcrVals.length > 1
+          ? <LineChart
+              vals={fcrVals}
+              lbls={fcrLbls}
+              color={T3}
+              dashed
+              labelLast
+              formatVal={(v) => v.toFixed(2)}
+            />
+          : <PendingChart message="Loading feed conversion data…" />;
       default:
         return null;
     }

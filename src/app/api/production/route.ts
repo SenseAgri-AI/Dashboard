@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { getSheetValues } from "@/lib/sheets";
+import { queryInflux, FARM_ID } from "@/lib/influxdb";
 
 const SPREADSHEET_ID = "1KjAr1wjfptYbE0n3qCWY_7gTVnR-XMTRy8xzRgCDpkA";
 const SHEET_RANGE = "DailyLog!A:J";
+const FEED_DEVICE_ID = "24e124136f452271";
 
-// Hen counts per house — update when new flock placed
 const HOUSE_HENS: Record<string, number> = {
   house1: 4479,
 };
 const TOTAL_HENS = Object.values(HOUSE_HENS).reduce((a, b) => a + b, 0);
 
-// Egg pricing tiers (price per egg in ZAR) — most recent tier takes precedence
 const PRICE_TIERS = [
   { from: "2026-04-01", small: 1.20, medium: 1.50, large: 1.80, xl: 2.00, jumbo: 2.20 },
   { from: "2025-10-01", small: 1.00, medium: 1.30, large: 1.60, xl: 1.80, jumbo: 2.00 },
@@ -24,7 +24,6 @@ function getPrices(dateKey: string) {
   return PRICE_TIERS[PRICE_TIERS.length - 1];
 }
 
-// Normalise to YYYY-MM-DD. Handles DD/MM/YYYY and YYYY-MM-DD.
 function normDate(raw: string): string | null {
   if (!raw) return null;
   const parts = raw.trim().split(/[\/\-]/);
@@ -45,15 +44,59 @@ function toInt(v: string | undefined): number {
   return isNaN(n) ? 0 : n;
 }
 
+function toNum(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
+  return isNaN(n) ? null : n;
+}
+
+interface FeedRow {
+  bucket: string | Date;
+  cumulative?: number | null;
+}
+
+// Returns a map of YYYY-MM-DD → daily pulse consumption (consecutive differences)
+function feedDailyMap(rows: FeedRow[]): Map<string, number> {
+  let prev: number | null = null;
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    const cumulative = toNum(row.cumulative);
+    const dateKey = (row.bucket instanceof Date
+      ? row.bucket.toISOString()
+      : new Date(row.bucket).toISOString()
+    ).slice(0, 10);
+    if (cumulative !== null && prev !== null) {
+      const delta = Math.max(0, cumulative - prev);
+      map.set(dateKey, (map.get(dateKey) ?? 0) + delta);
+    }
+    prev = cumulative;
+  }
+  return map;
+}
+
 export async function GET() {
   const session = await getSession();
   if (!session.isLoggedIn) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const rows = await getSheetValues(SPREADSHEET_ID, SHEET_RANGE);
+    const [sheetRows, feedRows] = await Promise.all([
+      getSheetValues(SPREADSHEET_ID, SHEET_RANGE),
+      queryInflux<FeedRow>(`
+        SELECT
+          date_bin(INTERVAL '1 day', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
+          MAX(pulse_total) AS cumulative
+        FROM sensors
+        WHERE farm_id = '${FARM_ID}'
+          AND device_id = '${FEED_DEVICE_ID}'
+          AND time > now() - INTERVAL '10 days'
+        GROUP BY bucket
+        ORDER BY bucket ASC
+      `),
+    ]);
 
-    // Skip header row — keep only rows with a valid date
-    const dataRows = rows
+    const feedByDay = feedDailyMap(feedRows);
+
+    const dataRows = sheetRows
       .map((r) => ({ key: normDate(r[0]), r }))
       .filter((x): x is { key: string; r: string[] } => x.key !== null);
 
@@ -61,7 +104,6 @@ export async function GET() {
       return NextResponse.json({ error: "No production data" }, { status: 404 });
     }
 
-    // Sort descending by date string (YYYY-MM-DD sorts lexicographically)
     dataRows.sort((a, b) => b.key.localeCompare(a.key));
 
     const latestKey = dataRows[0].key;
@@ -69,7 +111,6 @@ export async function GET() {
 
     let small = 0, medium = 0, large = 0, xl = 0, jumbo = 0, damaged = 0, mortality = 0;
     for (const { r } of todayRows) {
-      // cols: Date(0), House(1), Small(2), Medium(3), Large(4), XL(5), J/Jumbo(6), Damaged(7), Mortality(8)
       small    += toInt(r[2]);
       medium   += toInt(r[3]);
       large    += toInt(r[4]);
@@ -90,7 +131,6 @@ export async function GET() {
 
     const hdep = TOTAL_HENS > 0 ? (totalEggs / TOTAL_HENS) * 100 : null;
 
-    // Cumulative mortality across all rows up to and including latestKey
     let cumulativeMortality = 0;
     for (const { r } of dataRows) {
       cumulativeMortality += toInt(r[8]);
@@ -99,7 +139,7 @@ export async function GET() {
       ? (cumulativeMortality / (TOTAL_HENS + cumulativeMortality)) * 100
       : null;
 
-    // Aggregate by date for 7-day trend
+    // Aggregate egg/revenue by date
     const dailyMap = new Map<string, { eggs: number; revenue: number }>();
     for (const { key, r } of dataRows) {
       const s = toInt(r[2]), me = toInt(r[3]), la = toInt(r[4]), x = toInt(r[5]), j = toInt(r[6]);
@@ -115,7 +155,6 @@ export async function GET() {
       }
     }
 
-    // Build cutoff 6 days before latest date using string arithmetic
     const cutoffDate = new Date(latestKey);
     cutoffDate.setDate(cutoffDate.getDate() - 6);
     const cutoffKey = cutoffDate.toISOString().slice(0, 10);
@@ -123,12 +162,20 @@ export async function GET() {
     const daily7d = Array.from(dailyMap.entries())
       .filter(([k]) => k >= cutoffKey)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, v]) => ({
-        date,
-        eggs: v.eggs,
-        revenue: Math.round(v.revenue * 100) / 100,
-        hdep: TOTAL_HENS > 0 ? Math.round((v.eggs / TOTAL_HENS) * 1000) / 10 : null,
-      }));
+      .map(([date, v]) => {
+        const feedPulses = feedByDay.get(date) ?? null;
+        const fcr = feedPulses !== null && v.eggs > 0
+          ? Math.round((feedPulses / v.eggs) * 100) / 100
+          : null;
+        return {
+          date,
+          eggs: v.eggs,
+          revenue: Math.round(v.revenue * 100) / 100,
+          hdep: TOTAL_HENS > 0 ? Math.round((v.eggs / TOTAL_HENS) * 1000) / 10 : null,
+          feedPulses,
+          fcr,
+        };
+      });
 
     return NextResponse.json({
       date: latestKey,

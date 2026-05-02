@@ -7,7 +7,7 @@ export interface ProductionData {
   hdep: number | null;
   mortality: { today: number; cumulative: number; rate: number | null };
   totalHens: number;
-  daily: { date: string; eggs: number; revenue: number; hdep: number | null }[];
+  daily: { date: string; eggs: number; revenue: number; hdep: number | null; feedPulses: number | null; fcr: number | null }[];
 }
 
 function PendingCard({ label, note }: { label: string; note: string }) {
