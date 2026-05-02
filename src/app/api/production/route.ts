@@ -186,8 +186,10 @@ export async function GET() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, v]) => {
         const feedPulses = feedByDay.get(date) ?? null;
-        const fcr = feedPulses !== null && v.eggs > 0
-          ? Math.round((feedPulses / v.eggs) * 100) / 100
+        // FCR: feed consumed on Day N-1 produced eggs collected on Day N
+        const prevFeed = feedByDay.get(prevDayKey(date)) ?? null;
+        const fcr = prevFeed !== null && v.eggs > 0
+          ? Math.round((prevFeed / v.eggs) * 100) / 100
           : null;
         return {
           date,
