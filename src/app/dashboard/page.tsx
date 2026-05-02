@@ -123,7 +123,7 @@ export default function DashboardPage() {
             env={summary?.env ?? null}
             production={production}
           />
-          <DashTrendsCarousel />
+          <DashTrendsCarousel production={production} />
         </div>
       </main>
     </>
