@@ -13,7 +13,7 @@ const TEAL  = "#2A8E9A";
 const GOLD  = "#D4AF37";
 const T3    = "#6B7C80";
 const GRID  = "#C8CCCC";
-const TICK  = { fontSize: 9, fill: T3, fontFamily: "Inter,sans-serif" } as const;
+const TICK  = { fontSize: 11, fontWeight: 600, fill: "#3a4d4f", fontFamily: "Inter,sans-serif" } as const;
 const AXIS_LINE = { stroke: "#BEC8CA", strokeWidth: 1 };
 
 const SLIDES = [
@@ -61,7 +61,7 @@ function dayLabel(dateStr: string): string {
 function PendingChart({ message }: { message: string }) {
   return (
     <div style={{ flex: 1, minHeight: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <span style={{ fontSize: 12, color: T3, fontFamily: "Inter,sans-serif" }}>{message}</span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: "#3a4d4f", fontFamily: "Inter,sans-serif" }}>{message}</span>
     </div>
   );
 }
@@ -149,7 +149,7 @@ export default function DashTrendsCarousel({ production, waterSeries, feedSeries
   const next = useCallback(() => setCur((c) => (c + 1) % SLIDES.length), []);
 
   useEffect(() => {
-    const tmr = setInterval(next, 5000);
+    const tmr = setInterval(next, 12000);
     return () => clearInterval(tmr);
   }, [next]);
 
@@ -162,11 +162,14 @@ export default function DashTrendsCarousel({ production, waterSeries, feedSeries
 
   // Precompute nice round-number axis ranges for every chart
   const eggValues = chartData.map(d => d.eggs).filter(v => isFinite(v));
-  const { ticks: eggTicks, domainMin: eggDomainMin, domainMax: eggDomainMax } = niceRange(
-    eggValues.length ? Math.min(...eggValues) : 0,
-    eggValues.length ? Math.max(...eggValues) : 5000,
-    5
-  );
+  const eggMin = eggValues.length ? Math.min(...eggValues) : 0;
+  const eggMax = eggValues.length ? Math.max(...eggValues) : 5000;
+  const eggRange = eggMax - eggMin;
+  const { ticks: eggTicks, domainMin: eggDomainMin, domainMax: eggDomainMax } = niceRange(eggMin, eggMax, 6);
+  // Use full numbers when range is tight — k suffix loses precision below ~500 spread
+  const eggFmt = (v: number) => eggRange < 800
+    ? v.toLocaleString("en-ZA")
+    : `${(v / 1000).toFixed(1)}k`;
 
   const revValues = chartData.map(d => d.revenue).filter(v => isFinite(v));
   const { ticks: revTicks, domainMin: revDomainMin, domainMax: revDomainMax } = niceRange(
@@ -200,16 +203,16 @@ export default function DashTrendsCarousel({ production, waterSeries, feedSeries
               <CartesianGrid stroke={GRID} vertical={true} strokeDasharray="3 3" />
               <XAxis dataKey="label" tick={TICK} tickLine={true} axisLine={AXIS_LINE} />
               <YAxis ticks={eggTicks} domain={[eggDomainMin, eggDomainMax]}
-                tick={TICK} tickLine={false} axisLine={AXIS_LINE} width={44}
-                tickFormatter={v => `${(v / 1000).toFixed(1)}k`} />
+                tick={TICK} tickLine={false} axisLine={AXIS_LINE} width={52}
+                tickFormatter={eggFmt} />
               <Tooltip content={<ChartTooltip formatter={v => `${Math.round(v).toLocaleString()} eggs`} />} cursor={{ fill: "rgba(0,46,53,0.04)" }} />
               <Bar dataKey="eggs" radius={0} isAnimationActive={false}>
                 {chartData.map((entry, i) => (
                   <Cell key={i} fill={entry.isToday ? TEAL : "rgba(0,46,53,0.09)"} />
                 ))}
                 <LabelList dataKey="eggs" position="top"
-                  formatter={(v: unknown) => { const n = Number(v); return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`; }}
-                  style={{ fontSize: 8, fill: T3, fontFamily: "Inter,sans-serif" }} />
+                  formatter={(v: unknown) => eggFmt(Number(v))}
+                  style={{ fontSize: 10, fontWeight: 600, fill: "#3a4d4f", fontFamily: "Inter,sans-serif" }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -314,7 +317,7 @@ export default function DashTrendsCarousel({ production, waterSeries, feedSeries
               <Bar dataKey="feedPulses" fill={T3} fillOpacity={0.55} radius={0} isAnimationActive={false}>
                 <LabelList dataKey="feedPulses" position="top"
                   formatter={(v: unknown) => { const n = Number(v); return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`; }}
-                  style={{ fontSize: 8, fill: T3, fontFamily: "Inter,sans-serif" }} />
+                  style={{ fontSize: 10, fontWeight: 600, fill: "#3a4d4f", fontFamily: "Inter,sans-serif" }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>

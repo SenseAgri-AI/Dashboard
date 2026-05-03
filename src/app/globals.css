@@ -86,7 +86,7 @@ html, body {
 .sa-gauge-card { background: var(--card); border: 1px solid rgba(0,0,0,0.09); box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 6px 6px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .sa-gauge { width: 100%; display: block; overflow: visible; }
 .sa-gauge-value { font-family: var(--font-d); font-size: 30px; font-weight: 800; fill: var(--t1); letter-spacing: -0.02em; }
-.sa-gauge-label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.10em; fill: var(--t3); }
+.sa-gauge-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.10em; fill: var(--t2); }
 .sa-gauge-footer { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 8px; }
 .sa-gauge-word { font-family: var(--font-d); font-size: 12px; font-weight: 800; }
 .sa-gauge-word.good    { color: #16A34A; }
@@ -108,15 +108,15 @@ html, body {
 .sa-panel-body { padding: 10px 14px; flex: 1; display: flex; flex-direction: column; justify-content: space-evenly; gap: 0; }
 .sa-pm { display: flex; flex-direction: column; padding: 6px 0; }
 .sa-pm + .sa-pm { border-top: 1px solid var(--divider); }
-.sa-pm-lbl { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.10em; color: var(--t3); margin-bottom: 2px; }
+.sa-pm-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.10em; color: var(--t2); margin-bottom: 2px; }
 .sa-pm-val { font-family: var(--font-d); font-size: 28px; font-weight: 800; line-height: 1.05; }
 .sa-pm-val--production { color: var(--primary); }
 .sa-pm-val--welfare    { color: var(--teal); }
 .sa-pm-val--financial  { color: #9A7100; }
 .sa-pm-val--neutral    { color: var(--t1); }
-.sa-pm-sub { font-size: 9.5px; color: var(--t3); margin-top: 2px; line-height: 1.4; }
-.sa-pm-sub b { color: var(--t2); font-weight: 600; }
-.sa-pm-status { font-size: 9px; font-weight: 700; margin-top: 3px; display: flex; align-items: center; gap: 5px; }
+.sa-pm-sub { font-size: 11px; font-weight: 600; color: var(--t2); margin-top: 2px; line-height: 1.4; }
+.sa-pm-sub b { color: var(--t1); font-weight: 700; }
+.sa-pm-status { font-size: 10px; font-weight: 700; margin-top: 3px; display: flex; align-items: center; gap: 5px; }
 .sa-pm-status::before { content: ''; width: 6px; height: 6px; flex: 0 0 6px; display: inline-block; }
 .sa-pm-status.ok::before     { background: #16A34A; }
 .sa-pm-status.warn::before   { background: #CA8A04; }
@@ -133,12 +133,12 @@ html, body {
 .sa-alert-card.warning { background: var(--warn-bg);   border-top-color: #D97706; }
 .sa-alert-card.normal  { background: var(--ok-bg);     border-top-color: #16A34A; }
 .sa-alert-card.neutral { border-top-color: var(--t4);  background: var(--card); }
-.sa-alert-metric { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.10em; margin-bottom: 2px; }
+.sa-alert-metric { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.10em; margin-bottom: 2px; }
 .sa-alert-card.danger  .sa-alert-metric { color: var(--danger); }
 .sa-alert-card.warning .sa-alert-metric { color: #92400E; }
 .sa-alert-card.normal  .sa-alert-metric { color: var(--ok); }
-.sa-alert-card.neutral .sa-alert-metric { color: var(--t3); }
-.sa-alert-conclusion { font-size: 11px; line-height: 1.3; color: var(--t2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sa-alert-card.neutral .sa-alert-metric { color: var(--t2); }
+.sa-alert-conclusion { font-size: 12px; font-weight: 500; line-height: 1.3; color: var(--t2); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
 /* ── ROW 2: ENVIRONMENTAL ───────────────────────── */
 .sa-env-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
@@ -147,23 +147,23 @@ html, body {
 .sa-env-name { font-family: var(--font-d); font-size: 18px; font-weight: 800; color: var(--t1); letter-spacing: -0.02em; }
 .sa-env-reading { font-family: var(--font-d); font-size: 22px; font-weight: 800; display: flex; align-items: baseline; gap: 4px; white-space: nowrap; }
 .sa-env-reading.small  { font-size: 18px; }
-.sa-env-unit { font-size: 9px; font-weight: 400; color: var(--t3); font-family: var(--font-s); }
-.sa-env-foot { font-size: 8.5px; color: var(--t3); margin-top: 6px; }
+.sa-env-unit { font-size: 11px; font-weight: 600; color: var(--t2); font-family: var(--font-s); }
+.sa-env-foot { font-size: 11px; font-weight: 500; color: var(--t2); margin-top: 6px; }
 
 /* ── ROW 3: TRENDS ──────────────────────────────── */
 .sa-trends-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .sa-trend-card { background: var(--card); border: 1px solid rgba(0,0,0,0.09); box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 13px 16px 10px; }
 .sa-trend-title { font-family: var(--font-d); font-size: 18px; font-weight: 800; color: var(--t1); letter-spacing: -0.02em; margin-bottom: 2px; }
-.sa-trend-sub { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--t3); margin-bottom: 12px; }
-.sa-trend-note { font-size: 8.5px; color: var(--t3); margin-top: 8px; line-height: 1.5; }
+.sa-trend-sub { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--t2); margin-bottom: 12px; }
+.sa-trend-note { font-size: 11px; font-weight: 500; color: var(--t2); margin-top: 8px; line-height: 1.5; }
 
 /* ── CAROUSEL (inside trends row) ───────────────── */
 .sa-carousel-card { background: var(--card); border: 1px solid rgba(0,0,0,0.09); box-shadow: 0 1px 4px rgba(0,0,0,0.08); display: flex; flex-direction: column; }
 .sa-carousel-body { padding: 13px 16px 8px; display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .sa-chart-title { font-family: var(--font-d); font-size: 18px; font-weight: 800; color: var(--t1); letter-spacing: -0.02em; margin-bottom: 2px; }
-.sa-chart-sub { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--t3); margin-bottom: 12px; }
+.sa-chart-sub { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--t2); margin-bottom: 12px; }
 .sa-chart-area { flex: 1; min-height: 0; display: flex; align-items: stretch; width: 100%; }
-.sa-chart-note { font-size: 8.5px; color: var(--t3); margin-top: 8px; line-height: 1.5; flex-shrink: 0; }
+.sa-chart-note { font-size: 11px; font-weight: 500; color: var(--t2); margin-top: 8px; line-height: 1.5; flex-shrink: 0; }
 .sa-carousel-footer { background: var(--card-alt); padding: 8px 18px; display: flex; align-items: center; justify-content: center; gap: 7px; flex-shrink: 0; }
 .sa-c-dot { width: 5px; height: 5px; border-radius: 50% !important; background: var(--t4); border: none; cursor: pointer; padding: 0; transition: background 150ms, transform 150ms; }
 .sa-c-dot.active { background: var(--primary); transform: scale(1.4); }

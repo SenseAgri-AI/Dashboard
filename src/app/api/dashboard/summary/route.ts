@@ -87,37 +87,64 @@ function rebaseCumulative(points: { time: string; value: number; cumulative: num
   });
 }
 
+function isNightSast(): boolean {
+  const hour = new Date(Date.now() + SAST_OFFSET_MS).getUTCHours();
+  return hour >= 20 || hour < 6;
+}
+
+function sustainedBelowThreshold(
+  sparkline: { time: string; value: number }[],
+  thresholdC: number,
+  durationHours: number
+): boolean {
+  const cutoff = Date.now() - durationHours * 60 * 60 * 1000;
+  const recent = sparkline.filter((pt) => new Date(pt.time).getTime() >= cutoff);
+  // Need at least durationHours*2 points (30-min buckets) to make the call
+  if (recent.length < durationHours * 2) return false;
+  return recent.every((pt) => pt.value < thresholdC);
+}
+
+function tempAlertMessage(
+  val: number | null,
+  sparkline: { time: string; value: number }[]
+): { status: "normal" | "warning" | "danger"; message: string } {
+  if (val === null) return { status: "normal", message: "No data from sensor." };
+  const v = Math.round(val * 10) / 10;
+
+  // Heat stress thresholds apply day and night
+  if (val > 30) return { status: "danger", message: `Critical. ${v}°C — heat stress threshold exceeded. Check cooling immediately.` };
+  if (val > 26) return { status: "warning", message: `Elevated. ${v}°C approaching heat stress threshold — monitor closely.` };
+
+  const night = isNightSast();
+
+  if (night) {
+    if (val < 10) return { status: "danger", message: `Cold night. ${v}°C — below 10°C threshold. Birds diverting energy to thermoregulation. Expect increased feed intake.` };
+    if (val < 14) return { status: "warning", message: `Cool night. ${v}°C — below optimal. Monitor feed consumption tomorrow.` };
+    return { status: "normal", message: `${v}°C — within acceptable night range.` };
+  } else {
+    if (val < 14 && sustainedBelowThreshold(sparkline, 14, 3)) {
+      return { status: "warning", message: `Sustained cold. ${v}°C for 3+ hours — birds burning extra energy on thermoregulation. Expect higher feed intake today.` };
+    }
+    if (val < 14) return { status: "warning", message: `Low. ${v}°C — below optimal daytime range. Monitor closely.` };
+    return { status: "normal", message: `Within range. ${v}°C — no action required.` };
+  }
+}
+
 function alertMessage(
-  metric: "temperature" | "humidity" | "co2",
-  status: "normal" | "warning" | "danger",
+  metric: "humidity" | "co2",
   val: number | null
 ): string {
   if (val === null) return "No data from sensor.";
   const v = Math.round(val * 10) / 10;
-  if (metric === "temperature") {
-    if (status === "danger") {
-      return val > 26
-        ? `Critical. ${v}°C — heat stress threshold exceeded. Check cooling immediately.`
-        : `Critical. ${v}°C — cold stress risk. Check heating immediately.`;
-    }
-    if (status === "warning") {
-      return val > 26
-        ? `Elevated. ${v}°C approaching heat stress threshold — monitor closely.`
-        : `Low. ${v}°C below optimal range — check heating.`;
-    }
-    return `Within range. ${v}°C — no action required.`;
-  }
   if (metric === "humidity") {
+    const status = val < 40 || val > 85 ? "danger" : val < 50 || val > 75 ? "warning" : "normal";
     if (status === "danger") return `Out of range. ${v}% RH — check ventilation and water systems.`;
-    if (status === "warning") {
-      const dir = val < 50 ? "Low" : "High";
-      return `${dir}. ${v}% RH — outside optimal 50–70% band.`;
-    }
+    if (status === "warning") return `${val < 50 ? "Low" : "High"}. ${v}% RH — outside optimal 50–70% band.`;
     return `Within range. ${v}% RH — no action required.`;
   }
   if (metric === "co2") {
-    if (status === "danger") return `Insufficient. CO₂ ${Math.round(v)}ppm — check fans immediately.`;
-    if (status === "warning") return `Elevated. CO₂ ${Math.round(v)}ppm — increase ventilation.`;
+    if (v > 1400) return `Insufficient. CO₂ ${Math.round(v)}ppm — check fans immediately.`;
+    if (v > 800) return `Elevated. CO₂ ${Math.round(v)}ppm — increase ventilation.`;
     return `Good. CO₂ ${Math.round(v)}ppm — ventilation sufficient.`;
   }
   return "";
@@ -251,20 +278,19 @@ export async function GET() {
       alerts: [
         {
           metric: "Temperature",
-          status: ts,
-          message: alertMessage("temperature", ts, temp),
+          ...tempAlertMessage(temp, tempSpark),
           updatedAt: tempSpark.at(-1)?.time ?? null,
         },
         {
           metric: "Ventilation",
           status: cs,
-          message: alertMessage("co2", cs, co2),
+          message: alertMessage("co2", co2),
           updatedAt: co2Spark.at(-1)?.time ?? null,
         },
         {
           metric: "Humidity",
           status: hs,
-          message: alertMessage("humidity", hs, humidity),
+          message: alertMessage("humidity", humidity),
           updatedAt: humiditySpark.at(-1)?.time ?? null,
         },
         {
