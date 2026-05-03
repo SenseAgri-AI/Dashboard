@@ -68,12 +68,15 @@ html, body {
 /* ── ROW 1: OVERVIEW ────────────────────────────── */
 .sa-overview-row { display: grid; grid-template-columns: 320px 1fr 700px; gap: 8px; align-items: stretch; }
 
-/* KPI grid — 4 equal columns, production header spans cols 1-2 */
-.sa-kpi-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
+/* KPI grid — mobile-first: sections stack; desktop: display:contents flattens into a true 4-col grid */
+.sa-kpi-grid { display: flex; flex-direction: column; gap: 6px; }
+.sa-kpi-section--production { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sa-kpi-section--welfare,
+.sa-kpi-section--financial  { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .sa-kpi-col-hd { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; padding: 5px 12px; }
 .sa-kpi-col-hd--production { grid-column: 1 / 3; color: var(--primary); border-left: 3px solid var(--primary); background: rgba(0,46,53,0.04); }
-.sa-kpi-col-hd--welfare    { color: var(--teal);    border-left: 3px solid var(--teal);    background: rgba(42,142,154,0.05); }
-.sa-kpi-col-hd--financial  { color: #7A5C00;        border-left: 3px solid var(--gold);    background: rgba(212,175,55,0.07); }
+.sa-kpi-col-hd--welfare    { grid-column: 1 / 3; color: var(--teal);    border-left: 3px solid var(--teal);    background: rgba(42,142,154,0.05); }
+.sa-kpi-col-hd--financial  { grid-column: 1 / 3; color: #7A5C00;        border-left: 3px solid var(--gold);    background: rgba(212,175,55,0.07); }
 .sa-kpi-item { background: var(--card); border: 1px solid rgba(0,0,0,0.09); box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 10px 14px; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
 
 /* Alert stack */
@@ -170,18 +173,33 @@ html, body {
 
 /* ── RESPONSIVE ─────────────────────────────────── */
 
-/* Tablet landscape (≤1280px): collapse alert stack below gauge+KPI */
+/* Desktop (>1280px): sections become transparent → true flat 4-col grid, all cards equal width */
+@media (min-width: 1281px) {
+  .sa-kpi-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .sa-kpi-section { display: contents; }
+  .sa-kpi-col-hd--production  { grid-column: 1 / 3; grid-row: 1; }
+  .sa-kpi-col-hd--welfare     { grid-column: 3;     grid-row: 1; }
+  .sa-kpi-col-hd--financial   { grid-column: 4;     grid-row: 1; }
+  .sa-kpi-section--production > :nth-child(2) { grid-column: 1; grid-row: 2; }
+  .sa-kpi-section--production > :nth-child(3) { grid-column: 2; grid-row: 2; }
+  .sa-kpi-section--production > :nth-child(4) { grid-column: 1; grid-row: 3; }
+  .sa-kpi-section--production > :nth-child(5) { grid-column: 2; grid-row: 3; }
+  .sa-kpi-section--welfare    > :nth-child(2) { grid-column: 3; grid-row: 2; }
+  .sa-kpi-section--welfare    > :nth-child(3) { grid-column: 3; grid-row: 3; }
+  .sa-kpi-section--financial  > :nth-child(2) { grid-column: 4; grid-row: 2; }
+  .sa-kpi-section--financial  > :nth-child(3) { grid-column: 4; grid-row: 3; }
+}
+
+/* Tablet landscape (≤1280px): alert row moves below gauge+KPI */
 @media (max-width: 1280px) {
   .sa-overview-row { grid-template-columns: 260px 1fr; }
   .sa-alert-stack { grid-column: 1 / -1; flex-direction: row; }
 }
 
-/* Tablet portrait / large phone landscape (≤1024px) */
+/* Tablet portrait (≤1024px) */
 @media (max-width: 1024px) {
   .sa-env-row { grid-template-columns: repeat(2, 1fr); }
   .sa-trends-row { grid-template-columns: 1fr; }
-  .sa-kpi-grid { grid-template-columns: 1fr 1fr; }
-  .sa-kpi-col-hd--production { grid-column: 1 / 3; }
 }
 
 /* Phone (≤767px) */
