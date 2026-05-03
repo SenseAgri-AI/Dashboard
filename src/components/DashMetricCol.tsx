@@ -80,10 +80,13 @@ export function DashKpiGrid({ production, env }: { production: ProductionData | 
     ? (eggs.small * 40 + eggs.medium * 47 + eggs.large * 55 + eggs.xl * 63 + eggs.jumbo * 70) / eggs.total
     : null;
 
-  // Feed pulses per egg for the latest recorded day
-  const todayDaily = production?.daily?.[production.daily.length - 1];
-  const feedPerEgg = todayDaily?.feedPulses != null && todayDaily.eggs > 0
-    ? todayDaily.feedPulses / todayDaily.eggs
+  // Feed per egg: yesterday's pulses (auger run after yesterday's first fill up to
+  // today's first fill) divided by today's collected eggs — matches trend chart pairing
+  const daily = production?.daily;
+  const todayDaily = daily?.[daily.length - 1];
+  const yesterdayDaily = daily?.[daily.length - 2];
+  const feedPerEgg = yesterdayDaily?.feedPulses != null && todayDaily?.eggs != null && todayDaily.eggs > 0
+    ? yesterdayDaily.feedPulses / todayDaily.eggs
     : null;
 
   return (
