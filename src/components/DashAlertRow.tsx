@@ -2,6 +2,7 @@ export interface AlertItem {
   metric: string;
   status: "normal" | "warning" | "danger" | "neutral";
   message: string;
+  updatedAt?: string | null;
 }
 
 export default function DashAlertRow({ alerts }: { alerts: AlertItem[] }) {

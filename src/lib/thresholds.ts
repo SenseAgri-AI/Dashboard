@@ -43,15 +43,17 @@ export function computeHealth(
   return Math.max(0, Math.min(100, score));
 }
 
-export function healthLabel(score: number): "normal" | "warning" | "danger" {
-  if (score >= 80) return "normal";
-  if (score >= 50) return "warning";
+export function healthLabel(score: number): "good" | "normal" | "warning" | "danger" {
+  if (score >= 80) return "good";
+  if (score >= 60) return "normal";
+  if (score >= 35) return "warning";
   return "danger";
 }
 
 export function healthWord(score: number): string {
-  if (score >= 80) return "Normal";
-  if (score >= 50) return "Warning";
+  if (score >= 80) return "Good";
+  if (score >= 60) return "Normal";
+  if (score >= 35) return "Warning";
   return "Critical";
 }
 

@@ -10,137 +10,117 @@ export interface ProductionData {
   daily: { date: string; eggs: number; revenue: number; hdep: number | null; feedPulses: number | null; fcr: number | null }[];
 }
 
-function PendingCard({ label, note }: { label: string; note: string }) {
-  return (
-    <div className="sa-metric-card pending">
-      <div className="sa-metric-lbl">{label}</div>
-      <div className="sa-pending-dash">—</div>
-      <div className="sa-pending-note">{note}</div>
-    </div>
-  );
+function fmt(date: string) {
+  return new Date(date).toLocaleDateString("en-ZA", { day: "numeric", month: "short" });
 }
 
-interface MetricCardProps {
+function fmtR(val: number) {
+  return `R ${val.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+interface KpiItemProps {
+  category: "production" | "welfare" | "financial";
   label: string;
-  value: string;
+  value: string | null;
   sub?: string;
+  status?: "ok" | "warn" | "danger";
   statusText?: string;
-  statusClass?: "ok" | "warn" | "danger";
 }
 
-function MetricCard({ label, value, sub, statusText, statusClass }: MetricCardProps) {
+function KpiItem({ category, label, value, sub, status, statusText }: KpiItemProps) {
+  const valColor =
+    category === "production" ? "sa-pm-val--production" :
+    category === "welfare"    ? "sa-pm-val--welfare" :
+    "sa-pm-val--financial";
+
   return (
-    <div className="sa-metric-card">
-      <div className="sa-metric-lbl">{label}</div>
-      <div className="sa-metric-val">{value}</div>
-      {sub && <div className="sa-metric-sub">{sub}</div>}
-      {statusText && (
-        <div className={`sa-metric-status${statusClass ? ` ${statusClass}` : ""}`}>{statusText}</div>
+    <div className={`sa-kpi-item sa-kpi-item--${category}`}>
+      <div className="sa-pm-lbl">{label}</div>
+      {value !== null ? (
+        <>
+          <div className={`sa-pm-val ${valColor}`}>{value}</div>
+          {sub && <div className="sa-pm-sub">{sub}</div>}
+          {status && statusText && <div className={`sa-pm-status ${status}`}>{statusText}</div>}
+        </>
+      ) : (
+        <div className="sa-pm-pending">—</div>
       )}
     </div>
   );
 }
 
-interface DashMetricColProps {
-  env: EnvData | null;
-  production: ProductionData | null;
-}
-
-export default function DashMetricCol({ env, production }: DashMetricColProps) {
-  const waterCurrent = env?.water?.current ?? null;
-  const waterDisplay = waterCurrent !== null ? `${Math.round(waterCurrent).toLocaleString()} L` : null;
-
+export function DashKpiGrid({ production, env }: { production: ProductionData | null; env: EnvData | null }) {
+  const hdep = production?.hdep ?? null;
   const hdepStatus: "ok" | "warn" | "danger" | undefined =
-    production?.hdep !== null && production?.hdep !== undefined
-      ? production.hdep >= 85 ? "ok" : production.hdep >= 70 ? "warn" : "danger"
+    hdep !== null ? (hdep >= 85 ? "ok" : hdep >= 70 ? "warn" : "danger") : undefined;
+  const hdepText =
+    hdep !== null
+      ? hdep >= 85 ? "Normal production rate"
+      : hdep >= 70 ? "Below target — monitor flock"
+      : "Poor — investigate immediately"
       : undefined;
 
-  const hdepStatusText =
-    production?.hdep !== null && production?.hdep !== undefined
-      ? production.hdep >= 85
-        ? "Normal production rate"
-        : production.hdep >= 70
-        ? "Below target — monitor flock"
-        : "Poor — investigate immediately"
-      : undefined;
-
-  const mortalityRate = production?.mortality?.rate ?? null;
+  const rate = production?.mortality?.rate ?? null;
   const mortalityStatus: "ok" | "warn" | "danger" | undefined =
-    mortalityRate !== null
-      ? mortalityRate < 3 ? "ok" : mortalityRate < 6 ? "warn" : "danger"
+    rate !== null ? (rate < 3 ? "ok" : rate < 6 ? "warn" : "danger") : undefined;
+  const mortalityText =
+    rate !== null
+      ? rate < 3 ? "Within normal range"
+      : rate < 6 ? "Elevated — monitor"
+      : "High — investigate"
       : undefined;
 
-  const dataDate = production?.date
-    ? new Date(production.date).toLocaleDateString("en-ZA", { day: "numeric", month: "short" })
+  const waterToday = env?.water?.today ?? null;
+  const weeklyRevenue = production?.daily?.reduce((sum, d) => sum + d.revenue, 0) ?? null;
+  const dataDate = production?.date ? fmt(production.date) : null;
+
+  // Average egg mass using grade midpoints (g): S=40, M=47, L=55, XL=63, J=70
+  const eggs = production?.eggs;
+  const avgEggMass = eggs && eggs.total > 0
+    ? (eggs.small * 40 + eggs.medium * 47 + eggs.large * 55 + eggs.xl * 63 + eggs.jumbo * 70) / eggs.total
+    : null;
+
+  // Feed pulses per egg for the latest recorded day
+  const todayDaily = production?.daily?.[production.daily.length - 1];
+  const feedPerEgg = todayDaily?.feedPulses != null && todayDaily.eggs > 0
+    ? todayDaily.feedPulses / todayDaily.eggs
     : null;
 
   return (
-    <div className="sa-metric-col">
-      <div className="sa-col-header">Welfare &amp; Financial</div>
+    <div className="sa-kpi-grid">
+      <div className="sa-kpi-col-hd sa-kpi-col-hd--production">Production</div>
+      <div className="sa-kpi-col-hd sa-kpi-col-hd--welfare">Welfare</div>
+      <div className="sa-kpi-col-hd sa-kpi-col-hd--financial">Financial</div>
 
-      <div className="sa-section-label">Production</div>
+      <KpiItem category="production" label="Hen-Day %"
+        value={hdep !== null ? `${hdep.toFixed(1)}%` : null}
+        sub={production ? `${production.totalHens.toLocaleString()} hens · ${dataDate}` : undefined}
+        status={hdepStatus} statusText={hdepText} />
+      <KpiItem category="production" label="Avg egg mass"
+        value={avgEggMass !== null ? `${avgEggMass.toFixed(1)} g` : null}
+        sub="Estimated from grade midpoints" />
+      <KpiItem category="welfare" label="Mortality rate"
+        value={rate !== null ? `${rate.toFixed(2)}%` : null}
+        sub={production ? `${production.mortality.today} today · ${production.mortality.cumulative} total` : undefined}
+        status={mortalityStatus} statusText={mortalityText} />
+      <KpiItem category="financial" label="Revenue today"
+        value={production ? fmtR(production.revenue) : null}
+        sub={dataDate ? `Based on ${dataDate} production` : undefined} />
 
-      {production ? (
-        <MetricCard
-          label="Hen-Day %"
-          value={production.hdep !== null ? `${production.hdep.toFixed(1)}%` : "—"}
-          sub={dataDate ? `${dataDate} · ${production.totalHens.toLocaleString()} hens` : undefined}
-          statusText={hdepStatusText}
-          statusClass={hdepStatus}
-        />
-      ) : (
-        <PendingCard label="Hen-Day %" note="Loading production data…" />
-      )}
-
-      {production ? (
-        <MetricCard
-          label="Eggs today"
-          value={production.eggs.total.toLocaleString()}
-          sub={`L ${production.eggs.large} · M ${production.eggs.medium} · XL ${production.eggs.xl} · S ${production.eggs.small}`}
-        />
-      ) : (
-        <PendingCard label="Eggs today" note="Loading production data…" />
-      )}
-
-      <div className="sa-section-label" style={{ marginTop: 3 }}>Financial</div>
-
-      {production ? (
-        <MetricCard
-          label="Revenue today"
-          value={`R ${production.revenue.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-          sub={dataDate ? `Based on ${dataDate} production` : undefined}
-        />
-      ) : (
-        <PendingCard label="Revenue today" note="Loading production data…" />
-      )}
-
-      <div className="sa-section-label" style={{ marginTop: 3 }}>Welfare</div>
-
-      {production ? (
-        <MetricCard
-          label="Mortality rate"
-          value={mortalityRate !== null ? `${mortalityRate.toFixed(2)}%` : "—"}
-          sub={`${production.mortality.cumulative} total · ${production.mortality.today} today`}
-          statusText={
-            mortalityRate !== null
-              ? mortalityRate < 3 ? "Within normal range" : mortalityRate < 6 ? "Elevated — monitor" : "High — investigate"
-              : undefined
-          }
-          statusClass={mortalityStatus}
-        />
-      ) : (
-        <PendingCard label="Mortality rate" note="Loading production data…" />
-      )}
-
-      {waterDisplay !== null ? (
-        <MetricCard
-          label="Water consumed"
-          value={waterDisplay}
-          sub="Last 30-min interval · pulse meter"
-        />
-      ) : (
-        <PendingCard label="Water consumed" note="No meter data — check device connection" />
-      )}
+      <KpiItem category="production" label="Eggs today"
+        value={production ? production.eggs.total.toLocaleString() : null}
+        sub={production ? `XL ${production.eggs.xl} · L ${production.eggs.large} · M ${production.eggs.medium} · S ${production.eggs.small}` : undefined} />
+      <KpiItem category="production" label="Feed per egg"
+        value={feedPerEgg !== null ? `${feedPerEgg.toFixed(2)} pulses` : null}
+        sub="Calibration needed for kg/egg" />
+      <KpiItem category="welfare" label="Water consumed today"
+        value={waterToday !== null ? `${Math.round(waterToday).toLocaleString()} L` : null}
+        sub="Since 00:00 SAST" />
+      <KpiItem category="financial" label="Weekly revenue"
+        value={weeklyRevenue !== null ? fmtR(weeklyRevenue) : null}
+        sub="Last 7 days" />
     </div>
   );
 }
+
+export default function DashMetricCol() { return null; }

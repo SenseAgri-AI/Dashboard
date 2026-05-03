@@ -3,7 +3,10 @@ import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 
 let cachedToken: string | null = null;
 let tokenFetchedAt = 0;
-const TOKEN_TTL_MS = 60 * 60 * 1000; // re-fetch token every hour
+const TOKEN_TTL_MS = 60 * 60 * 1000;
+
+let cachedClient: InfluxDBClient | null = null;
+let cachedClientToken: string | null = null;
 
 async function getInfluxToken(): Promise<string> {
   if (cachedToken && Date.now() - tokenFetchedAt < TOKEN_TTL_MS) {
@@ -24,10 +27,13 @@ async function getInfluxToken(): Promise<string> {
 
 export async function getInfluxClient(): Promise<InfluxDBClient> {
   const token = await getInfluxToken();
-  return new InfluxDBClient({
+  if (cachedClient && cachedClientToken === token) return cachedClient;
+  cachedClient = new InfluxDBClient({
     host: process.env.INFLUXDB_URL ?? "https://us-east-1-1.aws.cloud2.influxdata.com",
     token,
   });
+  cachedClientToken = token;
+  return cachedClient;
 }
 
 export const BUCKET = process.env.INFLUXDB_BUCKET ?? "senseagri-telemetry";
@@ -40,8 +46,11 @@ export async function queryInflux<T = Record<string, unknown>>(sql: string): Pro
     for await (const row of client.query(sql, BUCKET)) {
       rows.push(row as T);
     }
-  } finally {
-    await client.close();
+  } catch (err) {
+    // Invalidate the cached client so the next call gets a fresh connection
+    cachedClient = null;
+    cachedClientToken = null;
+    throw err;
   }
   return rows;
 }
