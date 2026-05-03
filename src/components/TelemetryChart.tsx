@@ -110,7 +110,7 @@ const CustomLegend = ({ payload }: { payload?: { value: string; color: string }[
   return (
     <div className="flex flex-wrap gap-3 justify-end px-2 pt-1">
       {payload.map((p) => (
-        <div key={p.value} className="flex items-center gap-1.5 text-xs text-[#5a6b6d]">
+        <div key={p.value} className="flex items-center gap-1.5 text-sm font-semibold text-[#3a4d4f]">
           <span className="w-4 h-px inline-block" style={{ backgroundColor: p.color, display: "inline-block", verticalAlign: "middle" }} />
           <span className="font-mono">{shortId(p.value)}</span>
         </div>
@@ -122,7 +122,7 @@ const CustomLegend = ({ payload }: { payload?: { value: string; color: string }[
 export default function TelemetryChart({ series, unit, label, barMode }: TelemetryChartProps) {
   if (!series.length || series.every((s) => s.data.length === 0)) {
     return (
-      <div className="flex items-center justify-center h-48 text-[#5a6b6d] text-sm">
+      <div className="flex items-center justify-center h-48 text-[#3a4d4f] text-sm font-semibold">
         No data for selected range
       </div>
     );
@@ -138,7 +138,7 @@ export default function TelemetryChart({ series, unit, label, barMode }: Telemet
       <XAxis
         dataKey="time"
         tickFormatter={isMultiDay ? formatDate : formatTime}
-        tick={{ fontSize: 10, fill: "#5a6b6d", fontFamily: "Inter" }}
+        tick={{ fontSize: 11, fontWeight: 600, fill: "#3a4d4f", fontFamily: "Inter" }}
         axisLine={{ stroke: "#d1dada" }}
         tickLine={false}
         minTickGap={40}
@@ -146,7 +146,7 @@ export default function TelemetryChart({ series, unit, label, barMode }: Telemet
     ),
     yAxis: (
       <YAxis
-        tick={{ fontSize: 10, fill: "#5a6b6d", fontFamily: "Inter" }}
+        tick={{ fontSize: 11, fontWeight: 600, fill: "#3a4d4f", fontFamily: "Inter" }}
         axisLine={false}
         tickLine={false}
         width={48}
@@ -156,7 +156,7 @@ export default function TelemetryChart({ series, unit, label, barMode }: Telemet
 
   return (
     <div>
-      <div className="text-xs font-semibold text-[#5a6b6d] uppercase tracking-widest mb-3">{label}</div>
+      <div className="text-sm font-bold text-[#3a4d4f] uppercase tracking-widest mb-3">{label}</div>
       <ResponsiveContainer width="100%" height={220}>
         {barMode ? (
           <ComposedChart data={merged} margin={{ top: 4, right: 48, left: -16, bottom: 0 }} barCategoryGap="20%">
@@ -165,7 +165,7 @@ export default function TelemetryChart({ series, unit, label, barMode }: Telemet
             {/* Left axis — consumption per bucket */}
             <YAxis
               yAxisId="consumption"
-              tick={{ fontSize: 10, fill: "#5a6b6d", fontFamily: "Inter" }}
+              tick={{ fontSize: 11, fontWeight: 600, fill: "#3a4d4f", fontFamily: "Inter" }}
               axisLine={false}
               tickLine={false}
               width={48}

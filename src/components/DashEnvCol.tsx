@@ -26,7 +26,7 @@ const T3      = "#6B7C80";
 const GREEN   = "#166534";
 const RED     = "#B91C1C";
 const GRID    = "#C8CCCC";
-const TICK  = { fontSize: 9, fill: T3, fontFamily: "Inter,sans-serif" } as const;
+const TICK  = { fontSize: 11, fontWeight: 600, fill: "#3a4d4f", fontFamily: "Inter,sans-serif" } as const;
 const AXIS_LINE = { stroke: "#BEC8CA", strokeWidth: 1 };
 
 function fmtTime(ts: string) {

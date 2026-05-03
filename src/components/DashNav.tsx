@@ -32,7 +32,7 @@ export default function DashNav({ loading }: { loading?: boolean }) {
           <rect x="10" y="60" width="70" height="20" rx="10" fill="#4FB8C5" opacity="0.75" />
           <rect x="0" y="88" width="90" height="20" rx="10" fill="#4FB8C5" />
         </svg>
-        <span className="sa-nav-brand">SenseAgri</span>
+        <span className="sa-nav-brand">SenseAgri AI</span>
       </div>
       <div className="sa-nav-sep" />
       <span className="sa-nav-context">

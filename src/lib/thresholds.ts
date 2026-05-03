@@ -2,8 +2,8 @@ export type MetricStatus = "normal" | "warning" | "danger";
 
 export function tempStatus(val: number | null): MetricStatus {
   if (val === null) return "normal";
-  if (val > 30 || val < 12) return "danger";
-  if (val > 26 || val < 16) return "warning";
+  if (val > 30 || val < 10) return "danger";
+  if (val > 26 || val < 14) return "warning";
   return "normal";
 }
 
