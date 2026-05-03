@@ -91,37 +91,41 @@ export function DashKpiGrid({ production, env }: { production: ProductionData | 
 
   return (
     <div className="sa-kpi-grid">
-      <div className="sa-kpi-col-hd sa-kpi-col-hd--production">Production</div>
-      <div className="sa-kpi-col-hd sa-kpi-col-hd--welfare">Welfare</div>
-      <div className="sa-kpi-col-hd sa-kpi-col-hd--financial">Financial</div>
-
-      <KpiItem category="production" label="Hen-Day %"
-        value={hdep !== null ? `${hdep.toFixed(1)}%` : null}
-        sub={production ? `${production.totalHens.toLocaleString()} hens · ${dataDate}` : undefined}
-        status={hdepStatus} statusText={hdepText} />
-      <KpiItem category="production" label="Avg egg mass"
-        value={avgEggMass !== null ? `${avgEggMass.toFixed(1)} g` : null}
-        sub="Estimated from grade midpoints" />
-      <KpiItem category="welfare" label="Mortality rate"
-        value={rate !== null ? `${rate.toFixed(2)}%` : null}
-        sub={production ? `${production.mortality.today} today · ${production.mortality.cumulative} total` : undefined}
-        status={mortalityStatus} statusText={mortalityText} />
-      <KpiItem category="financial" label="Revenue today"
-        value={production ? fmtR(production.revenue) : null}
-        sub={dataDate ? `Based on ${dataDate} production` : undefined} />
-
-      <KpiItem category="production" label="Eggs today"
-        value={production ? production.eggs.total.toLocaleString() : null}
-        sub={production ? `XL ${production.eggs.xl} · L ${production.eggs.large} · M ${production.eggs.medium} · S ${production.eggs.small}` : undefined} />
-      <KpiItem category="production" label="Feed per egg"
-        value={feedPerEgg !== null ? `${feedPerEgg.toFixed(2)} pulses` : null}
-        sub="Calibration needed for kg/egg" />
-      <KpiItem category="welfare" label="Water consumed today"
-        value={waterToday !== null ? `${Math.round(waterToday).toLocaleString()} L` : null}
-        sub="Since 00:00 SAST" />
-      <KpiItem category="financial" label="Weekly revenue"
-        value={weeklyRevenue !== null ? fmtR(weeklyRevenue) : null}
-        sub="Last 7 days" />
+      <div className="sa-kpi-section sa-kpi-section--production">
+        <div className="sa-kpi-col-hd sa-kpi-col-hd--production">Production</div>
+        <KpiItem category="production" label="Hen-Day %"
+          value={hdep !== null ? `${hdep.toFixed(1)}%` : null}
+          sub={production ? `${production.totalHens.toLocaleString()} hens · ${dataDate}` : undefined}
+          status={hdepStatus} statusText={hdepText} />
+        <KpiItem category="production" label="Avg egg mass"
+          value={avgEggMass !== null ? `${avgEggMass.toFixed(1)} g` : null}
+          sub="Estimated from grade midpoints" />
+        <KpiItem category="production" label="Eggs today"
+          value={production ? production.eggs.total.toLocaleString() : null}
+          sub={production ? `XL ${production.eggs.xl} · L ${production.eggs.large} · M ${production.eggs.medium} · S ${production.eggs.small}` : undefined} />
+        <KpiItem category="production" label="Feed per egg"
+          value={feedPerEgg !== null ? `${feedPerEgg.toFixed(2)} pulses` : null}
+          sub="Calibration needed for kg/egg" />
+      </div>
+      <div className="sa-kpi-section sa-kpi-section--welfare">
+        <div className="sa-kpi-col-hd sa-kpi-col-hd--welfare">Welfare</div>
+        <KpiItem category="welfare" label="Mortality rate"
+          value={rate !== null ? `${rate.toFixed(2)}%` : null}
+          sub={production ? `${production.mortality.today} today · ${production.mortality.cumulative} total` : undefined}
+          status={mortalityStatus} statusText={mortalityText} />
+        <KpiItem category="welfare" label="Water consumed today"
+          value={waterToday !== null ? `${Math.round(waterToday).toLocaleString()} L` : null}
+          sub="Since 00:00 SAST" />
+      </div>
+      <div className="sa-kpi-section sa-kpi-section--financial">
+        <div className="sa-kpi-col-hd sa-kpi-col-hd--financial">Financial</div>
+        <KpiItem category="financial" label="Revenue today"
+          value={production ? fmtR(production.revenue) : null}
+          sub={dataDate ? `Based on ${dataDate} production` : undefined} />
+        <KpiItem category="financial" label="Weekly revenue"
+          value={weeklyRevenue !== null ? fmtR(weeklyRevenue) : null}
+          sub="Last 7 days" />
+      </div>
     </div>
   );
 }

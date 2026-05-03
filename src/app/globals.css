@@ -68,8 +68,11 @@ html, body {
 /* ── ROW 1: OVERVIEW ────────────────────────────── */
 .sa-overview-row { display: grid; grid-template-columns: 320px 1fr 700px; gap: 8px; align-items: stretch; }
 
-/* KPI grid — 4 equal columns, production header spans cols 1-2 */
-.sa-kpi-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
+/* KPI grid — 3 sections: production (2x), welfare (1x), financial (1x) */
+.sa-kpi-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 6px; align-items: start; }
+.sa-kpi-section--production { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sa-kpi-section--welfare,
+.sa-kpi-section--financial { display: flex; flex-direction: column; gap: 6px; }
 .sa-kpi-col-hd { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; padding: 5px 12px; }
 .sa-kpi-col-hd--production { grid-column: 1 / 3; color: var(--primary); border-left: 3px solid var(--primary); background: rgba(0,46,53,0.04); }
 .sa-kpi-col-hd--welfare    { color: var(--teal);    border-left: 3px solid var(--teal);    background: rgba(42,142,154,0.05); }
@@ -180,23 +183,12 @@ html, body {
 @media (max-width: 1024px) {
   .sa-env-row { grid-template-columns: repeat(2, 1fr); }
   .sa-trends-row { grid-template-columns: 1fr; }
-
-  /* Regroup KPI into production block → welfare block → financial block */
-  .sa-kpi-grid { grid-template-columns: 1fr 1fr; }
-  /* Headers: welfare and financial move below their items */
-  .sa-kpi-col-hd--welfare   { grid-column: 1 / 3; grid-row: 4; }
-  .sa-kpi-col-hd--financial { grid-column: 1 / 3; grid-row: 6; }
-  /* Production items: rows 2–3 */
-  .sa-kpi-grid > :nth-child(4)  { grid-column: 1; grid-row: 2; } /* Hen-Day %       */
-  .sa-kpi-grid > :nth-child(5)  { grid-column: 2; grid-row: 2; } /* Avg egg mass     */
-  .sa-kpi-grid > :nth-child(8)  { grid-column: 1; grid-row: 3; } /* Eggs today       */
-  .sa-kpi-grid > :nth-child(9)  { grid-column: 2; grid-row: 3; } /* Feed per egg     */
-  /* Welfare items: row 5 */
-  .sa-kpi-grid > :nth-child(6)  { grid-column: 1; grid-row: 5; } /* Mortality rate   */
-  .sa-kpi-grid > :nth-child(10) { grid-column: 2; grid-row: 5; } /* Water            */
-  /* Financial items: row 7 */
-  .sa-kpi-grid > :nth-child(7)  { grid-column: 1; grid-row: 7; } /* Revenue today    */
-  .sa-kpi-grid > :nth-child(11) { grid-column: 2; grid-row: 7; } /* Weekly revenue   */
+  /* Stack KPI sections vertically; welfare+financial expand to 2 cols each */
+  .sa-kpi-grid { grid-template-columns: 1fr; }
+  .sa-kpi-section--welfare,
+  .sa-kpi-section--financial { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .sa-kpi-col-hd--welfare,
+  .sa-kpi-col-hd--financial { grid-column: 1 / 3; }
 }
 
 /* Phone (≤767px) */
