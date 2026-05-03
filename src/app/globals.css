@@ -167,3 +167,32 @@ html, body {
 .sa-meter-card { background: var(--card); border: 1px solid rgba(0,0,0,0.09); box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 12px 14px 8px; flex: 1; min-height: 0; }
 
 @keyframes sa-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+/* ── RESPONSIVE ─────────────────────────────────── */
+
+/* Tablet landscape (≤1280px): collapse alert stack below gauge+KPI */
+@media (max-width: 1280px) {
+  .sa-overview-row { grid-template-columns: 260px 1fr; }
+  .sa-alert-stack { grid-column: 1 / -1; flex-direction: row; }
+}
+
+/* Tablet portrait / large phone landscape (≤1024px) */
+@media (max-width: 1024px) {
+  .sa-env-row { grid-template-columns: repeat(2, 1fr); }
+  .sa-trends-row { grid-template-columns: 1fr; }
+  .sa-kpi-grid { grid-template-columns: 1fr 1fr; }
+  .sa-kpi-col-hd--production { grid-column: 1 / 3; }
+}
+
+/* Phone (≤767px) */
+@media (max-width: 767px) {
+  .sa-main { padding: 6px 10px 12px; gap: 6px; }
+  .sa-nav { padding: 0 14px; gap: 10px; }
+  .sa-flock-strip { display: none; }
+  .sa-overview-row { grid-template-columns: 1fr; }
+  .sa-pm-val { font-size: 20px; }
+  .sa-pm-pending { font-size: 20px; }
+  .sa-env-name { font-size: 14px; }
+  .sa-env-reading { font-size: 18px; }
+  .sa-trend-title, .sa-chart-title { font-size: 15px; }
+}
