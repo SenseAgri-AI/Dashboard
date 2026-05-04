@@ -61,6 +61,12 @@ function prevDayKey(dateKey: string): string {
   return d.toISOString().slice(0, 10);
 }
 
+function nextDayKey(dateKey: string): string {
+  const d = new Date(dateKey + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 // Attribute feed pulses by farm-day logic:
 // The FIRST fill of each UTC calendar day is the previous evening's top-up
 // and belongs to the previous day. All subsequent fills that day are current-day.
@@ -96,9 +102,13 @@ function feedDailyMap(rows: FeedRow[]): Map<string, number> {
   return map;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getSession();
   if (!session.isLoggedIn) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(request.url);
+  const fromParam = searchParams.get("from"); // YYYY-MM-DD, optional
+  const toParam   = searchParams.get("to");   // YYYY-MM-DD, optional
 
   try {
     const [sheetRows, feedRows] = await Promise.all([
@@ -110,7 +120,7 @@ export async function GET() {
         FROM sensors
         WHERE farm_id = '${FARM_ID}'
           AND device_id = '${FEED_DEVICE_ID}'
-          AND time > now() - INTERVAL '16 days'
+          AND time > now() - INTERVAL '32 days'
         GROUP BY bucket
         ORDER BY bucket ASC
       `),
@@ -177,12 +187,13 @@ export async function GET() {
       }
     }
 
-    const cutoffDate = new Date(latestKey);
-    cutoffDate.setDate(cutoffDate.getDate() - 6);
-    const cutoffKey = cutoffDate.toISOString().slice(0, 10);
+    const defaultCutoff = new Date(latestKey);
+    defaultCutoff.setDate(defaultCutoff.getDate() - 29);
+    const cutoffKey = fromParam ?? defaultCutoff.toISOString().slice(0, 10);
+    const endKey    = toParam   ?? latestKey;
 
-    const daily7d = Array.from(dailyMap.entries())
-      .filter(([k]) => k >= cutoffKey)
+    const daily30d = Array.from(dailyMap.entries())
+      .filter(([k]) => k >= cutoffKey && k <= endKey)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([date, v]) => {
         const feedPulses = feedByDay.get(date) ?? null;
@@ -212,7 +223,7 @@ export async function GET() {
         rate: mortalityRate !== null ? Math.round(mortalityRate * 100) / 100 : null,
       },
       totalHens: TOTAL_HENS,
-      daily: daily7d,
+      daily: daily30d,
     });
   } catch (err) {
     console.error("Production API error:", err);

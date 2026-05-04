@@ -71,7 +71,7 @@ export function DashKpiGrid({ production, env }: { production: ProductionData | 
       : undefined;
 
   const waterToday = env?.water?.today ?? null;
-  const weeklyRevenue = production?.daily?.reduce((sum, d) => sum + d.revenue, 0) ?? null;
+  const weeklyRevenue = production?.daily?.slice(-7).reduce((sum, d) => sum + d.revenue, 0) ?? null;
   const dataDate = production?.date ? fmt(production.date) : null;
 
   // Average egg mass using grade midpoints (g): S=40, M=47, L=55, XL=63, J=70
@@ -102,7 +102,7 @@ export function DashKpiGrid({ production, env }: { production: ProductionData | 
           sub={dataDate ? `Estimated from grade midpoints · ${dataDate}` : "Estimated from grade midpoints"} />
         <KpiItem category="production" label="Eggs today"
           value={production ? production.eggs.total.toLocaleString() : null}
-          sub={production ? `XL ${production.eggs.xl} · L ${production.eggs.large} · M ${production.eggs.medium} · S ${production.eggs.small}${dataDate ? ` · ${dataDate}` : ""}` : undefined} />
+          sub={production ? `J ${production.eggs.jumbo} · XL ${production.eggs.xl} · L ${production.eggs.large} · M ${production.eggs.medium} · S ${production.eggs.small} · Broken ${production.eggs.damaged}${dataDate ? ` · ${dataDate}` : ""}` : undefined} />
         <KpiItem category="production" label="Feed per egg"
           value={feedPerEgg !== null ? `${feedPerEgg.toFixed(2)} pulses` : null}
           sub={dataDate ? `Calibration needed for kg/egg · ${dataDate}` : "Calibration needed for kg/egg"} />

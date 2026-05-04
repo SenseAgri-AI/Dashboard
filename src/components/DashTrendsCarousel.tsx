@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, ComposedChart, Line,
   CartesianGrid, ReferenceArea, ReferenceLine,
@@ -17,16 +17,22 @@ const TICK  = { fontSize: 11, fontWeight: 600, fill: "#3a4d4f", fontFamily: "Int
 const AXIS_LINE = { stroke: "#BEC8CA", strokeWidth: 1 };
 
 const SLIDES = [
-  { title: "Egg count",       sub: "7-day · production",     note: "Today highlighted in teal" },
-  { title: "Revenue",         sub: "7-day · financial",       note: "7-day revenue trend" },
-  { title: "Hen-Day %",       sub: "7-day · welfare derived", note: "Shaded band = normal zone 85–98%" },
-  { title: "Feed conversion", sub: "7-day · pulses/egg",      note: "Uncalibrated — lower is better. Converts to kg/egg once auger calibrated" },
-  { title: "Feed per day",    sub: "7-day · raw pulses",      note: "Raw feed auger pulses — uncalibrated. Validates sensor activity per day" },
+  { title: "Egg count",       group: "production" },
+  { title: "Revenue",         group: "financial" },
+  { title: "Hen-Day %",       group: "welfare derived" },
+  { title: "Feed conversion", group: "pulses/egg" },
+  { title: "Feed per day",    group: "raw pulses" },
 ];
 
-function evenTicks(min: number, max: number, count = 6): number[] {
-  return Array.from({ length: count }, (_, i) => min + (max - min) * i / (count - 1));
-}
+const NOTES = [
+  "Today highlighted in teal",
+  "Revenue trend",
+  "Shaded band = normal zone 85–98%",
+  "Uncalibrated — lower is better. Converts to kg/egg once auger calibrated",
+  "Raw feed auger pulses — uncalibrated. Validates sensor activity per day",
+];
+
+type DailyEntry = ProductionData["daily"][number];
 
 function niceTicks(max: number, targetCount = 5): { ticks: number[]; domainMax: number } {
   if (max <= 0) return { ticks: [0], domainMax: 1 };
@@ -58,6 +64,15 @@ function dayLabel(dateStr: string): string {
   return ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"][d.getDay()];
 }
 
+function shortDate(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00");
+  return `${d.getDate()}/${d.getMonth() + 1}`;
+}
+
+function fmtDate(dateStr: string): string {
+  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-ZA", { day: "numeric", month: "short" });
+}
+
 function PendingChart({ message }: { message: string }) {
   return (
     <div style={{ flex: 1, minHeight: 120, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -68,12 +83,11 @@ function PendingChart({ message }: { message: string }) {
 
 function ChartTooltip({ active, payload, label, formatter }: {
   active?: boolean;
-  payload?: { value: number; color: string }[];
+  payload?: { value: number }[];
   label?: string;
   formatter?: (v: number) => string;
 }) {
   if (!active || !payload?.length) return null;
-  const val = payload[0].value;
   return (
     <div style={{
       background: "#002E35", color: "#fff", fontSize: 10,
@@ -81,7 +95,7 @@ function ChartTooltip({ active, payload, label, formatter }: {
       border: "none", boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
     }}>
       <span style={{ opacity: 0.6, marginRight: 6 }}>{label}</span>
-      <strong>{formatter ? formatter(val) : val}</strong>
+      <strong>{formatter ? formatter(payload[0].value) : payload[0].value}</strong>
     </div>
   );
 }
@@ -106,13 +120,9 @@ function OperationalMeterChart({
       t: new Date(pt.time).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false }),
     }));
 
-  const barValues = pts.map(p => p.v);
-  const barMax = barValues.length ? Math.max(...barValues) : 10;
+  const barMax = pts.length ? Math.max(...pts.map(p => p.v)) : 10;
   const { ticks: barTicks, domainMax: barDomainMax } = niceTicks(barMax, 4);
-
-  const cumValues = pts.map(p => p.cum);
-  const cumMax = cumValues.length ? Math.max(...cumValues) : 10;
-  const cumDomainMax = Math.ceil(cumMax * 1.05);
+  const cumMax = pts.length ? Math.max(...pts.map(p => p.cum)) : 10;
 
   return (
     <div className="sa-meter-card sa-trend-card">
@@ -127,7 +137,7 @@ function OperationalMeterChart({
             <YAxis yAxisId={0} ticks={barTicks} domain={[0, barDomainMax]}
               tick={TICK} tickLine={false} axisLine={AXIS_LINE} width={42}
               tickFormatter={v => `${Math.round(v)}`} />
-            <YAxis yAxisId={1} orientation="right" ticks={[cumMax]} domain={[0, cumDomainMax]}
+            <YAxis yAxisId={1} orientation="right" ticks={[cumMax]} domain={[0, Math.ceil(cumMax * 1.05)]}
               tick={TICK} tickLine={false} axisLine={AXIS_LINE} width={48}
               tickFormatter={v => `${Math.round(v)}${cumUnit}`} />
             <Tooltip content={<ChartTooltip formatter={v => `${Math.round(v).toLocaleString()} ${barUnit}`} />} cursor={{ fill: "rgba(0,46,53,0.04)" }} />
@@ -146,79 +156,114 @@ function OperationalMeterChart({
 
 export default function DashTrendsCarousel({ production, waterSeries, feedSeries }: DashTrendsCarouselProps) {
   const [cur, setCur] = useState(0);
-  const next = useCallback(() => setCur((c) => (c + 1) % SLIDES.length), []);
-
-  useEffect(() => {
-    const tmr = setInterval(next, 12000);
-    return () => clearInterval(tmr);
-  }, [next]);
+  const [preset, setPreset] = useState<7 | 14 | 30>(7);
+  const [showCustom, setShowCustom] = useState(false);
+  const [fromInput, setFromInput] = useState("");
+  const [toInput, setToInput] = useState("");
+  const [customRange, setCustomRange] = useState<{ from: string; to: string; data: DailyEntry[] } | null>(null);
+  const [fetching, setFetching] = useState(false);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [showGraphMenu, setShowGraphMenu] = useState(false);
 
   const daily = production?.daily ?? [];
-  const chartData = daily.map((d, i) => ({
+  const viewData: DailyEntry[] = customRange ? customRange.data : daily.slice(-preset);
+
+  const chartData = viewData.map((d, i) => ({
     ...d,
-    label: dayLabel(d.date),
-    isToday: i === daily.length - 1,
+    label: viewData.length > 10 ? shortDate(d.date) : dayLabel(d.date),
+    isToday: !customRange && i === viewData.length - 1,
   }));
 
-  // Precompute nice round-number axis ranges for every chart
+  const xInterval = chartData.length > 10 ? Math.max(0, Math.floor(chartData.length / 6) - 1) : 0;
+  const showDots  = chartData.length <= 14;
+  const showBarLabels = chartData.length <= 7;
+
+  const viewLabel = customRange
+    ? `${fmtDate(customRange.from)} – ${fmtDate(customRange.to)}`
+    : `${preset}-day`;
+
+  // Axis ranges
   const eggValues = chartData.map(d => d.eggs).filter(v => isFinite(v));
   const eggMin = eggValues.length ? Math.min(...eggValues) : 0;
   const eggMax = eggValues.length ? Math.max(...eggValues) : 5000;
   const eggRange = eggMax - eggMin;
   const { ticks: eggTicks, domainMin: eggDomainMin, domainMax: eggDomainMax } = niceRange(eggMin, eggMax, 6);
-  // Use full numbers when range is tight — k suffix loses precision below ~500 spread
-  const eggFmt = (v: number) => eggRange < 800
-    ? v.toLocaleString("en-ZA")
-    : `${(v / 1000).toFixed(1)}k`;
+  const eggFmt = (v: number) => eggRange < 800 ? v.toLocaleString("en-ZA") : `${(v / 1000).toFixed(1)}k`;
 
   const revValues = chartData.map(d => d.revenue).filter(v => isFinite(v));
   const { ticks: revTicks, domainMin: revDomainMin, domainMax: revDomainMax } = niceRange(
     revValues.length ? Math.min(...revValues) : 0,
-    revValues.length ? Math.max(...revValues) : 5000,
-    5
+    revValues.length ? Math.max(...revValues) : 5000, 5
   );
-
-  const hdepTicks = [80, 84, 88, 92, 96, 100];
 
   const fcrVals = chartData.filter(d => d.fcr !== null).map(d => d.fcr as number).filter(isFinite);
   const fcrMax = fcrVals.length ? Math.max(...fcrVals) : 5;
-  const fcrMin = fcrVals.length ? Math.max(0, Math.min(...fcrVals) * 0.85) : 0;
-  const { ticks: fcrTicksRaw, domainMax: fcrDomainMax } = niceTicks(fcrMax, 6);
-  const fcrTicks = fcrTicksRaw.filter(t => t >= fcrMin);
-  const fcrDomainMin = fcrTicks[0] ?? 0;
+  const { ticks: fcrTicks, domainMax: fcrDomainMax } = niceTicks(fcrMax, 6);
 
   const feedVals = chartData.filter(d => d.feedPulses !== null).map(d => d.feedPulses as number).filter(isFinite);
-  const { ticks: feedTicks, domainMax: feedDomainMax } = niceTicks(
-    feedVals.length ? Math.max(...feedVals) : 1000, 6
-  );
+  const { ticks: feedTicks, domainMax: feedDomainMax } = niceTicks(feedVals.length ? Math.max(...feedVals) : 1000, 6);
+
+  async function applyCustomRange() {
+    if (!fromInput || !toInput) return;
+    setFetching(true);
+    try {
+      const res = await fetch(`/api/production?from=${fromInput}&to=${toInput}`);
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      setCustomRange({ from: fromInput, to: toInput, data: data.daily ?? [] });
+      setShowCustom(false);
+    } finally {
+      setFetching(false);
+    }
+  }
+
+  function openCustom() {
+    if (!fromInput && !toInput) {
+      const today = new Date().toISOString().slice(0, 10);
+      const ago30 = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
+      setFromInput(ago30);
+      setToInput(today);
+    }
+    setShowCustom(s => !s);
+  }
+
+  function selectPreset(d: 7 | 14 | 30) {
+    setPreset(d);
+    setCustomRange(null);
+    setShowCustom(false);
+  }
+
+  function clearCustom() {
+    setCustomRange(null);
+    setShowCustom(false);
+  }
 
   function renderSlide(idx: number) {
     switch (idx) {
-      // ── Egg count bar chart ──────────────────────────────────────────────
       case 0:
         if (chartData.length === 0) return <PendingChart message="Loading production data…" />;
         return (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 18, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={GRID} vertical={true} strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={TICK} tickLine={true} axisLine={AXIS_LINE} />
+              <XAxis dataKey="label" tick={TICK} tickLine={true} axisLine={AXIS_LINE} interval={xInterval} />
               <YAxis ticks={eggTicks} domain={[eggDomainMin, eggDomainMax]}
-                tick={TICK} tickLine={false} axisLine={AXIS_LINE} width={52}
-                tickFormatter={eggFmt} />
+                tick={TICK} tickLine={false} axisLine={AXIS_LINE} width={52} tickFormatter={eggFmt} />
               <Tooltip content={<ChartTooltip formatter={v => `${Math.round(v).toLocaleString()} eggs`} />} cursor={{ fill: "rgba(0,46,53,0.04)" }} />
               <Bar dataKey="eggs" radius={0} isAnimationActive={false}>
                 {chartData.map((entry, i) => (
                   <Cell key={i} fill={entry.isToday ? TEAL : "rgba(0,46,53,0.09)"} />
                 ))}
-                <LabelList dataKey="eggs" position="top"
-                  formatter={(v: unknown) => eggFmt(Number(v))}
-                  style={{ fontSize: 10, fontWeight: 600, fill: "#3a4d4f", fontFamily: "Inter,sans-serif" }} />
+                {showBarLabels && (
+                  <LabelList dataKey="eggs" position="top"
+                    formatter={(v: unknown) => eggFmt(Number(v))}
+                    style={{ fontSize: 10, fontWeight: 600, fill: "#3a4d4f", fontFamily: "Inter,sans-serif" }} />
+                )}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         );
 
-      // ── Revenue area chart ───────────────────────────────────────────────
       case 1:
         if (chartData.length === 0) return <PendingChart message="Loading production data…" />;
         return (
@@ -231,18 +276,17 @@ export default function DashTrendsCarousel({ production, waterSeries, feedSeries
                 </linearGradient>
               </defs>
               <CartesianGrid stroke={GRID} vertical={true} strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={TICK} tickLine={true} axisLine={AXIS_LINE} />
+              <XAxis dataKey="label" tick={TICK} tickLine={true} axisLine={AXIS_LINE} interval={xInterval} />
               <YAxis ticks={revTicks} domain={[revDomainMin, revDomainMax]}
                 tick={TICK} tickLine={false} axisLine={AXIS_LINE} width={52}
                 tickFormatter={v => `R${(v / 1000).toFixed(1)}k`} />
               <Tooltip content={<ChartTooltip formatter={v => `R ${v.toLocaleString("en-ZA", { minimumFractionDigits: 2 })}`} />} cursor={{ stroke: GOLD, strokeWidth: 1, strokeOpacity: 0.3 }} />
               <Area type="monotone" dataKey="revenue" stroke={GOLD} strokeWidth={2}
-                fill="url(#sa-rev)" dot={{ r: 3, fill: GOLD, strokeWidth: 0 }} activeDot={{ r: 4, fill: GOLD }} isAnimationActive={false} />
+                fill="url(#sa-rev)" dot={showDots ? { r: 3, fill: GOLD, strokeWidth: 0 } : false} activeDot={{ r: 4, fill: GOLD }} isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
         );
 
-      // ── HDEP band chart ──────────────────────────────────────────────────
       case 2: {
         if (chartData.length === 0) return <PendingChart message="Loading production data…" />;
         const hdepData = chartData.filter(d => d.hdep !== null);
@@ -261,19 +305,17 @@ export default function DashTrendsCarousel({ production, waterSeries, feedSeries
                 label={{ value: "85% min", position: "insideTopLeft", fontSize: 8, fill: TEAL, opacity: 0.7 }} />
               <ReferenceLine y={98} stroke={TEAL} strokeDasharray="4 3" strokeOpacity={0.45}
                 label={{ value: "98% max", position: "insideBottomLeft", fontSize: 8, fill: TEAL, opacity: 0.7 }} />
-              <XAxis dataKey="label" tick={TICK} tickLine={true} axisLine={AXIS_LINE} />
-              <YAxis ticks={hdepTicks} domain={[80, 100]}
-                tick={TICK} tickLine={false} axisLine={AXIS_LINE} width={38}
-                tickFormatter={v => `${v}%`} />
+              <XAxis dataKey="label" tick={TICK} tickLine={true} axisLine={AXIS_LINE} interval={xInterval} />
+              <YAxis ticks={[80, 84, 88, 92, 96, 100]} domain={[80, 100]}
+                tick={TICK} tickLine={false} axisLine={AXIS_LINE} width={38} tickFormatter={v => `${v}%`} />
               <Tooltip content={<ChartTooltip formatter={v => `${v.toFixed(1)}%`} />} cursor={{ stroke: TEAL, strokeWidth: 1, strokeOpacity: 0.3 }} />
               <Area type="monotone" dataKey="hdep" stroke={TEAL} strokeWidth={2}
-                fill="url(#sa-hdep)" dot={{ r: 3, fill: TEAL, strokeWidth: 0 }} activeDot={{ r: 4, fill: TEAL }} isAnimationActive={false} />
+                fill="url(#sa-hdep)" dot={showDots ? { r: 3, fill: TEAL, strokeWidth: 0 } : false} activeDot={{ r: 4, fill: TEAL }} isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
         );
       }
 
-      // ── FCR proxy area (dashed) ──────────────────────────────────────────
       case 3: {
         if (chartData.length === 0) return <PendingChart message="Loading production data…" />;
         const fcrData = chartData.filter(d => d.fcr !== null);
@@ -288,19 +330,17 @@ export default function DashTrendsCarousel({ production, waterSeries, feedSeries
                 </linearGradient>
               </defs>
               <CartesianGrid stroke={GRID} vertical={true} strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={TICK} tickLine={true} axisLine={AXIS_LINE} />
-              <YAxis ticks={fcrTicks} domain={[fcrDomainMin, fcrDomainMax]}
-                tick={TICK} tickLine={false} axisLine={AXIS_LINE} width={38}
-                tickFormatter={v => v.toFixed(1)} />
+              <XAxis dataKey="label" tick={TICK} tickLine={true} axisLine={AXIS_LINE} interval={xInterval} />
+              <YAxis ticks={fcrTicks} domain={[0, fcrDomainMax]}
+                tick={TICK} tickLine={false} axisLine={AXIS_LINE} width={38} tickFormatter={v => v.toFixed(1)} />
               <Tooltip content={<ChartTooltip formatter={v => `${v.toFixed(2)} pulses/egg`} />} cursor={{ stroke: T3, strokeWidth: 1, strokeOpacity: 0.3 }} />
               <Area type="monotone" dataKey="fcr" stroke={T3} strokeWidth={2} strokeDasharray="6 3"
-                fill="url(#sa-fcr)" dot={{ r: 3, fill: T3, strokeWidth: 0 }} activeDot={{ r: 4, fill: T3 }} isAnimationActive={false} />
+                fill="url(#sa-fcr)" dot={showDots ? { r: 3, fill: T3, strokeWidth: 0 } : false} activeDot={{ r: 4, fill: T3 }} isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
         );
       }
 
-      // ── Raw feed pulses bar chart ────────────────────────────────────────
       case 4: {
         if (chartData.length === 0) return <PendingChart message="Loading production data…" />;
         const feedData = chartData.filter(d => d.feedPulses !== null);
@@ -309,15 +349,17 @@ export default function DashTrendsCarousel({ production, waterSeries, feedSeries
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={feedData} margin={{ top: 18, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={GRID} vertical={true} strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={TICK} tickLine={true} axisLine={AXIS_LINE} />
+              <XAxis dataKey="label" tick={TICK} tickLine={true} axisLine={AXIS_LINE} interval={xInterval} />
               <YAxis ticks={feedTicks} domain={[0, feedDomainMax]}
                 tick={TICK} tickLine={false} axisLine={AXIS_LINE} width={44}
                 tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`} />
               <Tooltip content={<ChartTooltip formatter={v => `${Math.round(v).toLocaleString()} pulses`} />} cursor={{ fill: "rgba(0,46,53,0.04)" }} />
               <Bar dataKey="feedPulses" fill={T3} fillOpacity={0.55} radius={0} isAnimationActive={false}>
-                <LabelList dataKey="feedPulses" position="top"
-                  formatter={(v: unknown) => { const n = Number(v); return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`; }}
-                  style={{ fontSize: 10, fontWeight: 600, fill: "#3a4d4f", fontFamily: "Inter,sans-serif" }} />
+                {showBarLabels && (
+                  <LabelList dataKey="feedPulses" position="top"
+                    formatter={(v: unknown) => { const n = Number(v); return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`; }}
+                    style={{ fontSize: 10, fontWeight: 600, fill: "#3a4d4f", fontFamily: "Inter,sans-serif" }} />
+                )}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -331,22 +373,87 @@ export default function DashTrendsCarousel({ production, waterSeries, feedSeries
 
   const slide = SLIDES[cur];
 
+  const handleTouchStart = (e: React.TouchEvent) => setTouchStart(e.touches[0].clientX);
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStart === null) return;
+    const delta = e.changedTouches[0].clientX - touchStart;
+    if (Math.abs(delta) > 50) {
+      setCur(c => delta < 0 ? (c + 1) % SLIDES.length : (c - 1 + SLIDES.length) % SLIDES.length);
+    }
+    setTouchStart(null);
+  };
+
   return (
     <div className="sa-trends-row">
       <div className="sa-carousel-card">
         <div className="sa-carousel-body">
-          <div className="sa-chart-title">{slide.title}</div>
-          <div className="sa-chart-sub">{slide.sub}</div>
-          <div className="sa-chart-area sa-slide-in" key={cur}>
+
+          {/* Header: graph picker (left) + range controls (right) */}
+          <div className="sa-carousel-header">
+
+            {/* Graph name dropdown */}
+            <div className="sa-graph-picker" onClick={() => setShowGraphMenu(s => !s)}>
+              <span className="sa-chart-title" style={{ marginBottom: 0 }}>{slide.title}</span>
+              <span style={{ fontSize: 18, color: "#D4AF37", opacity: 0.85, lineHeight: 1, marginLeft: 3, flexShrink: 0 }}>▾</span>
+              {showGraphMenu && (
+                <>
+                  <div className="sa-graph-backdrop" onClick={e => { e.stopPropagation(); setShowGraphMenu(false); }} />
+                  <div className="sa-graph-menu">
+                    {SLIDES.map((s, i) => (
+                      <button key={i}
+                        className={`sa-graph-option${i === cur ? " active" : ""}`}
+                        onClick={e => { e.stopPropagation(); setCur(i); setShowGraphMenu(false); }}
+                      >{s.title}</button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Date range controls — all inline */}
+            <div className="sa-range-controls">
+              {([7, 14, 30] as const).map(d => (
+                <button key={d}
+                  className={`sa-vt-btn${!customRange && preset === d ? " active" : ""}`}
+                  onClick={() => selectPreset(d)}
+                >{d}d</button>
+              ))}
+              <div className="sa-range-divider" />
+              {showCustom ? (
+                <>
+                  <input type="date" className="sa-date-input-inline" value={fromInput}
+                    onChange={e => setFromInput(e.target.value)} />
+                  <span className="sa-date-sep-inline">→</span>
+                  <input type="date" className="sa-date-input-inline" value={toInput}
+                    onChange={e => setToInput(e.target.value)} />
+                  <button className="sa-range-apply-inline"
+                    onClick={applyCustomRange}
+                    disabled={!fromInput || !toInput || fetching}
+                  >{fetching ? "…" : "Apply"}</button>
+                  <button className="sa-range-clear"
+                    onClick={() => { setShowCustom(false); clearCustom(); }}
+                  >✕</button>
+                </>
+              ) : (
+                <button
+                  className={`sa-vt-btn${customRange ? " active" : ""}`}
+                  onClick={openCustom}
+                >Custom</button>
+              )}
+            </div>
+          </div>
+
+          <div className="sa-chart-sub">{viewLabel} · {slide.group}</div>
+
+          {/* Chart */}
+          <div
+            className="sa-chart-area"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
             {renderSlide(cur)}
           </div>
-          <div className="sa-chart-note">{slide.note}</div>
-        </div>
-        <div className="sa-carousel-footer">
-          {SLIDES.map((_, i) => (
-            <button key={i} className={`sa-c-dot${i === cur ? " active" : ""}`}
-              onClick={() => setCur(i)} aria-label={`Go to slide ${i + 1}`} />
-          ))}
+          <div className="sa-chart-note">{NOTES[cur]}</div>
         </div>
       </div>
 
