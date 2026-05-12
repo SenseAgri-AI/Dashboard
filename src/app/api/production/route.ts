@@ -161,12 +161,12 @@ export async function GET(request: Request) {
       xl     * prices.xl     +
       jumbo  * prices.jumbo;
 
-    const hdep = TOTAL_HENS > 0 ? (totalEggs / TOTAL_HENS) * 100 : null;
-
     let cumulativeMortality = 0;
     for (const { r } of dataRows) {
       cumulativeMortality += toInt(r[8]);
     }
+    const liveHens = Math.max(1, TOTAL_HENS - cumulativeMortality);
+    const hdep = TOTAL_HENS > 0 ? (totalEggs / liveHens) * 100 : null;
     const mortalityRate = TOTAL_HENS > 0
       ? (cumulativeMortality / (TOTAL_HENS + cumulativeMortality)) * 100
       : null;
@@ -206,7 +206,7 @@ export async function GET(request: Request) {
           date,
           eggs: v.eggs,
           revenue: Math.round(v.revenue * 100) / 100,
-          hdep: TOTAL_HENS > 0 ? Math.round((v.eggs / TOTAL_HENS) * 1000) / 10 : null,
+          hdep: TOTAL_HENS > 0 ? Math.round((v.eggs / liveHens) * 1000) / 10 : null,
           feedPulses,
           fcr,
         };
