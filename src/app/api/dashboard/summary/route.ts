@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { queryInflux, FARM_ID } from "@/lib/influxdb";
-import { getSession } from "@/lib/session";
+import { queryInflux } from "@/lib/influxdb";
+import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
 import {
   tempStatus,
   humidityStatus,
@@ -24,9 +24,8 @@ interface MeterRow {
   cumulative?: number;
 }
 
-const WATER_DEVICE_ID = "24e124136f451854";
-const FEED_DEVICE_ID = "24e124136f452271";
-const WATER_LITRES_PER_PULSE = 10;
+// Device IDs and litres-per-pulse now come from per-farm config (src/lib/farms.ts).
+// SAST offset stays a constant — all current farms are UTC+2.
 const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
 
 function toPoint(bucket: string | Date, value: unknown): { time: string; value: number } | null {
@@ -151,8 +150,15 @@ function alertMessage(
 }
 
 export async function GET() {
-  const session = await getSession();
-  if (!session.isLoggedIn) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let farm;
+  try {
+    farm = await getFarmForRequest();
+  } catch (err) {
+    if (err instanceof FarmAccessError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Failed to resolve farm" }, { status: 500 });
+  }
 
   try {
     // Latest AM308 reading
@@ -165,7 +171,7 @@ export async function GET() {
           AVG(tvoc)        AS tvoc,
           AVG(pressure)    AS pressure
         FROM sensors
-        WHERE farm_id = '${FARM_ID}'
+        WHERE farm_id = '${farm.farmId}'
           AND device_type = 'AM308-1'
           AND time > now() - INTERVAL '1 hour'
       `),
@@ -177,7 +183,7 @@ export async function GET() {
           AVG(co2)         AS co2,
           AVG(tvoc)        AS tvoc
         FROM sensors
-        WHERE farm_id = '${FARM_ID}'
+        WHERE farm_id = '${farm.farmId}'
           AND device_type = 'AM308-1'
           AND time > now() - INTERVAL '24 hours'
         GROUP BY bucket
@@ -188,8 +194,8 @@ export async function GET() {
           date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
           MAX(pulse_total) AS cumulative
         FROM sensors
-        WHERE farm_id = '${FARM_ID}'
-          AND device_id = '${WATER_DEVICE_ID}'
+        WHERE farm_id = '${farm.farmId}'
+          AND device_id = '${farm.waterDeviceId}'
           AND time > now() - INTERVAL '25 hours'
         GROUP BY bucket
         ORDER BY bucket ASC
@@ -199,8 +205,8 @@ export async function GET() {
           date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
           MAX(pulse_total) AS cumulative
         FROM sensors
-        WHERE farm_id = '${FARM_ID}'
-          AND device_id = '${FEED_DEVICE_ID}'
+        WHERE farm_id = '${farm.farmId}'
+          AND device_id = '${farm.feedDeviceId}'
           AND time > now() - INTERVAL '25 hours'
         GROUP BY bucket
         ORDER BY bucket ASC
@@ -220,7 +226,7 @@ export async function GET() {
     const tvocVals = tvocSpark.map((pt) => pt.value);
 
     // Consumption is derived from consecutive cumulative meter readings.
-    const allWaterPoints = cumulativeMeterPoints(waterSparkRows, WATER_LITRES_PER_PULSE);
+    const allWaterPoints = cumulativeMeterPoints(waterSparkRows, farm.waterLitresPerPulse);
     const cutoff3h = Date.now() - 3 * 60 * 60 * 1000;
     const waterLast3h = allWaterPoints
       .filter((pt) => new Date(pt.time).getTime() >= cutoff3h)

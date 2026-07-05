@@ -198,6 +198,71 @@ html, body {
 
 @keyframes sa-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
 
+/* ── APP SHELL (sidebar + content) ──────────────── */
+.sa-shell { display: flex; min-height: 100vh; }
+.sa-sidebar {
+  width: 218px; flex-shrink: 0; background: var(--bg-nav); color: #fff;
+  display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; z-index: 60;
+}
+.sa-side-brand { display: flex; align-items: center; gap: 10px; padding: 18px 20px 16px; }
+.sa-side-brand svg { height: 30px; }
+.sa-side-brand-text { font-family: var(--font-d); font-size: 15px; font-weight: 800; letter-spacing: -0.01em; }
+.sa-side-brand-sub { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: #4FB8C5; margin-top: 2px; }
+.sa-side-nav { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; flex: 1; }
+.sa-side-link {
+  display: flex; align-items: center; gap: 11px; padding: 10px 12px;
+  color: rgba(255,255,255,0.62); font-size: 13.5px; font-weight: 600; text-decoration: none;
+  transition: background 120ms, color 120ms;
+}
+.sa-side-link:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.sa-side-link.active { background: rgba(42,142,154,0.22); color: #fff; box-shadow: inset 3px 0 0 var(--gold); }
+.sa-side-link svg { width: 18px; height: 18px; flex-shrink: 0; }
+.sa-side-foot { border-top: 1px solid rgba(255,255,255,0.09); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+.sa-content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sa-topbar {
+  height: 52px; flex-shrink: 0; background: var(--bg-nav); border-bottom: 1px solid rgba(255,255,255,0.08);
+  display: flex; align-items: center; gap: 14px; padding: 0 20px; position: sticky; top: 0; z-index: 50;
+}
+.sa-topbar-title { font-family: var(--font-d); font-size: 15px; font-weight: 800; color: #fff; }
+.sa-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+/* Always-visible top-bar menu toggle (collapse on desktop, drawer on mobile) */
+.sa-menu-btn { display: inline-flex; align-items: center; justify-content: center; background: transparent; border: none; color: #fff; cursor: pointer; padding: 4px; }
+
+/* Secondary collapse control inside the sidebar header (desktop only) */
+.sa-collapse-btn { display: inline-flex; align-items: center; justify-content: center; background: transparent; border: none; color: rgba(255,255,255,0.5); cursor: pointer; padding: 4px; flex-shrink: 0; }
+.sa-collapse-btn:hover { color: #fff; }
+@media (min-width: 901px) {
+  .sa-shell.collapsed .sa-sidebar { display: none; }
+}
+@media (max-width: 900px) {
+  .sa-collapse-btn { display: none; }
+}
+
+/* Mobile drawer + bottom nav */
+.sa-drawer-backdrop { display: none; }
+.sa-mobile-nav { display: none; }
+
+@media (max-width: 900px) {
+  .sa-sidebar {
+    position: fixed; left: 0; top: 0; height: 100vh; transform: translateX(-100%);
+    transition: transform 220ms ease; box-shadow: 0 0 40px rgba(0,0,0,0.4);
+  }
+  .sa-sidebar.open { transform: translateX(0); }
+  .sa-drawer-backdrop.open { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 55; }
+  .sa-content { padding-bottom: 58px; }
+  .sa-mobile-nav {
+    display: flex; position: fixed; bottom: 0; left: 0; right: 0; height: 58px; z-index: 58;
+    background: var(--bg-nav); border-top: 1px solid rgba(255,255,255,0.1);
+  }
+  .sa-mobile-link {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    color: rgba(255,255,255,0.6); font-size: 10px; font-weight: 700; text-decoration: none; letter-spacing: 0.02em;
+  }
+  .sa-mobile-link svg { width: 20px; height: 20px; }
+  .sa-mobile-link.active { color: var(--gold); }
+}
+
 /* ── RESPONSIVE ─────────────────────────────────── */
 
 /* Desktop (>1280px): sections become transparent → true flat 4-col grid, all cards equal width */

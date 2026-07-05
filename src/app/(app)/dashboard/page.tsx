@@ -2,9 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import DashNav from "@/components/DashNav";
 import DashStatusBar from "@/components/DashStatusBar";
-import DashAlertRow, { type AlertItem } from "@/components/DashAlertRow";
+import { type AlertItem } from "@/components/DashAlertRow";
 import DashEnvCol, { type EnvData } from "@/components/DashEnvCol";
 import { DashKpiGrid, type ProductionData } from "@/components/DashMetricCol";
 import DashTrendsCarousel from "@/components/DashTrendsCarousel";
@@ -37,7 +36,7 @@ export default function DashboardPage() {
       ]);
 
       if (summaryRes.status === 401) {
-        router.push("/login");
+        router.push("/sign-in");
         return;
       }
 
@@ -70,64 +69,55 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <>
-        <DashNav loading />
-        <main className="sa-main">
-          <div style={{ color: "var(--t3)", fontSize: 13, padding: "60px 0", textAlign: "center", fontFamily: "var(--font-s)" }}>
-            Loading sensor data…
-          </div>
-        </main>
-      </>
+      <main className="sa-main">
+        <div style={{ color: "var(--t3)", fontSize: 13, padding: "60px 0", textAlign: "center", fontFamily: "var(--font-s)" }}>
+          Loading sensor data…
+        </div>
+      </main>
     );
   }
 
   if (error) {
     return (
-      <>
-        <DashNav />
-        <main className="sa-main">
-          <div style={{ color: "var(--danger)", fontSize: 13, padding: "60px 0", textAlign: "center", fontFamily: "var(--font-s)" }}>
-            {error}
-          </div>
-        </main>
-      </>
+      <main className="sa-main">
+        <div style={{ color: "var(--danger)", fontSize: 13, padding: "60px 0", textAlign: "center", fontFamily: "var(--font-s)" }}>
+          {error}
+        </div>
+      </main>
     );
   }
 
   return (
-    <>
-      <DashNav />
-      <main className="sa-main">
+    <main className="sa-main">
 
-        {/* Row 1 — Overview: gauge + combined KPI card + alert stack */}
-        <div className="sa-overview-row">
-          <DashStatusBar
-            health={summary?.health ?? 0}
-            word={summary?.healthWord ?? "Unknown"}
-            label={summary?.healthLabel ?? "normal"}
-          />
-          <DashKpiGrid production={production} env={summary?.env ?? null} />
-          <div className="sa-alert-stack">
-            {(summary?.alerts ?? []).slice(0, 4).map((a) => (
-              <div key={a.metric} className={`sa-alert-card ${a.status}`} style={{ flex: 1 }}>
-                <div className="sa-alert-metric">{a.metric}</div>
-                <div className="sa-alert-conclusion">{a.message}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Row 3 — Environmental sparklines */}
-        <DashEnvCol env={summary?.env ?? null} />
-
-        {/* Row 3 — Trends carousel + operational meters */}
-        <DashTrendsCarousel
-          production={production}
-          waterSeries={summary?.env?.water?.sparkline ?? []}
-          feedSeries={summary?.operational?.feed?.sparkline ?? []}
+      {/* Row 1 — Overview: gauge + combined KPI card + alert stack */}
+      <div className="sa-overview-row">
+        <DashStatusBar
+          health={summary?.health ?? 0}
+          word={summary?.healthWord ?? "Unknown"}
+          label={summary?.healthLabel ?? "normal"}
         />
+        <DashKpiGrid production={production} env={summary?.env ?? null} />
+        <div className="sa-alert-stack">
+          {(summary?.alerts ?? []).slice(0, 4).map((a) => (
+            <div key={a.metric} className={`sa-alert-card ${a.status}`} style={{ flex: 1 }}>
+              <div className="sa-alert-metric">{a.metric}</div>
+              <div className="sa-alert-conclusion">{a.message}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
-      </main>
-    </>
+      {/* Row 2 — Environmental sparklines */}
+      <DashEnvCol env={summary?.env ?? null} />
+
+      {/* Row 3 — Trends carousel + operational meters */}
+      <DashTrendsCarousel
+        production={production}
+        waterSeries={summary?.env?.water?.sparkline ?? []}
+        feedSeries={summary?.operational?.feed?.sparkline ?? []}
+      />
+
+    </main>
   );
 }

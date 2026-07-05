@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-ssm": "^3.1032.0",
+    "@clerk/nextjs": "^7.5.12",
     "@influxdata/influxdb3-client": "^2.1.0",
     "googleapis": "^171.4.0",
     "iron-session": "^8.0.4",
