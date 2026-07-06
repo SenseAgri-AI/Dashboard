@@ -14,7 +14,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider>
-      <html lang="en" className={`${manrope.variable} ${inter.variable} h-full`}>
+      {/* suppressHydrationWarning: browser extensions inject attributes (e.g. data-processed-*)
+          onto <html> before React hydrates — a benign, expected mismatch on this element only. */}
+      <html lang="en" suppressHydrationWarning className={`${manrope.variable} ${inter.variable} h-full`}>
         <body className="min-h-full">{children}</body>
       </html>
     </ClerkProvider>

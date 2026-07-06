@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
-import { listVersions, addVersion, deleteVersion, normalizeVersion } from "@/lib/scheduleService";
+import { listVersions, saveVersion, deleteVersion, normalizeVersion } from "@/lib/scheduleService";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     const user = await currentUser();
     const email = user?.emailAddresses?.[0]?.emailAddress ?? user?.id ?? "";
     const version = normalizeVersion((await request.json()) as Record<string, unknown>, email);
-    return NextResponse.json({ version: await addVersion(r.farm!.spreadsheetId, version) });
+    return NextResponse.json({ version: await saveVersion(r.farm!.spreadsheetId, version) });
   } catch (e) {
     return err(400, e instanceof Error ? e.message : "Failed to save action");
   }
@@ -44,10 +44,10 @@ export async function DELETE(request: Request) {
   if (r.error) return r.error;
   try {
     const { searchParams } = new URL(request.url);
-    const actionKey = searchParams.get("actionKey");
+    const scheduleId = searchParams.get("scheduleId");
     const effectiveDate = searchParams.get("effectiveDate") ?? undefined;
-    if (!actionKey) return err(400, "actionKey is required");
-    await deleteVersion(r.farm!.spreadsheetId, actionKey, effectiveDate);
+    if (!scheduleId) return err(400, "scheduleId is required");
+    await deleteVersion(r.farm!.spreadsheetId, scheduleId, effectiveDate);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return err(500, e instanceof Error ? e.message : "Failed to delete action");
