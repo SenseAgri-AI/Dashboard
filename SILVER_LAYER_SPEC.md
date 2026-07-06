@@ -76,6 +76,23 @@ ChirpStack LoRaWAN uplinks:
   version in effect at H.
 - **`Prices`**, **`SizeWeights`** — pricing + grader thresholds (effective-dated), for later revenue/size analysis.
 
+### Accessing the Sheets (where + how)
+- **Where** — each farm's `spreadsheetId` is in its **per-farm SSM config
+  `/senseagri/farms/<slug>/config`** (same JSON blob as the `devices` map). Read it from there;
+  do **not** hard-code an ID. (DATA_ACCESS.md still shows Anike's single hard-coded ID
+  `1KjAr1wjfptYbE0n3qCWY_7gTVnR-XMTRy8xzRgCDpkA` — pre-multitenant, use it only as a fallback.)
+- **Auth** — Google **service-account JSON in SSM `/senseagri/dev/google/service-account`**
+  (region `af-south-1`). Read-only scope `https://www.googleapis.com/auth/spreadsheets.readonly`
+  is enough for the pipeline. DATA_ACCESS.md §2 has a working `gspread`/Python snippet — reuse it.
+- **⚠️ Sharing** — the service account only sees sheets **shared with its `client_email`**
+  (the email inside the service-account JSON). If a farm's sheet 403s, it hasn't been shared —
+  share it as at least Viewer. New-farm onboarding must include this step.
+- **Column layouts** — DATA_ACCESS.md documents only the old `DailyLog!A:J` and is **stale**. The
+  current, authoritative layouts (incl. the `house` column and the Events/Feed/Schedule/SizeWeights
+  tabs) are the header constants in the app's service files: `src/lib/scheduleService.ts`,
+  `eventService.ts`, `feedService.ts`, `sizeWeightsService.ts`, and the DailyLog parser in
+  `src/app/api/production/route.ts`. Read tab headers dynamically rather than by fixed index.
+
 ---
 
 ## BRONZE — decode, type, dedup
@@ -118,8 +135,10 @@ Parquet + Snappy, **UTC**. Rewrite the open month each run; closed months immuta
 | meters | `water_litres, feed_kg` | per-hour **consumption** = `max(0, Δ pulse_total) × unit-per-pulse` |
 | eggs (manual) | `eggs_total, eggs_small, eggs_medium, eggs_large, eggs_xl, eggs_jumbo, avg_egg_weight, mortality, deaths` | from `DailyLog` — **daily values broadcast onto that day's 24 hourly rows** |
 | interventions | `event_flag, event_type, event_note, feed_delivery_flag, feed_kg_delivered` | from `Events` / `FeedDeliveries`, stamped on the hour they occurred |
-| schedule state | `lights_on, photoperiod_h, fan_state, …` | **as-of** the hour, reconstructed from the effective-dated `Schedule` versions |
 | quality | `n` | sensor-reading count in the bucket |
+
+> **Schedule-state (`lights_on`, `photoperiod_h`, `fan_state`) is intentionally NOT a silver column
+> in v1** — see "Schedule-state" below. Everything above is cleanly derivable from the sheet + raw.
 
 ### Alignment rules
 - **Filter by `device_type` first.** Env columns come **only from `AM308-1`** readings; meter columns
@@ -132,8 +151,37 @@ Parquet + Snappy, **UTC**. Rewrite the open month each run; closed months immuta
 - **Daily sheet data:** broadcast the day's values onto that day's 24 hourly rows (keeps one table;
   a parallel `aligned_daily` is optional).
 - **Events / feed:** stamp on the hour they occurred (these become the plot **annotations**).
-- **Schedule:** for each hour, evaluate the schedule **version in effect** → boolean/number state columns.
+- **Schedule:** **not evaluated in silver v1** — see "Schedule-state" below.
 - **Gaps → `null`.** Never zero-fill or forward-fill instantaneous metrics.
+
+### Schedule-state — expand it into a timeline, don't re-evaluate it in the ETL
+A schedule is just a **calendar**: "Lights 06:00–18:00 daily", "Feeder at 07:00/13:00/17:00", "Fans
+cycle 5 min every 30 min, 06:00–18:00". Like any calendar it **expands into a concrete time-series
+of occurrences**, and once expanded it's plain intervals that drop onto the hour grid with a trivial
+**interval → hour join**. There is no bespoke "deciphering" — the *data* is ordinary time series.
+
+The only nuance: the `Schedule` tab stores the **compact** form (a few dated versions + `Recurrence`
++ a serialized `Times` set), because that's what's sane for a farmer to edit — not 365 rows. So
+there's exactly one operation between stored and analysable: **expand the recurrence into
+occurrences** — the same thing a calendar app does turning a repeat-rule into individual events. Do
+that expansion **once, in the app** (which owns the model); the ETL should never re-expand it, or two
+expanders drift.
+
+**v1 (now) — skip it:**
+- The pipeline skips schedule-state; silver ships with everything else (all cleanly derivable).
+  **Interventions are already aligned** (`event_flag`/`event_type`/`feed_delivery_flag`) — only the
+  continuous regime is deferred.
+- The app renders schedule/event overlays on charts directly from the `Schedule` tab — covers the
+  immediate charting need.
+
+**v2 (science phase) — the app emits an expanded timeline, silver just joins it:**
+- The app materializes a **schedule-occurrence timeline** — the expanded calendar —
+  `(farm_id, house_id, schedule, type, state, start_ts, end_ts)` for the range, to an S3 export the
+  pipeline reads (or a derived sheet tab / small endpoint). This is like exporting a calendar to iCal:
+  concrete events, no rules.
+- Silver joins those intervals onto the hour grid → `lights_on` (hour overlaps an on-interval),
+  `photoperiod_h` (overlap hours/day), `fan_state` (duty within an overlapping window). A dumb
+  time-join — the ETL never touches recurrence logic, and nothing can drift because only the app expands.
 
 ### ⚠️ The one required input: `devEui → (farm_id, house_id, role)`
 Raw sensor JSON has **no farm/house** — only `devEui`. Supply a mapping (extend the per-farm SSM
