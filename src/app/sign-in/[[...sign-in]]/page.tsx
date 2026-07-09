@@ -1,4 +1,5 @@
 import { SignIn } from "@clerk/nextjs";
+import Image from "next/image";
 
 export default function SignInPage() {
   return (
@@ -17,12 +18,14 @@ export default function SignInPage() {
           {/* Logo + brand */}
           <div className="relative z-10 flex-1 flex flex-col justify-between">
             <div>
-              <svg width="52" height="65" viewBox="0 0 90 112" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="45" cy="11" r="7" fill="#D4AF37" />
-                <rect x="24" y="32" width="42" height="20" rx="10" fill="#4FB8C5" opacity="0.55" />
-                <rect x="10" y="60" width="70" height="20" rx="10" fill="#4FB8C5" opacity="0.75" />
-                <rect x="0" y="88" width="90" height="20" rx="10" fill="#4FB8C5" />
-              </svg>
+              <Image
+                src="/logo-dark.jpg"
+                alt="SenseAgri AI"
+                width={64}
+                height={64}
+                priority
+                style={{ borderRadius: 12, boxShadow: "0 4px 14px rgba(0,0,0,0.35)" }}
+              />
 
               <div style={{ marginTop: 24 }}>
                 <div className="text-white font-display font-bold tracking-tight" style={{ fontSize: 22 }}>SenseAgri AI</div>
