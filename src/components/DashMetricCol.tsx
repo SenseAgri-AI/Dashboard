@@ -1,5 +1,3 @@
-import type { EnvData } from "./DashEnvCol";
-
 export interface ProductionData {
   date: string;
   eggs: { total: number; small: number; medium: number; large: number; xl: number; jumbo: number; damaged: number };
@@ -18,7 +16,7 @@ function fmtR(val: number) {
   return `R ${val.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-interface KpiItemProps {
+interface KpiCardProps {
   category: "production" | "welfare" | "financial";
   label: string;
   value: string | null;
@@ -27,29 +25,32 @@ interface KpiItemProps {
   statusText?: string;
 }
 
-function KpiItem({ category, label, value, sub, status, statusText }: KpiItemProps) {
-  const valColor =
-    category === "production" ? "sa-pm-val--production" :
-    category === "welfare"    ? "sa-pm-val--welfare" :
-    "sa-pm-val--financial";
+const CAT: Record<string, { accent: string; val: string }> = {
+  production: { accent: "#002E35", val: "#002E35" },
+  welfare:    { accent: "#2A8E9A", val: "#2A8E9A" },
+  financial:  { accent: "#D4AF37", val: "#7A5C00" },
+};
+const STATUS_COLOR: Record<string, string> = { ok: "#16A34A", warn: "#B45309", danger: "#B91C1C" };
 
+function KpiCard({ category, label, value, sub, status, statusText }: KpiCardProps) {
+  const c = CAT[category];
   return (
-    <div className={`sa-kpi-item sa-kpi-item--${category}`}>
-      <div className="sa-pm-lbl">{label}</div>
+    <div style={{ background: "var(--card)", border: "1px solid rgba(0,0,0,0.09)", borderLeft: `3px solid ${c.accent}`, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", padding: "11px 14px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 3, minWidth: 0 }}>
+      <div style={{ fontSize: 9.5, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--t2)" }}>{label}</div>
       {value !== null ? (
         <>
-          <div className={`sa-pm-val ${valColor}`}>{value}</div>
-          {sub && <div className="sa-pm-sub">{sub}</div>}
-          {status && statusText && <div className={`sa-pm-status ${status}`}>{statusText}</div>}
+          <div style={{ fontFamily: "var(--font-d)", fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.05, color: c.val }}>{value}</div>
+          {sub && <div style={{ fontSize: 10.5, color: "var(--t3)", lineHeight: 1.3 }}>{sub}</div>}
+          {status && statusText && <div style={{ fontSize: 10, fontWeight: 700, color: STATUS_COLOR[status] }}>{statusText}</div>}
         </>
       ) : (
-        <div className="sa-pm-pending">—</div>
+        <div style={{ fontSize: 22, color: "var(--t4)" }}>—</div>
       )}
     </div>
   );
 }
 
-export function DashKpiGrid({ production, env }: { production: ProductionData | null; env: EnvData | null }) {
+export function DashKpiGrid({ production }: { production: ProductionData | null }) {
   const hdep = production?.hdep ?? null;
   const hdepStatus: "ok" | "warn" | "danger" | undefined =
     hdep !== null ? (hdep >= 85 ? "ok" : hdep >= 70 ? "warn" : "danger") : undefined;
@@ -70,7 +71,6 @@ export function DashKpiGrid({ production, env }: { production: ProductionData | 
       : "High — investigate"
       : undefined;
 
-  const waterToday = env?.water?.today ?? null;
   const weeklyRevenue = production?.daily?.slice(-7).reduce((sum, d) => sum + d.revenue, 0) ?? null;
   const dataDate = production?.date ? fmt(production.date) : null;
 
@@ -80,52 +80,28 @@ export function DashKpiGrid({ production, env }: { production: ProductionData | 
     ? (eggs.small * 40 + eggs.medium * 47 + eggs.large * 55 + eggs.xl * 63 + eggs.jumbo * 70) / eggs.total
     : null;
 
-  // Feed per egg: yesterday's pulses (auger run after yesterday's first fill up to
-  // today's first fill) divided by today's collected eggs — matches trend chart pairing
-  const daily = production?.daily;
-  const todayDaily = daily?.[daily.length - 1];
-  const yesterdayDaily = daily?.[daily.length - 2];
-  const feedPerEgg = yesterdayDaily?.feedPulses != null && todayDaily?.eggs != null && todayDaily.eggs > 0
-    ? yesterdayDaily.feedPulses / todayDaily.eggs
-    : null;
-
   return (
-    <div className="sa-kpi-grid">
-      <div className="sa-kpi-section sa-kpi-section--production">
-        <div className="sa-kpi-col-hd sa-kpi-col-hd--production">Production</div>
-        <KpiItem category="production" label="Hen-Day %"
-          value={hdep !== null ? `${hdep.toFixed(1)}%` : null}
-          sub={production ? `${production.totalHens.toLocaleString()} hens · ${dataDate}` : undefined}
-          status={hdepStatus} statusText={hdepText} />
-        <KpiItem category="production" label="Avg egg mass"
-          value={avgEggMass !== null ? `${avgEggMass.toFixed(1)} g` : null}
-          sub={dataDate ? `Estimated from grade midpoints · ${dataDate}` : "Estimated from grade midpoints"} />
-        <KpiItem category="production" label="Eggs today"
-          value={production ? production.eggs.total.toLocaleString() : null}
-          sub={production ? `J ${production.eggs.jumbo} · XL ${production.eggs.xl} · L ${production.eggs.large} · M ${production.eggs.medium} · S ${production.eggs.small} · Broken ${production.eggs.damaged}${dataDate ? ` · ${dataDate}` : ""}` : undefined} />
-        <KpiItem category="production" label="Feed per egg"
-          value={feedPerEgg !== null ? `${feedPerEgg.toFixed(2)} pulses` : null}
-          sub={dataDate ? `Calibration needed for kg/egg · ${dataDate}` : "Calibration needed for kg/egg"} />
-      </div>
-      <div className="sa-kpi-section sa-kpi-section--welfare">
-        <div className="sa-kpi-col-hd sa-kpi-col-hd--welfare">Welfare</div>
-        <KpiItem category="welfare" label="Mortality rate"
-          value={rate !== null ? `${rate.toFixed(2)}%` : null}
-          sub={production ? `${production.mortality.today} today · ${production.mortality.cumulative} total${dataDate ? ` · ${dataDate}` : ""}` : undefined}
-          status={mortalityStatus} statusText={mortalityText} />
-        <KpiItem category="welfare" label="Water consumed today"
-          value={waterToday !== null ? `${Math.round(waterToday).toLocaleString()} L` : null}
-          sub="Since 00:00 SAST" />
-      </div>
-      <div className="sa-kpi-section sa-kpi-section--financial">
-        <div className="sa-kpi-col-hd sa-kpi-col-hd--financial">Financial</div>
-        <KpiItem category="financial" label="Revenue today"
-          value={production ? fmtR(production.revenue) : null}
-          sub={dataDate ? `Based on ${dataDate} production` : undefined} />
-        <KpiItem category="financial" label="Weekly revenue"
-          value={weeklyRevenue !== null ? fmtR(weeklyRevenue) : null}
-          sub="Last 7 days" />
-      </div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, alignContent: "stretch" }}>
+      <KpiCard category="production" label="Hen-Day %"
+        value={hdep !== null ? `${hdep.toFixed(1)}%` : null}
+        sub={production ? `${production.totalHens.toLocaleString()} hens · ${dataDate}` : undefined}
+        status={hdepStatus} statusText={hdepText} />
+      <KpiCard category="production" label="Eggs today"
+        value={production ? production.eggs.total.toLocaleString() : null}
+        sub={production ? `J ${production.eggs.jumbo} · XL ${production.eggs.xl} · L ${production.eggs.large} · M ${production.eggs.medium} · S ${production.eggs.small} · Broken ${production.eggs.damaged}` : undefined} />
+      <KpiCard category="production" label="Avg egg mass"
+        value={avgEggMass !== null ? `${avgEggMass.toFixed(1)} g` : null}
+        sub="Estimated from grade midpoints" />
+      <KpiCard category="welfare" label="Mortality rate"
+        value={rate !== null ? `${rate.toFixed(2)}%` : null}
+        sub={production ? `${production.mortality.today} today · ${production.mortality.cumulative} total` : undefined}
+        status={mortalityStatus} statusText={mortalityText} />
+      <KpiCard category="financial" label="Revenue today"
+        value={production ? fmtR(production.revenue) : null}
+        sub={dataDate ? `Based on ${dataDate}` : undefined} />
+      <KpiCard category="financial" label="Weekly revenue"
+        value={weeklyRevenue !== null ? fmtR(weeklyRevenue) : null}
+        sub="Last 7 days" />
     </div>
   );
 }

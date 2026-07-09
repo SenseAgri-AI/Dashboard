@@ -92,7 +92,7 @@ export default function AdminClient() {
           </Field>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <button onClick={onboard} disabled={status.kind === "saving"}
-              style={{ background: "var(--primary)", color: "#fff", border: "none", padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: status.kind === "saving" ? 0.6 : 1 }}>
+              style={{ background: "var(--grad-primary)", color: "#fff", border: "none", boxShadow: "var(--shadow-primary)", padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: status.kind === "saving" ? 0.6 : 1 }}>
               {status.kind === "saving" ? "Creating…" : "Create organization"}
             </button>
             {status.kind === "ok" && <span style={{ color: "var(--ok)", fontSize: 13, fontWeight: 600 }}>{status.msg}</span>}

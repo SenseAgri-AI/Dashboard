@@ -2,6 +2,7 @@
 
 import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { UserButton, OrganizationSwitcher, useUser, useOrganization } from "@clerk/nextjs";
 
@@ -80,14 +81,24 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
 }
 
-const Brand = () => (
-  <svg viewBox="0 0 90 112" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="45" cy="11" r="7" fill="#D4AF37" />
-    <rect x="24" y="32" width="42" height="20" rx="10" fill="#4FB8C5" opacity="0.55" />
-    <rect x="10" y="60" width="70" height="20" rx="10" fill="#4FB8C5" opacity="0.75" />
-    <rect x="0" y="88" width="90" height="20" rx="10" fill="#4FB8C5" />
-  </svg>
-);
+// Clerk widgets sit on the dark sidebar — force their trigger text/borders light so
+// the org switcher and signed-in user are clearly visible (popovers keep Clerk defaults).
+const clerkDark = {
+  variables: { colorPrimary: "#2A8E9A" },
+  elements: {
+    rootBox: { width: "100%" },
+    organizationSwitcherTrigger: {
+      color: "#fff", width: "100%", justifyContent: "flex-start", padding: "8px 10px",
+      border: "1px solid rgba(255,255,255,0.16)", borderRadius: 8, background: "rgba(255,255,255,0.06)",
+      fontWeight: 600,
+    },
+    organizationSwitcherTrigger__open: { background: "rgba(255,255,255,0.12)" },
+    organizationPreviewMainIdentifier: { color: "#fff", fontWeight: 700 },
+    organizationSwitcherTriggerIcon: { color: "rgba(255,255,255,0.7)" },
+    userButtonBox: { color: "#fff" },
+    userButtonOuterIdentifier: { color: "#fff", fontWeight: 600 },
+  },
+} as const;
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -128,7 +139,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Sidebar (desktop) / drawer (mobile) */}
       <aside className={`sa-sidebar ${open ? "open" : ""}`}>
         <div className="sa-side-brand">
-          <Brand />
+          <Image src="/logo-dark.jpg" alt="SenseAgri" width={36} height={36} priority style={{ borderRadius: 8, flexShrink: 0, display: "block" }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="sa-side-brand-text">SenseAgri AI</div>
             <div className="sa-side-brand-sub">Farm Portal</div>
@@ -156,12 +167,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="sa-side-foot">
           <SafeBoundary>
-            <OrganizationSwitcher
-              hidePersonal
-              appearance={{ variables: { colorPrimary: "#2A8E9A" } }}
-            />
+            <OrganizationSwitcher hidePersonal appearance={clerkDark} />
           </SafeBoundary>
-          <UserButton showName appearance={{ variables: { colorPrimary: "#2A8E9A" } }} />
+          <div className="sa-side-user">
+            <UserButton showName appearance={clerkDark} />
+          </div>
         </div>
       </aside>
 

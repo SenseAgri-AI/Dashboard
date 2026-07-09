@@ -162,13 +162,15 @@ export async function GET() {
 
   try {
     // Latest AM308 reading
-    const [latestRows, sparkRows, waterSparkRows, feedSparkRows] = await Promise.all([
+    const [latestRows, sparkRows, waterSparkRows, feedSparkRows, pmSparkRows] = await Promise.all([
       queryInflux<Record<string, unknown>>(`
         SELECT
           AVG(temperature) AS temperature,
           AVG(humidity)    AS humidity,
           AVG(co2)         AS co2,
           AVG(tvoc)        AS tvoc,
+          AVG(pm2_5)       AS pm2_5,
+          AVG(pm10)        AS pm10,
           AVG(pressure)    AS pressure
         FROM sensors
         WHERE farm_id = '${farm.farmId}'
@@ -211,6 +213,18 @@ export async function GET() {
         GROUP BY bucket
         ORDER BY bucket ASC
       `),
+      queryInflux<Record<string, unknown>>(`
+        SELECT
+          date_bin(INTERVAL '15 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
+          AVG(pm2_5) AS pm25_avg, MIN(pm2_5) AS pm25_min, MAX(pm2_5) AS pm25_max,
+          AVG(pm10)  AS pm10_avg, MIN(pm10)  AS pm10_min, MAX(pm10)  AS pm10_max
+        FROM sensors
+        WHERE farm_id = '${farm.farmId}'
+          AND device_type = 'AM308-1'
+          AND time > now() - INTERVAL '24 hours'
+        GROUP BY bucket
+        ORDER BY bucket ASC
+      `),
     ]);
 
     const latest = latestRows[0] ?? {};
@@ -224,6 +238,18 @@ export async function GET() {
     const co2Spark = sparkRows.map((r) => toPoint(r.bucket, r.co2)).filter((v): v is { time: string; value: number } => v !== null);
     const tvocSpark = sparkRows.map((r) => toPoint(r.bucket, r.tvoc)).filter((v): v is { time: string; value: number } => v !== null);
     const tvocVals = tvocSpark.map((pt) => pt.value);
+
+    // Particulates — 15-min mean with the bucket's min/max range.
+    const pm25Current = toNum(latest.pm2_5);
+    const pm10Current = toNum(latest.pm10);
+    const toBand = (rows: Record<string, unknown>[], avg: string, lo: string, hi: string) =>
+      rows.map((r) => {
+        const p = toPoint(r.bucket as string | Date, r[avg]); // reuse the proven bucket→time conversion
+        if (!p) return null;
+        return { time: p.time, value: Math.round(p.value * 10) / 10, lo: toNum(r[lo]), hi: toNum(r[hi]) };
+      }).filter((p): p is { time: string; value: number; lo: number | null; hi: number | null } => p !== null);
+    const pm25Spark = toBand(pmSparkRows, "pm25_avg", "pm25_min", "pm25_max");
+    const pm10Spark = toBand(pmSparkRows, "pm10_avg", "pm10_min", "pm10_max");
 
     // Consumption is derived from consecutive cumulative meter readings.
     const allWaterPoints = cumulativeMeterPoints(waterSparkRows, farm.waterLitresPerPulse);
@@ -267,6 +293,8 @@ export async function GET() {
           mean: tvocStats.mean,
           std: tvocStats.std,
         },
+        pm2_5: { current: pm25Current, sparkline: pm25Spark },
+        pm10: { current: pm10Current, sparkline: pm10Spark },
         water: {
           current: waterCurrent,
           today: waterSpark.length > 0 ? waterToday : null,

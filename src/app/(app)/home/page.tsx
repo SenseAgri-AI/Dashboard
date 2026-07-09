@@ -132,7 +132,7 @@ function HousesManager({ houses, onSaved }: { houses: House[]; onSaved: () => vo
           <Field label="Starting hens"><input type="number" min={0} value={draft.startingHens} onChange={(e) => setDraft({ ...draft, startingHens: Number(e.target.value) })} style={inputStyle} /></Field>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button onClick={save} style={{ background: "var(--primary)", color: "#fff", border: "none", padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Save house</button>
+          <button onClick={save} style={{ background: "var(--grad-primary)", color: "#fff", border: "none", boxShadow: "var(--shadow-primary)", padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Save house</button>
           {msg && <span style={{ fontSize: 13, fontWeight: 600, color: msg === "Saved" ? "var(--ok)" : "var(--danger)" }}>{msg}</span>}
         </div>
       </div>

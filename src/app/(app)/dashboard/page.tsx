@@ -4,15 +4,12 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import DashStatusBar from "@/components/DashStatusBar";
 import { type AlertItem } from "@/components/DashAlertRow";
+import DashAlertChat from "@/components/DashAlertChat";
 import DashEnvCol, { type EnvData } from "@/components/DashEnvCol";
 import { DashKpiGrid, type ProductionData } from "@/components/DashMetricCol";
-import DashTrendsCarousel from "@/components/DashTrendsCarousel";
 
 interface DashboardSummary {
   env: EnvData;
-  operational?: {
-    feed?: { sparkline: { time: string; value: number; cumulative?: number }[] };
-  };
   metrics: { vapour_pressure: number | null };
   health: number;
   healthWord: string;
@@ -89,35 +86,21 @@ export default function DashboardPage() {
 
   return (
     <main className="sa-main">
-
-      {/* Row 1 — Overview: gauge + combined KPI card + alert stack */}
-      <div className="sa-overview-row">
+      {/* Top — compact health gauge + equal-size KPI cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "200px minmax(0, 1fr)", gap: 10, alignItems: "stretch" }}>
         <DashStatusBar
           health={summary?.health ?? 0}
           word={summary?.healthWord ?? "Unknown"}
           label={summary?.healthLabel ?? "normal"}
         />
-        <DashKpiGrid production={production} env={summary?.env ?? null} />
-        <div className="sa-alert-stack">
-          {(summary?.alerts ?? []).slice(0, 4).map((a) => (
-            <div key={a.metric} className={`sa-alert-card ${a.status}`} style={{ flex: 1 }}>
-              <div className="sa-alert-metric">{a.metric}</div>
-              <div className="sa-alert-conclusion">{a.message}</div>
-            </div>
-          ))}
-        </div>
+        <DashKpiGrid production={production} />
       </div>
 
-      {/* Row 2 — Environmental sparklines */}
-      <DashEnvCol env={summary?.env ?? null} />
-
-      {/* Row 3 — Trends carousel + operational meters */}
-      <DashTrendsCarousel
-        production={production}
-        waterSeries={summary?.env?.water?.sparkline ?? []}
-        feedSeries={summary?.operational?.feed?.sparkline ?? []}
-      />
-
+      {/* Body — environment plots (stacked) on the left, alerts chat on the right */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 340px", gap: 10, alignItems: "stretch", marginTop: 10 }}>
+        <DashEnvCol env={summary?.env ?? null} />
+        <DashAlertChat alerts={summary?.alerts ?? []} updatedAt={summary?.updatedAt} />
+      </div>
     </main>
   );
 }
