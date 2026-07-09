@@ -96,13 +96,22 @@ export async function listFeedDeliveries(spreadsheetId: string): Promise<FeedDel
   return rows.map(({ rowNumber: _r, ...rest }) => rest);
 }
 
+/** Add a new delivery, or update the existing one when its id already exists (edit). */
 export async function addFeedDelivery(spreadsheetId: string, f: FeedDelivery): Promise<FeedDelivery> {
-  await ensureTab(spreadsheetId);
+  const rows = await listWithRows(spreadsheetId);
   const sheets = await getSheetsClient();
-  await sheets.spreadsheets.values.append({
-    spreadsheetId, range: `${FEED_TAB}!A2:${LAST_COL}`, valueInputOption: "RAW", insertDataOption: "INSERT_ROWS",
-    requestBody: { values: [toRow(f)] },
-  });
+  const existing = rows.find((r) => r.id === f.id);
+  if (existing) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId, range: `${FEED_TAB}!A${existing.rowNumber}:${LAST_COL}${existing.rowNumber}`,
+      valueInputOption: "RAW", requestBody: { values: [toRow(f)] },
+    });
+  } else {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId, range: `${FEED_TAB}!A2:${LAST_COL}`, valueInputOption: "RAW", insertDataOption: "INSERT_ROWS",
+      requestBody: { values: [toRow(f)] },
+    });
+  }
   return f;
 }
 

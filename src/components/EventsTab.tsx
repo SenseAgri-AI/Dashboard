@@ -47,6 +47,7 @@ export default function EventsTab() {
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [fieldVals, setFieldVals] = useState<Record<string, string>>({});
+  const [editingId, setEditingId] = useState("");
   const [status, setStatus] = useState<{ kind: "idle" | "saving" | "ok" | "error"; msg?: string }>({ kind: "idle" });
 
   const load = useCallback(async () => {
@@ -58,7 +59,22 @@ export default function EventsTab() {
   const meta = typeMeta(type);
 
   function reset() {
-    setTitle(""); setNotes(""); setTime(""); setFieldVals({}); setDate(todayInSast());
+    setTitle(""); setNotes(""); setTime(""); setFieldVals({}); setDate(todayInSast()); setEditingId("");
+  }
+
+  // Load an existing event back into the form for editing (details string → field values).
+  function edit(e: FarmEvent) {
+    setType(e.type); setHouse(e.house); setDate(e.date); setTime(e.time);
+    setTitle(e.title); setNotes(e.notes);
+    const fv: Record<string, string> = {};
+    for (const part of (e.details || "").split(";")) {
+      const i = part.indexOf(":");
+      if (i > 0) { const k = part.slice(0, i).trim(); if (k) fv[k] = part.slice(i + 1).trim(); }
+    }
+    setFieldVals(fv);
+    setEditingId(e.id);
+    setStatus({ kind: "idle" });
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function save() {
@@ -70,11 +86,11 @@ export default function EventsTab() {
       .join("; ");
     const res = await fetch("/api/events", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, house, date, time, title: title.trim() || meta.label, details, notes }),
+      body: JSON.stringify({ id: editingId || undefined, type, house, date, time, title: title.trim() || meta.label, details, notes }),
     });
     const data = await res.json();
     if (!res.ok) { setStatus({ kind: "error", msg: data.error ?? "Failed" }); return; }
-    setStatus({ kind: "ok", msg: "Event logged" });
+    setStatus({ kind: "ok", msg: editingId ? "Event updated" : "Event logged" });
     reset();
     load();
   }
@@ -91,7 +107,7 @@ export default function EventsTab() {
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Log an event */}
       <section className="sa-panel" style={{ padding: 0 }}>
-        <div className="sa-panel-hd sa-panel-hd--production">Log an event</div>
+        <div className="sa-panel-hd sa-panel-hd--production">{editingId ? "Edit event" : "Log an event"}</div>
         <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
             <Field label="Type">
@@ -121,9 +137,10 @@ export default function EventsTab() {
 
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <button onClick={save} disabled={status.kind === "saving"}
-              style={{ background: "var(--primary)", color: "#fff", border: "none", padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: status.kind === "saving" ? 0.6 : 1 }}>
-              {status.kind === "saving" ? "Saving…" : "Log event"}
+              style={{ background: "var(--grad-primary)", color: "#fff", border: "none", boxShadow: "var(--shadow-primary)", padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: status.kind === "saving" ? 0.6 : 1 }}>
+              {status.kind === "saving" ? "Saving…" : editingId ? "Save changes" : "Log event"}
             </button>
+            {editingId && <button onClick={reset} style={{ background: "transparent", border: "none", color: "var(--t3)", fontWeight: 700, cursor: "pointer" }}>Cancel</button>}
             {status.kind === "ok" && <span style={{ color: "var(--ok)", fontSize: 13, fontWeight: 600 }}>{status.msg}</span>}
             {status.kind === "error" && <span style={{ color: "var(--danger)", fontSize: 13, fontWeight: 600 }}>{status.msg}</span>}
           </div>
@@ -156,7 +173,8 @@ export default function EventsTab() {
                     </td>
                     <td style={{ padding: "9px 12px", fontWeight: 600 }}>{e.title}</td>
                     <td style={{ padding: "9px 12px", color: "var(--t2)" }}>{e.details}{e.notes ? ` — ${e.notes}` : ""}</td>
-                    <td style={{ padding: "9px 12px", textAlign: "right" }}>
+                    <td style={{ padding: "9px 12px", textAlign: "right", whiteSpace: "nowrap" }}>
+                      <button onClick={() => edit(e)} style={{ background: "transparent", border: "none", color: "var(--teal)", fontWeight: 700, cursor: "pointer", marginRight: 12 }}>Edit</button>
                       <button onClick={() => remove(e)} style={{ background: "transparent", border: "none", color: "var(--danger)", fontWeight: 700, cursor: "pointer" }}>Delete</button>
                     </td>
                   </tr>

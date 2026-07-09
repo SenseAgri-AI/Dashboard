@@ -42,12 +42,20 @@ export default function FeedTab() {
 
   const set = (k: keyof FeedDelivery) => (e: React.ChangeEvent<HTMLInputElement>) => setF((x) => ({ ...x, [k]: e.target.value }));
 
+  // Load an existing delivery into the form for editing (keeps its id → save updates it).
+  function edit(d: FeedDelivery) {
+    setF({ ...d });
+    setStatus({ kind: "idle" });
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function save() {
     setStatus({ kind: "saving" });
+    const editing = !!f.id;
     const res = await fetch("/api/feed", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(f) });
     const data = await res.json();
     if (!res.ok) { setStatus({ kind: "error", msg: data.error ?? "Failed" }); return; }
-    setStatus({ kind: "ok", msg: "Delivery logged" });
+    setStatus({ kind: "ok", msg: editing ? "Delivery updated" : "Delivery logged" });
     setF(empty());
     load();
   }
@@ -66,7 +74,7 @@ export default function FeedTab() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <section className="sa-panel" style={{ padding: 0 }}>
-        <div className="sa-panel-hd sa-panel-hd--financial">Log a feed delivery / silo fill</div>
+        <div className="sa-panel-hd sa-panel-hd--financial">{f.id ? "Edit feed delivery" : "Log a feed delivery / silo fill"}</div>
         <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 16 }}>
 
           <div>
@@ -100,9 +108,10 @@ export default function FeedTab() {
 
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <button onClick={save} disabled={status.kind === "saving"}
-              style={{ background: "var(--primary)", color: "#fff", border: "none", padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: status.kind === "saving" ? 0.6 : 1 }}>
-              {status.kind === "saving" ? "Saving…" : "Log delivery"}
+              style={{ background: "var(--grad-primary)", color: "#fff", border: "none", boxShadow: "var(--shadow-primary)", padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: status.kind === "saving" ? 0.6 : 1 }}>
+              {status.kind === "saving" ? "Saving…" : f.id ? "Save changes" : "Log delivery"}
             </button>
+            {f.id && <button onClick={() => setF(empty())} style={{ background: "transparent", border: "none", color: "var(--t3)", fontWeight: 700, cursor: "pointer" }}>Cancel</button>}
             {status.kind === "ok" && <span style={{ color: "var(--ok)", fontSize: 13, fontWeight: 600 }}>{status.msg}</span>}
             {status.kind === "error" && <span style={{ color: "var(--danger)", fontSize: 13, fontWeight: 600 }}>{status.msg}</span>}
           </div>
@@ -133,7 +142,8 @@ export default function FeedTab() {
                   <td style={{ padding: "8px 10px" }}>{d.calcium}</td>
                   <td style={{ padding: "8px 10px" }}>{d.phosphorus}</td>
                   <td style={{ padding: "8px 10px" }}>{d.energy}</td>
-                  <td style={{ padding: "8px 10px", textAlign: "right" }}>
+                  <td style={{ padding: "8px 10px", textAlign: "right", whiteSpace: "nowrap" }}>
+                    <button onClick={() => edit(d)} style={{ background: "transparent", border: "none", color: "var(--teal)", fontWeight: 700, cursor: "pointer", marginRight: 12 }}>Edit</button>
                     <button onClick={() => remove(d)} style={{ background: "transparent", border: "none", color: "var(--danger)", fontWeight: 700, cursor: "pointer" }}>Delete</button>
                   </td>
                 </tr>

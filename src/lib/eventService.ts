@@ -103,13 +103,22 @@ export async function listEvents(spreadsheetId: string): Promise<FarmEvent[]> {
   return rows.map(({ rowNumber: _r, ...rest }) => rest);
 }
 
+/** Add a new event, or update the existing one when its id already exists (edit). */
 export async function addEvent(spreadsheetId: string, e: FarmEvent): Promise<FarmEvent> {
-  await ensureTab(spreadsheetId);
+  const rows = await listWithRows(spreadsheetId);
   const sheets = await getSheetsClient();
-  await sheets.spreadsheets.values.append({
-    spreadsheetId, range: `${EVENTS_TAB}!A2:${LAST_COL}`, valueInputOption: "RAW", insertDataOption: "INSERT_ROWS",
-    requestBody: { values: [toRow(e)] },
-  });
+  const existing = rows.find((r) => r.id === e.id);
+  if (existing) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId, range: `${EVENTS_TAB}!A${existing.rowNumber}:${LAST_COL}${existing.rowNumber}`,
+      valueInputOption: "RAW", requestBody: { values: [toRow(e)] },
+    });
+  } else {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId, range: `${EVENTS_TAB}!A2:${LAST_COL}`, valueInputOption: "RAW", insertDataOption: "INSERT_ROWS",
+      requestBody: { values: [toRow(e)] },
+    });
+  }
   return e;
 }
 
