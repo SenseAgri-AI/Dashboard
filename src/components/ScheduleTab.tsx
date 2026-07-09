@@ -6,15 +6,18 @@ import HouseSelect, { houseLabel } from "@/components/HouseSelect";
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 type Day = (typeof DAYS)[number];
 const DAY_LABEL: Record<Day, string> = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" };
-type ActionType = "onoff" | "do" | "cycle";
+type ActionType = "onoff" | "do";
 type Recurrence = "daily" | "hourly" | "weekly" | "everyNDays" | "biweekly" | "monthly";
-type TimeSlot = { start: string; end: string };
+// A period: start (+ end for on/off). `cycle` is a UI flag; when on, runMinutes/everyMinutes apply.
+type TimeSlot = { start: string; end: string; runMinutes: number; everyMinutes: number; cycle?: boolean };
+// Parse an int from an input, treating blank/invalid as 0 (so clearing a field is fine).
+const intOf = (s: string) => { const n = parseInt(s, 10); return Number.isFinite(n) && n >= 0 ? n : 0; };
 
-// One dated version of a schedule = its full set of times at that point in time.
+// One dated version of a schedule = its full set of periods at that point in time.
 type Version = {
   scheduleId: string; effectiveDate: string; name: string; house: string; type: ActionType;
   recurrence: Recurrence; interval: number; dayOfMonth: number; days: Day[];
-  times: TimeSlot[]; runMinutes: number; everyMinutes: number; notes: string; changedBy: string; changedAt: string;
+  times: TimeSlot[]; notes: string; changedBy: string; changedAt: string;
 };
 
 // Colour is derived from the name — common names get a fixed colour, anything else
@@ -46,19 +49,20 @@ function recurrenceSummary(v: Version): string {
     default: return v.days.map(cap).join(", ");
   }
 }
-// The set of times, shown together: "07:00, 13:00, 17:00" or "06:00→18:00, 20:00→22:00".
+// Periods shown together: "07:00, 15:00" (do) or "06:00→18:00, 20:00→22:00 (5m/30m)" (on/off + cycle).
 function timesSummary(v: Version): string {
   if (!v.times.length) return "—";
-  const window = v.type === "onoff" || v.type === "cycle";
-  return v.times.map((t) => (window && t.end ? `${t.start}→${t.end}` : t.start)).join(", ");
+  return v.times.map((t) => {
+    if (v.type !== "onoff" || !t.end) return t.start;
+    const cyc = t.runMinutes && t.everyMinutes ? ` (${t.runMinutes}m/${t.everyMinutes}m)` : "";
+    return `${t.start}→${t.end}${cyc}`;
+  }).join(", ");
 }
-// For fan-style cycles: "Runs 5 min every 30 min".
-const cycleSummary = (v: Version) => (v.type === "cycle" ? `Runs ${v.runMinutes} min every ${v.everyMinutes} min` : "");
 
 const emptyDraft = (): Version => ({
   scheduleId: "", effectiveDate: todayInSast(), name: "", house: "", type: "do",
   recurrence: "daily", interval: 2, dayOfMonth: 1, days: [...DAYS],
-  times: [{ start: "07:00", end: "" }], runMinutes: 5, everyMinutes: 30, notes: "", changedBy: "", changedAt: "",
+  times: [{ start: "07:00", end: "", runMinutes: 0, everyMinutes: 0 }], notes: "", changedBy: "", changedAt: "",
 });
 
 const inputStyle: React.CSSProperties = {
@@ -122,7 +126,7 @@ export default function ScheduleTab() {
     setDraft((x) => ({ ...x, times: x.times.map((t, j) => (j === i ? { ...t, ...patch } : t)) }));
   }
   function addTime() {
-    setDraft((x) => ({ ...x, times: [...x.times, { start: "07:00", end: x.type !== "do" ? "18:00" : "" }] }));
+    setDraft((x) => ({ ...x, times: [...x.times, { start: x.type === "do" ? "07:00" : "06:00", end: x.type === "onoff" ? "18:00" : "", runMinutes: 0, everyMinutes: 0 }] }));
   }
   function removeTime(i: number) {
     setDraft((x) => ({ ...x, times: x.times.length > 1 ? x.times.filter((_, j) => j !== i) : x.times }));
@@ -130,24 +134,23 @@ export default function ScheduleTab() {
   function reset() { setDraft(emptyDraft()); setStatus({ kind: "idle" }); }
   const focusForm = () => { if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); };
 
-  // "Change" a schedule → start a NEW version dated today, pre-filled from the current times.
-  // Saving it keeps the schedule's id, so the old version drops into history.
-  function change(current: Version) {
-    setDraft({ ...current, effectiveDate: todayInSast() });
-    setStatus({ kind: "idle" });
-    focusForm();
-  }
-  // "Edit" the current version in place (fix a mistake without making a new version).
+  // Edit ANY version (current or a past one). Saving with the same start date fixes it in place;
+  // changing the start date records a new version and keeps the old one as history.
   function edit(v: Version) {
-    setDraft({ ...v });
+    setDraft({ ...v, times: v.times.map((t) => ({ ...t, cycle: t.runMinutes > 0 || t.everyMinutes > 0 })) });
     setStatus({ kind: "idle" });
     focusForm();
   }
 
   async function save() {
     setStatus({ kind: "saving" });
+    // Zero out cycle minutes for periods that aren't cycling; drop the UI-only `cycle` flag.
+    const payload = {
+      ...draft,
+      times: draft.times.map((t) => ({ start: t.start, end: t.end, runMinutes: t.cycle ? t.runMinutes : 0, everyMinutes: t.cycle ? t.everyMinutes : 0 })),
+    };
     const res = await fetch("/api/schedule", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft),
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) { setStatus({ kind: "error", msg: data.error ?? "Failed" }); return; }
@@ -172,14 +175,14 @@ export default function ScheduleTab() {
     setOpenHistory((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   }
 
-  const timeLabel = draft.type === "do" ? "Times" : draft.type === "cycle" ? "Window(s)" : "On / off times";
-  const timeHint = draft.type === "do" ? "Add each time it runs in a day."
-    : draft.type === "cycle" ? "The window it cycles within (on→off). Add more for split windows."
-    : "Add each on→off block.";
+  const timeLabel = draft.type === "do" ? "Times" : "On / off periods";
+  const timeHint = draft.type === "do"
+    ? "Add each time it runs during the day."
+    : "Each period runs on→off. Tick “Cycle” for a period that pulses (e.g. fans: runs 5 min every 30 min).";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      {/* Add / change form */}
+      {/* Add / edit form */}
       <section className="sa-panel" style={{ padding: 0 }}>
         <div className="sa-panel-hd sa-panel-hd--production">{editing ? `Editing “${draft.name || "schedule"}”` : "Add a schedule"}</div>
         <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
@@ -189,49 +192,53 @@ export default function ScheduleTab() {
               <datalist id="sched-names">{nameOptions.map((n) => <option key={n} value={n} />)}</datalist>
             </Field>
             <Field label="House"><HouseSelect value={draft.house} onChange={(v) => setDraft({ ...draft, house: v })} style={inputStyle} /></Field>
-            <Field label="Start date" hint="The day this version starts running. Earlier ones become history.">
+            <Field label="Start date" hint="Keep it to fix this version; set a new date to record a change (old one becomes history).">
               <input type="date" value={draft.effectiveDate} onChange={(e) => setDraft({ ...draft, effectiveDate: e.target.value })} style={inputStyle} />
             </Field>
             <Field label="Type">
               <select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value as ActionType })} style={inputStyle}>
                 <option value="do">Runs at a time (e.g. feeder)</option>
-                <option value="onoff">On / off block (e.g. lights)</option>
-                <option value="cycle">On/off cycle in a window (e.g. fans)</option>
+                <option value="onoff">On / off periods (e.g. lights, fans)</option>
               </select>
             </Field>
           </div>
 
-          {/* Multiple times — this is the whole set the schedule runs at. */}
+          {/* Periods — each is an on→off block that can optionally cycle. */}
           <Field label={timeLabel} hint={timeHint}>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {draft.times.map((t, i) => (
-                <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input type="time" value={t.start} onChange={(e) => setTime(i, { start: e.target.value })} style={{ ...inputStyle, maxWidth: 150 }} />
-                  {draft.type !== "do" && <>
-                    <span style={{ color: "var(--t3)", fontWeight: 700 }}>→</span>
-                    <input type="time" value={t.end} onChange={(e) => setTime(i, { end: e.target.value })} style={{ ...inputStyle, maxWidth: 150 }} />
-                  </>}
-                  {draft.times.length > 1 && (
-                    <button type="button" onClick={() => removeTime(i)} aria-label="Remove"
-                      style={{ border: "1px solid rgba(0,0,0,0.14)", background: "#fff", color: "var(--danger)", width: 34, height: 34, fontSize: 18, lineHeight: 1, cursor: "pointer", flexShrink: 0 }}>×</button>
+                <div key={i} style={{ border: draft.type === "onoff" ? "1px solid var(--divider)" : "none", padding: draft.type === "onoff" ? "8px 10px" : 0, display: "flex", flexDirection: "column", gap: 7 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input type="time" value={t.start} onChange={(e) => setTime(i, { start: e.target.value })} style={{ ...inputStyle, maxWidth: 140 }} />
+                    {draft.type === "onoff" && <>
+                      <span style={{ color: "var(--t3)", fontWeight: 700 }}>→</span>
+                      <input type="time" value={t.end} onChange={(e) => setTime(i, { end: e.target.value })} style={{ ...inputStyle, maxWidth: 140 }} />
+                    </>}
+                    {draft.times.length > 1 && (
+                      <button type="button" onClick={() => removeTime(i)} aria-label="Remove period"
+                        style={{ border: "1px solid rgba(0,0,0,0.14)", background: "#fff", color: "var(--danger)", width: 34, height: 34, fontSize: 18, lineHeight: 1, cursor: "pointer", flexShrink: 0 }}>×</button>
+                    )}
+                  </div>
+                  {draft.type === "onoff" && (
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, color: "var(--t2)" }}>
+                      <label style={{ display: "flex", gap: 5, alignItems: "center", fontWeight: 700, cursor: "pointer" }}>
+                        <input type="checkbox" checked={!!t.cycle} onChange={(e) => setTime(i, e.target.checked ? { cycle: true, runMinutes: t.runMinutes || 5, everyMinutes: t.everyMinutes || 30 } : { cycle: false })} />
+                        Cycle on/off within this period
+                      </label>
+                      {t.cycle && <>
+                        <span>· runs</span>
+                        <input type="number" min={1} inputMode="numeric" value={t.runMinutes || ""} onChange={(e) => setTime(i, { runMinutes: intOf(e.target.value) })} style={{ ...inputStyle, maxWidth: 66, padding: "5px 7px" }} />
+                        <span>min every</span>
+                        <input type="number" min={1} inputMode="numeric" value={t.everyMinutes || ""} onChange={(e) => setTime(i, { everyMinutes: intOf(e.target.value) })} style={{ ...inputStyle, maxWidth: 66, padding: "5px 7px" }} />
+                        <span>min</span>
+                      </>}
+                    </div>
                   )}
                 </div>
               ))}
-              <button type="button" onClick={addTime} style={{ alignSelf: "flex-start", background: "transparent", border: "1px dashed var(--teal)", color: "var(--teal)", padding: "7px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{draft.type === "do" ? "+ Add time" : "+ Add window"}</button>
+              <button type="button" onClick={addTime} style={{ alignSelf: "flex-start", background: "transparent", border: "1px dashed var(--teal)", color: "var(--teal)", padding: "7px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{draft.type === "do" ? "+ Add time" : "+ Add period"}</button>
             </div>
           </Field>
-
-          {draft.type === "cycle" && (
-            <Field label="Cycle within the window" hint="e.g. runs 5 min every 30 min.">
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                <span style={{ fontSize: 13, color: "var(--t2)" }}>Runs for</span>
-                <input type="number" min={1} value={draft.runMinutes} onChange={(e) => setDraft({ ...draft, runMinutes: Number(e.target.value) })} style={{ ...inputStyle, maxWidth: 90 }} />
-                <span style={{ fontSize: 13, color: "var(--t2)" }}>min, every</span>
-                <input type="number" min={1} value={draft.everyMinutes} onChange={(e) => setDraft({ ...draft, everyMinutes: Number(e.target.value) })} style={{ ...inputStyle, maxWidth: 90 }} />
-                <span style={{ fontSize: 13, color: "var(--t2)" }}>min</span>
-              </div>
-            </Field>
-          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
             <Field label="Repeats">
@@ -246,10 +253,10 @@ export default function ScheduleTab() {
             </Field>
             {(draft.recurrence === "everyNDays" || draft.recurrence === "hourly") && (
               <Field label={draft.recurrence === "hourly" ? "Every N hours" : "Every N days"}>
-                <input type="number" min={1} value={draft.interval} onChange={(e) => setDraft({ ...draft, interval: Number(e.target.value) })} style={inputStyle} />
+                <input type="number" min={1} inputMode="numeric" value={draft.interval || ""} onChange={(e) => setDraft({ ...draft, interval: intOf(e.target.value) })} style={inputStyle} />
               </Field>
             )}
-            {draft.recurrence === "monthly" && <Field label="Day of month"><input type="number" min={1} max={31} value={draft.dayOfMonth} onChange={(e) => setDraft({ ...draft, dayOfMonth: Number(e.target.value) })} style={inputStyle} /></Field>}
+            {draft.recurrence === "monthly" && <Field label="Day of month"><input type="number" min={1} max={31} inputMode="numeric" value={draft.dayOfMonth || ""} onChange={(e) => setDraft({ ...draft, dayOfMonth: intOf(e.target.value) })} style={inputStyle} /></Field>}
           </div>
 
           {(draft.recurrence === "weekly" || draft.recurrence === "biweekly") && (
@@ -268,7 +275,7 @@ export default function ScheduleTab() {
 
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <button onClick={save} disabled={status.kind === "saving"}
-              style={{ background: "var(--primary)", color: "#fff", border: "none", padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: status.kind === "saving" ? 0.6 : 1 }}>
+              style={{ background: "var(--grad-primary)", color: "#fff", border: "none", boxShadow: "var(--shadow-primary)", padding: "11px 22px", fontSize: 14, fontWeight: 700, cursor: "pointer", opacity: status.kind === "saving" ? 0.6 : 1 }}>
               {status.kind === "saving" ? "Saving…" : editing ? "Save" : "Add schedule"}
             </button>
             {editing && <button onClick={reset} style={{ background: "transparent", border: "none", color: "var(--t3)", fontWeight: 700, cursor: "pointer" }}>Cancel</button>}
@@ -278,7 +285,7 @@ export default function ScheduleTab() {
         </div>
       </section>
 
-      {/* One card per schedule: current set of times, with change history tucked under it. */}
+      {/* One card per schedule: current set of periods, with change history tucked under it. */}
       <section className="sa-panel" style={{ padding: 0 }}>
         <div className="sa-panel-hd sa-panel-hd--welfare">Schedules</div>
         <div style={{ padding: 12 }}>
@@ -297,23 +304,19 @@ export default function ScheduleTab() {
                         <div style={{ fontWeight: 800, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
                         <div style={{ fontSize: 10.5, color: "var(--t3)" }}>{houseLabel(s.house)}</div>
                       </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-end", flexShrink: 0 }}>
-                        <button onClick={() => change(s.current)} style={linkBtn("var(--teal)")}>Change</button>
-                        <button onClick={() => delSchedule(s)} style={linkBtn("var(--danger)")}>Delete</button>
-                      </div>
+                      <button onClick={() => delSchedule(s)} style={linkBtn("var(--danger)")}>Delete</button>
                     </div>
 
-                    {/* Current version — the live set of times, shown together. */}
+                    {/* Current version — the live set of periods. */}
                     <div style={{ padding: "10px 12px" }}>
                       <div style={{ fontSize: 9.5, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--teal)" }}>Now · since {s.current.effectiveDate}</div>
-                      <div style={{ fontSize: 15, fontWeight: 700, marginTop: 3 }}>{timesSummary(s.current)}</div>
-                      {cycleSummary(s.current) && <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 1 }}>{cycleSummary(s.current)}</div>}
+                      <div style={{ fontSize: 14, fontWeight: 700, marginTop: 3 }}>{timesSummary(s.current)}</div>
                       <div style={{ fontSize: 12, color: "var(--t2)", marginTop: 2 }}>{recurrenceSummary(s.current)}</div>
                       {s.current.notes && <div style={{ fontSize: 11.5, color: "var(--t3)", marginTop: 3 }}>{s.current.notes}</div>}
                       <div style={{ marginTop: 6 }}><button onClick={() => edit(s.current)} style={{ ...linkBtn("var(--teal)"), fontSize: 11 }}>Edit</button></div>
                     </div>
 
-                    {/* History — past sets of times, so the farmer sees how it changed. */}
+                    {/* History — past versions, each editable in case of a mistake. */}
                     {s.history.length > 0 && (
                       <div style={{ borderTop: "1px solid var(--divider)" }}>
                         <button onClick={() => toggleHistory(s.key)}
@@ -323,12 +326,13 @@ export default function ScheduleTab() {
                         </button>
                         {open && s.history.map((v) => (
                           <div key={v.effectiveDate + v.changedAt} style={{ padding: "6px 12px 8px", borderTop: "1px solid var(--divider)" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6 }}>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--t3)" }}>{v.effectiveDate}</span>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--t3)" }}>{v.effectiveDate}</div>
+                            <div style={{ fontSize: 12.5, color: "var(--t2)" }}>{timesSummary(v)}</div>
+                            <div style={{ fontSize: 10.5, color: "var(--t3)" }}>{recurrenceSummary(v)}</div>
+                            <div style={{ display: "flex", gap: 12, marginTop: 3 }}>
+                              <button onClick={() => edit(v)} style={{ ...linkBtn("var(--teal)"), fontSize: 10.5 }}>Edit</button>
                               <button onClick={() => delVersion(v)} style={{ ...linkBtn("var(--danger)"), fontSize: 10.5 }}>Remove</button>
                             </div>
-                            <div style={{ fontSize: 12.5, color: "var(--t2)" }}>{timesSummary(v)}{cycleSummary(v) ? ` · ${cycleSummary(v)}` : ""}</div>
-                            <div style={{ fontSize: 10.5, color: "var(--t3)" }}>{recurrenceSummary(v)}</div>
                           </div>
                         ))}
                       </div>
