@@ -133,7 +133,7 @@ Parquet + Snappy, **UTC**. Rewrite the open month each run; closed months immuta
 | keys | `farm_id, house_id, bucket_start` | hour left-edge (UTC) |
 | environment | `temperature, humidity, co2, tvoc, pm2_5, pm10, pressure, light_level, battery` | **mean** over the hour across the house's AM308s; `temp_min/temp_max` optional |
 | meters | `water_litres, feed_kg` | per-hour **consumption** = `max(0, Δ pulse_total) × unit-per-pulse` |
-| eggs (manual) | `eggs_total, eggs_small, eggs_medium, eggs_large, eggs_xl, eggs_jumbo, avg_egg_weight, mortality, deaths` | from `DailyLog` — **daily values broadcast onto that day's 24 hourly rows** |
+| eggs (manual) | `eggs_total, eggs_small, eggs_medium, eggs_large, eggs_xl, eggs_jumbo, eggs_damaged, avg_egg_weight, mortality, deaths` | from `DailyLog` — **daily values broadcast onto that day's 24 hourly rows**. ⚠️ **`eggs_damaged` (breakages, DailyLog col H) is in the sheet + app but was NOT carried into the current build — add it.** |
 | interventions | `event_flag, event_type, event_note, feed_delivery_flag, feed_kg_delivered` | from `Events` / `FeedDeliveries`, stamped on the hour they occurred |
 | quality | `n` | sensor-reading count in the bucket |
 

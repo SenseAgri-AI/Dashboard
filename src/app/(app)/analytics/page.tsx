@@ -27,8 +27,9 @@ function schedColor(name: string): string {
 type House = { id: string; name: string; startDate: string; startAgeDays: number; startingHens: number };
 type Frame = Record<string, number | string | null | number[]>;
 type Anno = { t: number; label: string; color: string; dash: boolean };
-type Band = { x1: number; x2: number; color: string };
-type AxisSpec = { key: string; label: string; unit: string; color: string; band: boolean };
+type Band = { x1: number; x2: number; color: string; name: string };
+// An axis can carry one metric, or several (e.g. the egg-size group → 5 lines).
+type AxisSpec = { unit: string; band: boolean; axisColor: string; series: { key: string; label: string; color: string }[] };
 type ChartMouse = { activeLabel?: number | string } | null | undefined;
 type SchedVersion = {
   scheduleId: string; effectiveDate: string; name: string; house: string; type: "do" | "onoff" | "cycle";
@@ -78,7 +79,7 @@ function expandSchedules(versions: SchedVersion[], fromMs: number, toMs: number)
         } else {
           const endMs = d + hmToMs(slot.end || slot.start) - off;
           const x1 = Math.max(startMs, fromMs), x2 = Math.min(endMs, toMs);
-          if (x2 > x1) bands.push({ x1, x2, color });
+          if (x2 > x1) bands.push({ x1, x2, color, name: ver.name });
         }
       }
     }
@@ -97,14 +98,38 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
   { key: "light_level", label: "Light", unit: "lux", env: true },
   { key: "battery", label: "Battery", unit: "%", env: true },
   { key: "eggs_total", label: "Eggs / day", unit: "", env: false },
+  { key: "egg_sizes", label: "Egg sizes (all)", unit: "", env: false },
+  { key: "eggs_damaged", label: "Breakages", unit: "", env: false },
   { key: "avg_egg_weight", label: "Egg weight", unit: "g", env: false },
   { key: "cum_mortality", label: "Cumulative mortality", unit: "%", env: false },
+  { key: "breakage_rate", label: "Breakage rate", unit: "%", env: false },
   { key: "hdep", label: "Hen-day %", unit: "%", env: false },
 ];
 const META: Record<string, { key: string; label: string; unit: string }> = Object.fromEntries(CATALOG.map((c) => [c.key, c]));
 const ENV_OPTIONS = CATALOG.filter((c) => c.env);
-// Computed server-side (no raw column, so no intraday min–max band).
-const COMPUTED = new Set(["hdep", "cum_mortality"]);
+// Only sensor metrics vary within a day → only they get a min–max band. Sheet-derived daily
+// values (eggs, sizes, breakages, weight, mortality) are broadcast across the 24 hours, so their
+// min = max = the day's value (a flat, meaningless band).
+const BANDED = new Set(ENV_OPTIONS.map((c) => c.key));
+
+// "Egg sizes (all)" is a GROUP: one pick that plots all five size splits as separate lines.
+const EGG_SIZES = "egg_sizes";
+const SIZE_MEMBERS = [
+  { key: "eggs_small", label: "Small" }, { key: "eggs_medium", label: "Medium" },
+  { key: "eggs_large", label: "Large" }, { key: "eggs_xl", label: "XL" }, { key: "eggs_jumbo", label: "Jumbo" },
+];
+const SIZE_COLORS = ["#9BC7CE", "#2A8E9A", "#D4AF37", "#B8860B", "#7A5C00"]; // small → jumbo
+const expandKeys = (key: string) => (key === EGG_SIZES ? SIZE_MEMBERS.map((m) => m.key) : key ? [key] : []);
+
+// Resolve a dropdown key into an axis spec: a single metric, or the egg-size group (5 lines).
+function buildSpec(key: string, baseColor: string, showRange: boolean): AxisSpec | null {
+  if (!key) return null;
+  if (key === EGG_SIZES) {
+    return { unit: "", band: false, axisColor: AXIS, series: SIZE_MEMBERS.map((m, i) => ({ key: m.key, label: m.label, color: SIZE_COLORS[i] })) };
+  }
+  const m = META[key];
+  return { unit: m?.unit ?? "", band: showRange && BANDED.has(key), axisColor: baseColor, series: [{ key, label: m?.label ?? key, color: baseColor }] };
+}
 
 const SILVER_RANGES = [
   { key: "30d", days: 30, label: "30d" }, { key: "90d", days: 90, label: "90d" },
@@ -148,6 +173,17 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
     setSelA(null); setSelB(null);
   };
 
+  // Stack marker labels vertically when markers cluster near the same x, so they don't overprint.
+  const stacked = useMemo(() => {
+    const span = (domain[1] - domain[0]) || 1;
+    const thresh = span / 20;
+    return [...annos].sort((a, b) => a.t - b.t).reduce<(Anno & { row: number })[]>((acc, a) => {
+      const prev = acc[acc.length - 1];
+      acc.push({ ...a, row: prev && a.t - prev.t <= thresh ? prev.row + 1 : 0 });
+      return acc;
+    }, []);
+  }, [annos, domain]);
+
   return (
     <div style={{ position: "relative", height: 372 }}>
       {zoom && (
@@ -155,13 +191,13 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
           style={{ position: "absolute", top: 0, right: 8, zIndex: 2, fontSize: 10, fontWeight: 700, padding: "3px 8px", border: "1px solid var(--divider)", background: "#fff", cursor: "pointer" }}>Reset zoom</button>
       )}
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 30, right: right ? 4 : 12, bottom: 4, left: -12 }}
+        <ComposedChart data={data} margin={{ top: 16, right: right ? 4 : 12, bottom: 4, left: -12 }}
           onMouseDown={down} onMouseMove={move} onMouseUp={up}>
           <CartesianGrid strokeDasharray="2 4" stroke={GRID} vertical={false} />
           <XAxis dataKey="t" type="number" scale="time" domain={domain} allowDataOverflow
             tickFormatter={tickFormat} tick={{ fontSize: 10, fill: AXIS, fontFamily: "Inter" }} axisLine={{ stroke: "#d1dada" }} tickLine={false} minTickGap={44} />
-          <YAxis yAxisId="left" tick={{ fontSize: 11, fill: left.color, fontFamily: "Inter" }} axisLine={false} tickLine={false} unit={left.unit} width={52} />
-          {right && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: right.color, fontFamily: "Inter" }} axisLine={false} tickLine={false} unit={right.unit} width={52} />}
+          <YAxis yAxisId="left" tick={{ fontSize: 11, fill: left.axisColor, fontFamily: "Inter" }} axisLine={false} tickLine={false} unit={left.unit} width={52} />
+          {right && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: right.axisColor, fontFamily: "Inter" }} axisLine={false} tickLine={false} unit={right.unit} width={52} />}
           <Tooltip labelFormatter={(ms) => labelFormat(Number(ms))}
             formatter={(value, name) => { if (name === "Above standard" || name === "Below standard") return null; if (Array.isArray(value)) return `${value[0]} – ${value[1]}`; return value as number; }}
             contentStyle={{ background: PRIMARY, border: `1px solid ${TEAL}`, borderRadius: 0, fontSize: 12, color: "#fff" }} labelStyle={{ color: TEAL }} />
@@ -172,12 +208,12 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
             <Area yAxisId={standardAxis} dataKey="aboveBand" name="Above standard" stroke="none" fill={GREEN} fillOpacity={0.22} legendType="none" isAnimationActive={false} connectNulls={false} />
             <Area yAxisId={standardAxis} dataKey="belowBand" name="Below standard" stroke="none" fill={DANGER} fillOpacity={0.18} legendType="none" isAnimationActive={false} connectNulls={false} />
           </>)}
-          {left.band && <Area yAxisId="left" type="monotone" dataKey={`${left.key}_band`} name={`${left.label} range`} stroke="none" fill={left.color} fillOpacity={0.2} legendType="none" isAnimationActive={false} connectNulls={false} />}
-          {right?.band && <Area yAxisId="right" type="monotone" dataKey={`${right.key}_band`} name={`${right.label} range`} stroke="none" fill={right.color} fillOpacity={0.2} legendType="none" isAnimationActive={false} connectNulls={false} />}
-          <Line yAxisId="left" type="monotone" dataKey={left.key} name={left.label} stroke={left.color} strokeWidth={2} dot={false} connectNulls />
-          {right && <Line yAxisId="right" type="monotone" dataKey={right.key} name={right.label} stroke={right.color} strokeWidth={2} dot={false} connectNulls />}
+          {left.band && left.series[0] && <Area yAxisId="left" type="monotone" dataKey={`${left.series[0].key}_band`} name={`${left.series[0].label} range`} stroke="none" fill={left.series[0].color} fillOpacity={0.2} legendType="none" isAnimationActive={false} connectNulls={false} />}
+          {right?.band && right.series[0] && <Area yAxisId="right" type="monotone" dataKey={`${right.series[0].key}_band`} name={`${right.series[0].label} range`} stroke="none" fill={right.series[0].color} fillOpacity={0.2} legendType="none" isAnimationActive={false} connectNulls={false} />}
+          {left.series.map((s) => <Line key={s.key} yAxisId="left" type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2} dot={false} connectNulls />)}
+          {right && right.series.map((s) => <Line key={s.key} yAxisId="right" type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2} dot={false} connectNulls />)}
           {standardAxis && <Line yAxisId={standardAxis} type="monotone" dataKey="standard" name="Breed standard" stroke={STD} strokeWidth={1.5} strokeDasharray="5 4" dot={false} connectNulls />}
-          {annos.map((a, i) => <ReferenceLine key={`a${i}`} yAxisId="left" x={a.t} stroke={a.color} strokeDasharray={a.dash ? "3 3" : undefined} strokeWidth={1} label={{ value: a.label, position: "top", fontSize: 8, fill: a.color }} />)}
+          {stacked.map((a, i) => <ReferenceLine key={`a${i}`} yAxisId="left" x={a.t} stroke={a.color} strokeDasharray={a.dash ? "3 3" : undefined} strokeWidth={1} label={<MarkLabel text={a.label} color={a.color} row={a.row} />} />)}
           {selA != null && selB != null && selA !== selB && <ReferenceArea yAxisId="left" x1={Math.min(selA, selB)} x2={Math.max(selA, selB)} strokeOpacity={0} fill={PRIMARY} fillOpacity={0.08} />}
         </ComposedChart>
       </ResponsiveContainer>
@@ -192,7 +228,9 @@ function HighResExplorer() {
   const [rangeKey, setRangeKey] = useState("7d");
   const [resKey, setResKey] = useState("1h");
   const [showRange, setShowRange] = useState(false);
-  const [overlays, setOverlays] = useState(false);
+  const [showWindows, setShowWindows] = useState(false);
+  const [showEvents, setShowEvents] = useState(false);
+  const [hidden, setHidden] = useState<Set<string>>(new Set()); // schedules hidden from the windows overlay
   const [raw, setRaw] = useState<Frame[]>([]);
   const [range, setRange] = useState<{ fromMs: number; toMs: number }>({ fromMs: 0, toMs: 0 });
   const [sched, setSched] = useState<SchedVersion[]>([]);
@@ -215,7 +253,7 @@ function HighResExplorer() {
     const now = Date.now();
     const r = HR_RANGES.find((x) => x.key === rangeKey) ?? HR_RANGES[1];
     setRange({ fromMs: now - r.days * DAY_MS, toMs: now });
-    const metrics = [left, ...(right && right !== left ? [right] : [])];
+    const metrics = [...new Set([...expandKeys(left), ...expandKeys(right)])];
     const q = new URLSearchParams({ metrics: metrics.join(","), range: rangeKey, resolution: resKey });
     const res = await fetch(`/api/analytics/highres?${q}`);
     if (!res.ok) { setErr((await res.json().catch(() => ({}))).error ?? "Failed to load"); setRaw([]); setLoading(false); return; }
@@ -226,17 +264,31 @@ function HighResExplorer() {
 
   const data = useMemo<Frame[]>(() => raw.map((row) => ({ ...row, t: new Date(String(row.time)).getTime() })), [raw]);
 
-  const { bands, marks } = useMemo(() => {
-    if (!overlays) return { bands: [] as Band[], marks: [] as Anno[] };
-    const { bands, marks } = expandSchedules(sched, range.fromMs, range.toMs);
+  const { bands, marks, schedLegend } = useMemo(() => {
+    const bands: Band[] = [];
+    const marks: Anno[] = [];
+    const legend = new Map<string, string>(); // name → colour (every schedule in the window)
     const inWin = (t: number) => t >= range.fromMs && t <= range.toMs;
-    for (const e of events) { const t = dayMs(e.date) + (e.time ? hmToMs(e.time) - SAST_OFFSET_H * 3_600_000 : 12 * 3_600_000); if (inWin(t)) marks.push({ t, label: truncate(e.title || e.type || "event"), color: DANGER, dash: true }); }
-    for (const f of feed) { const t = dayMs(f.date) + 12 * 3_600_000; if (inWin(t)) marks.push({ t, label: "Feed", color: STD, dash: true }); }
-    return { bands, marks };
-  }, [overlays, sched, events, feed, range]);
+    // Schedules = the actual operation: on/off windows (bands) + "do" run-times (marks).
+    if (showWindows) {
+      const ex = expandSchedules(sched, range.fromMs, range.toMs);
+      for (const b of ex.bands) { legend.set(b.name, b.color); if (!hidden.has(b.name)) bands.push(b); }
+      for (const m of ex.marks) { legend.set(m.label, m.color); if (!hidden.has(m.label)) marks.push(m); }
+    }
+    // Events = point-in-time: schedule changes (a new version starting), logged events, feed.
+    if (showEvents) {
+      for (const v of sched) { const t = dayMs(v.effectiveDate); if (inWin(t)) marks.push({ t, label: truncate(v.name || "schedule"), color: PRIMARY, dash: true }); }
+      for (const e of events) { const t = dayMs(e.date) + (e.time ? hmToMs(e.time) - SAST_OFFSET_H * 3_600_000 : 12 * 3_600_000); if (inWin(t)) marks.push({ t, label: truncate(e.title || e.type || "event"), color: DANGER, dash: true }); }
+      for (const f of feed) { const t = dayMs(f.date) + 12 * 3_600_000; if (inWin(t)) marks.push({ t, label: "Feed", color: STD, dash: true }); }
+    }
+    return { bands, marks, schedLegend: [...legend.entries()].map(([name, color]) => ({ name, color })).sort((a, b) => a.name.localeCompare(b.name)) };
+  }, [showWindows, showEvents, hidden, sched, events, feed, range]);
 
-  const leftMeta = META[left], rightMeta = right ? META[right] : null;
-  const hasData = data.some((d) => d[left] != null || (right && d[right] != null));
+  const toggleHidden = (name: string) => setHidden((prev) => { const n = new Set(prev); if (n.has(name)) n.delete(name); else n.add(name); return n; });
+
+  const leftSpec = buildSpec(left, TEAL, showRange)!;
+  const rightSpec = buildSpec(right, GOLD, showRange);
+  const hasData = data.some((d) => leftSpec.series.some((s) => d[s.key] != null) || (rightSpec != null && rightSpec.series.some((s) => d[s.key] != null)));
 
   return (
     <section className="sa-panel" style={{ padding: 0 }}>
@@ -249,7 +301,8 @@ function HighResExplorer() {
         <div style={GROUP_END}>
           <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
             <Toggle checked={showRange} onChange={setShowRange} label="Min–max" title="Show each metric's min–max range per bucket" />
-            <Toggle checked={overlays} onChange={setOverlays} label="Schedules" title="Show the actual daily schedule windows, events and feed" />
+            <Toggle checked={showWindows} onChange={setShowWindows} label="Schedules" title="Shade the actual daily on/off windows (lights, fans) + run-times" />
+            <Toggle checked={showEvents} onChange={setShowEvents} label="Events" title="Mark schedule changes, logged events and feed deliveries" />
           </div>
           <Group label="Res"><Segmented options={HR_RES} value={resKey} onChange={setResKey} /></Group>
           <Group label="Range"><Segmented options={HR_RANGES} value={rangeKey} onChange={setRangeKey} /></Group>
@@ -260,15 +313,30 @@ function HighResExplorer() {
           : err ? <div style={{ height: 340 }}><Placeholder text={err} /></div>
           : !hasData ? <div style={{ height: 340 }}><Placeholder text="No recent telemetry for this range." /></div>
           : <MetricChart data={data} domainMs={[range.fromMs, range.toMs]}
-              left={{ ...leftMeta, color: TEAL, band: showRange }}
-              right={rightMeta ? { ...rightMeta, color: GOLD, band: showRange } : null}
+              left={leftSpec}
+              right={rightSpec}
               standardAxis={null} annos={marks} bands={bands}
               tickFormat={(ms) => new Date(ms).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: rangeKey === "24h" ? "2-digit" : undefined, minute: rangeKey === "24h" ? "2-digit" : undefined })}
               labelFormat={(ms) => new Date(ms).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} />}
+        {showWindows && schedLegend.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "8px 8px 0" }}>
+            {schedLegend.map((s) => {
+              const off = hidden.has(s.name);
+              return (
+                <button key={s.name} onClick={() => toggleHidden(s.name)} title={off ? "Show" : "Hide"}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 9px", border: "1px solid var(--divider)", background: off ? "transparent" : "var(--card-alt)", cursor: "pointer", fontSize: 11.5, fontWeight: 700, color: off ? "var(--t4)" : "var(--t1)" }}>
+                  <span style={{ width: 11, height: 11, background: s.color, opacity: off ? 0.3 : 1, flexShrink: 0 }} />
+                  {s.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
       <div className="sa-chart-note" style={NOTE_PAD}>
         Recent, from InfluxDB (≤1 month) at {HR_RES.find((r) => r.key === resKey)?.label} resolution. Drag across the plot to zoom.
-        {overlays && <> Shaded blocks are the day&apos;s schedule windows (lights, fans…); markers are feeder runs, events and feed.</>}
+        {showWindows && <> Shaded blocks are the day&apos;s schedule windows + run-times.</>}
+        {showEvents && <> Markers: <span style={{ color: PRIMARY, fontWeight: 700 }}>schedule change</span> · <span style={{ color: DANGER, fontWeight: 700 }}>event</span> · <span style={{ color: STD, fontWeight: 700 }}>feed</span>.</>}
       </div>
     </section>
   );
@@ -308,7 +376,7 @@ function SilverExplorer() {
     const fromIso = r.days ? new Date(now - r.days * DAY_MS).toISOString() : "2025-01-01T00:00:00Z";
     const toIso = new Date(now).toISOString();
     setRange({ fromMs: Date.parse(fromIso), toMs: now });
-    const metrics = [left, ...(right && right !== left ? [right] : [])];
+    const metrics = [...new Set([...expandKeys(left), ...expandKeys(right)])];
     const q = new URLSearchParams({ metrics: metrics.join(","), from: fromIso, to: toIso });
     const res = await fetch(`/api/analytics/series?${q}`);
     if (!res.ok) { setErr((await res.json().catch(() => ({}))).error ?? "Failed to load"); setRaw([]); setLoading(false); return; }
@@ -344,8 +412,9 @@ function SilverExplorer() {
     return out;
   }, [overlays, sched, events, feed, range]);
 
-  const leftMeta = META[left], rightMeta = right ? META[right] : null;
-  const hasData = data.some((d) => d[left] != null || (right && d[right] != null));
+  const leftSpec = buildSpec(left, TEAL, showRange)!;
+  const rightSpec = buildSpec(right, GOLD, showRange);
+  const hasData = data.some((d) => leftSpec.series.some((s) => d[s.key] != null) || (rightSpec != null && rightSpec.series.some((s) => d[s.key] != null)));
 
   return (
     <section className="sa-panel" style={{ padding: 0 }}>
@@ -370,8 +439,8 @@ function SilverExplorer() {
           : err ? <div style={{ height: 340 }}><Placeholder text={err} /></div>
           : !hasData ? <div style={{ height: 340 }}><Placeholder text="No data for this metric / range." /></div>
           : <MetricChart data={data} domainMs={[range.fromMs, range.toMs]}
-              left={{ ...leftMeta, color: TEAL, band: showRange && !COMPUTED.has(left) }}
-              right={rightMeta ? { ...rightMeta, color: GOLD, band: showRange && !COMPUTED.has(right) } : null}
+              left={leftSpec}
+              right={rightSpec}
               standardAxis={stdOn ? hdepAxis : null} annos={annos} bands={[]}
               tickFormat={(ms) => new Date(ms).toLocaleDateString("en-ZA", { day: "numeric", month: "short" })}
               labelFormat={(ms) => new Date(ms).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "2-digit" })} />}
@@ -418,12 +487,20 @@ function Segmented({ options, value, onChange }: { options: { key: string; label
         const on = value === o.key;
         return (
           <button key={o.key} onClick={() => onChange(o.key)}
-            style={{ padding: "5px 11px", fontSize: 11, fontWeight: 700, border: "none", borderLeft: i ? "1px solid var(--divider)" : "none", background: on ? PRIMARY : "#fff", color: on ? "#fff" : "var(--t2)", cursor: "pointer" }}>{o.label}</button>
+            style={{ padding: "5px 11px", fontSize: 11, fontWeight: 700, border: "none", borderLeft: i ? "1px solid var(--divider)" : "none", background: on ? "var(--grad-primary)" : "#fff", color: on ? "#fff" : "var(--t2)", boxShadow: on ? "inset 0 -2px 0 rgba(0,0,0,0.18)" : "none", cursor: "pointer" }}>{o.label}</button>
         );
       })}
     </div>
   );
 }
+// Custom marker label — recharts injects `viewBox`; we offset y by the marker's row so
+// clustered markers stack instead of overprinting.
+function MarkLabel({ viewBox, text, color, row }: { viewBox?: { x?: number; y?: number }; text: string; color: string; row: number }) {
+  const x = (viewBox?.x ?? 0) + 3;
+  const y = (viewBox?.y ?? 0) + 9 + row * 10;
+  return <text x={x} y={y} fill={color} fontSize={8} fontWeight={700} textAnchor="start">{text}</text>;
+}
+
 function Placeholder({ text }: { text: string }) {
   return <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--t3)", fontSize: 13 }}>{text}</div>;
 }

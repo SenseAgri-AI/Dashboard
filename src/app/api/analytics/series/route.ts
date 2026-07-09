@@ -8,7 +8,8 @@ export const runtime = "nodejs";
 // Computed metrics (derived from silver, not raw columns).
 const HDEP = "hdep";
 const CUM_MORT = "cum_mortality"; // cumulative deaths since day 1 / starting flock × 100
-const COMPUTED = [HDEP, CUM_MORT];
+const BREAKAGE = "breakage_rate"; // damaged eggs / total eggs × 100 (per day)
+const COMPUTED = [HDEP, CUM_MORT, BREAKAGE];
 const round = (v: number | null, dp = 2) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 10 ** dp) / 10 ** dp);
 
 // Deep-history analytics from the silver layer (Athena), daily-aggregated. Farm-scoped:
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const metrics = (searchParams.get("metrics") ?? searchParams.get("metric") ?? "")
-    .split(",").map((s) => s.trim()).filter(Boolean).slice(0, 2);
+    .split(",").map((s) => s.trim()).filter(Boolean).slice(0, 8);
   const from = searchParams.get("from") ?? "";
   const to = searchParams.get("to") ?? "";
   const houseId = searchParams.get("house") || Object.keys(farm.houseHens ?? {})[0] || "house1";
@@ -38,6 +39,7 @@ export async function GET(req: NextRequest) {
   const rawCols = metrics.filter((m) => !COMPUTED.includes(m));
   const wantHdep = metrics.includes(HDEP);
   const wantCumMort = metrics.includes(CUM_MORT);
+  const wantBreakage = metrics.includes(BREAKAGE);
   const byDay = new Map<string, DailyRow>();
 
   try {
@@ -56,25 +58,29 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // HDEP and cumulative-mortality% both need mortality accumulated from the flock's start,
-    // so pull the full history once and emit only the requested window.
-    if (wantHdep || wantCumMort) {
+    // HDEP / cumulative-mortality% need mortality accumulated from the flock's start; breakage-rate
+    // is a per-day ratio. All derive from the same daily egg/mortality history — fetch it once.
+    if (wantHdep || wantCumMort || wantBreakage) {
       const totalHens = Object.values(farm.houseHens ?? {}).reduce((a, b) => a + b, 0);
-      const hist = await fetchSilverDaily(farm.farmId, houseId, ["eggs_total", "mortality"], "2025-01-01T00:00:00Z", to);
+      const hist = await fetchSilverDaily(farm.farmId, houseId, ["eggs_total", "mortality", "eggs_damaged"], "2025-01-01T00:00:00Z", to);
       const fromDay = from.slice(0, 10), toDay = to.slice(0, 10);
       let cumMortality = 0;
       for (const row of hist) {
         cumMortality += Number(row.mortality) || 0;
         const day = String(row.time).slice(0, 10);
         if (day < fromDay || day >= toDay) continue;
+        const eggs = typeof row.eggs_total === "number" ? row.eggs_total : null; // null = no egg log → gap, not 0
         const point = byDay.get(day) ?? { time: row.time };
         if (wantHdep) {
-          const eggs = Number(row.eggs_total);
           const liveHens = Math.max(1, totalHens - cumMortality);
-          point[HDEP] = totalHens > 0 && Number.isFinite(eggs) ? round((eggs / liveHens) * 100, 1) : null;
+          point[HDEP] = totalHens > 0 && eggs != null ? round((eggs / liveHens) * 100, 1) : null;
         }
         if (wantCumMort) {
           point[CUM_MORT] = totalHens > 0 ? round((cumMortality / totalHens) * 100, 2) : null;
+        }
+        if (wantBreakage) {
+          const dmg = typeof row.eggs_damaged === "number" ? row.eggs_damaged : null;
+          point[BREAKAGE] = eggs != null && eggs > 0 && dmg != null ? round((dmg / eggs) * 100, 2) : null;
         }
         byDay.set(day, point);
       }

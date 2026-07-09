@@ -16,7 +16,7 @@ const WORKGROUP = "senseagri"; // enforces its own result-output location
 export const SILVER_METRICS = [
   "temperature", "humidity", "co2", "tvoc", "pm2_5", "pm10", "pressure", "light_level", "battery",
   "water_litres", "feed_kg",
-  "eggs_total", "eggs_small", "eggs_medium", "eggs_large", "eggs_xl", "eggs_jumbo",
+  "eggs_total", "eggs_small", "eggs_medium", "eggs_large", "eggs_xl", "eggs_jumbo", "eggs_damaged",
   "avg_egg_weight", "mortality", "deaths", "photoperiod_h", "n",
 ] as const;
 export type SilverMetric = (typeof SILVER_METRICS)[number];
