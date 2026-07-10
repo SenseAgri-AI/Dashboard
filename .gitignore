@@ -23,3 +23,8 @@ npm-debug.log*
 
 # Reference-only clone the Farm Logs section was ported from (not part of the app)
 poultry-layer-log-/
+
+# Data-science scratch: local venv + generated forecast outputs (sample plot is committed)
+analysis/.venv/
+analysis/egg_forecast.csv
+analysis/egg_forecast.png
