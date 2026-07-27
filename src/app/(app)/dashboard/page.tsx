@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import DashStatusBar from "@/components/DashStatusBar";
 import { type AlertItem } from "@/components/DashAlertRow";
 import DashAlertChat from "@/components/DashAlertChat";
+import DashAcousticCard from "@/components/DashAcousticCard";
 import DashEnvCol, { type EnvData } from "@/components/DashEnvCol";
 import { DashKpiGrid, type ProductionData } from "@/components/DashMetricCol";
 
@@ -94,6 +95,11 @@ export default function DashboardPage() {
           label={summary?.healthLabel ?? "normal"}
         />
         <DashKpiGrid production={production} />
+      </div>
+
+      {/* Welfare — flock-noise acoustic tracker (full width) */}
+      <div style={{ marginTop: 10 }}>
+        <DashAcousticCard />
       </div>
 
       {/* Body — environment plots (stacked) on the left, alerts chat on the right */}

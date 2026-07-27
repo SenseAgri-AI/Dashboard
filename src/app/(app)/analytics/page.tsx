@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine, ReferenceArea, ComposedChart,
+  Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine, ReferenceArea, ComposedChart, Scatter,
 } from "recharts";
 import { standardHdepForWeek } from "@/lib/henStandard";
 
@@ -148,6 +148,7 @@ const NOTE_PAD: React.CSSProperties = { padding: "2px 16px 14px" };
 export default function AnalyticsPage() {
   return (
     <main className="sa-main" style={{ maxWidth: 1440, width: "100%", margin: "0 auto", gap: 14 }}>
+      <AcousticExplorer />
       <HighResExplorer />
       <SilverExplorer />
     </main>
@@ -450,6 +451,177 @@ function SilverExplorer() {
         {overlays && <> Markers: <span style={{ color: PRIMARY, fontWeight: 700 }}>schedule change</span> · <span style={{ color: DANGER, fontWeight: 700 }}>event</span> · <span style={{ color: STD, fontWeight: 700 }}>feed</span>.</>}
       </div>
     </section>
+  );
+}
+
+// ── Flock noise (acoustic welfare): noise level over time + clickable anomaly clips ──
+type NoiseRow = { time: string; mean: number | null; max: number | null; baseline: number | null };
+type AnomalyRow = { time: string; peakDb: number | null; baselineDb: number | null; clipKey: string | null; clipSeconds: number | null };
+type NoiseDatum = { t: number; mean: number | null; baseline: number | null; band?: [number, number] };
+type AnomPt = { t: number; y: number; a: AnomalyRow };
+type ClipState = { key: string | null; state: "idle" | "loading" | "playing" | "error" };
+const ACOUSTIC_RANGES = [{ key: "24h", label: "24h" }, { key: "7d", label: "7d" }, { key: "30d", label: "30d" }];
+const dbFmt = (v: number | null | undefined) => (v == null ? "—" : `${Math.round(v * 10) / 10} dB`);
+const anomKey = (a: AnomalyRow) => a.clipKey ?? a.time;
+
+function AcousticExplorer() {
+  const [rangeKey, setRangeKey] = useState("24h");
+  const [series, setSeries] = useState<NoiseRow[]>([]);
+  const [anomalies, setAnomalies] = useState<AnomalyRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [selected, setSelected] = useState<AnomalyRow | null>(null);
+  const [clip, setClip] = useState<ClipState>({ key: null, state: "idle" });
+  const [win, setWin] = useState<{ fromMs: number; toMs: number }>({ fromMs: 0, toMs: 0 });
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true); setErr(null);
+    const toMs = Date.now();
+    setWin({ fromMs: toMs - (rangeKey === "7d" ? 7 : rangeKey === "30d" ? 30 : 1) * DAY_MS, toMs });
+    const res = await fetch(`/api/analytics/acoustic?range=${rangeKey}`);
+    if (!res.ok) { setErr((await res.json().catch(() => ({}))).error ?? "Failed to load"); setSeries([]); setAnomalies([]); setLoading(false); return; }
+    const d = await res.json();
+    setSeries(d.series ?? []); setAnomalies(d.anomalies ?? []); setLoading(false);
+  }, [rangeKey]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { const id = setInterval(load, 60_000); return () => clearInterval(id); }, [load]); // readings arrive ~1/min
+
+  // Click a marker or an inbox row → sign the clip and play it in the shared <audio>.
+  const playClip = useCallback(async (a: AnomalyRow) => {
+    setSelected(a);
+    if (!a.clipKey) { setClip({ key: anomKey(a), state: "error" }); return; }
+    setClip({ key: a.clipKey, state: "loading" });
+    try {
+      const res = await fetch(`/api/analytics/acoustic/clip?key=${encodeURIComponent(a.clipKey)}`);
+      if (!res.ok) throw new Error("clip");
+      const { url } = await res.json();
+      const el = audioRef.current;
+      if (el) { el.src = url; await el.play(); setClip({ key: a.clipKey, state: "playing" }); }
+    } catch { setClip({ key: a.clipKey, state: "error" }); }
+  }, []);
+
+  const data = useMemo<NoiseDatum[]>(() => series.map((r) => ({
+    t: new Date(r.time).getTime(), mean: r.mean, baseline: r.baseline,
+    band: r.mean != null && r.max != null ? [r.mean, r.max] : undefined,
+  })), [series]);
+  const anomPts = useMemo<AnomPt[]>(() => anomalies
+    .filter((a) => a.peakDb != null || a.baselineDb != null)
+    .map((a) => ({ t: new Date(a.time).getTime(), y: (a.peakDb ?? a.baselineDb) as number, a })), [anomalies]);
+  const hasNoise = data.some((d) => d.mean != null);
+  const selectedT = selected ? new Date(selected.time).getTime() : null;
+
+  return (
+    <section className="sa-panel" style={{ padding: 0 }}>
+      <div className="sa-panel-hd sa-panel-hd--welfare">Flock noise (welfare)</div>
+      <div style={TOOLBAR}>
+        <div style={GROUP}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--t2)" }}>Noise level &amp; spike anomalies</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--t3)" }}>{anomalies.length} anomal{anomalies.length === 1 ? "y" : "ies"}</span>
+        </div>
+        <div style={GROUP_END}>
+          <Group label="Range"><Segmented options={ACOUSTIC_RANGES} value={rangeKey} onChange={setRangeKey} /></Group>
+        </div>
+      </div>
+      <div style={CHART_PAD}>
+        {loading ? <div style={{ height: 340 }}><Placeholder text="Loading…" /></div>
+          : err ? <div style={{ height: 340 }}><Placeholder text={err} /></div>
+          : !hasNoise && anomPts.length === 0 ? <div style={{ height: 340 }}><Placeholder text="No acoustic data yet — the mic feed will show here once it's flowing." /></div>
+          : <AcousticChart data={data} anomPts={anomPts} domainMs={[win.fromMs, win.toMs]} selectedT={selectedT} onPick={playClip}
+              tickFormat={(ms) => new Date(ms).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: rangeKey === "24h" ? "2-digit" : undefined, minute: rangeKey === "24h" ? "2-digit" : undefined })}
+              labelFormat={(ms) => new Date(ms).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} />}
+      </div>
+      <AnomalyInbox anomalies={anomalies} selected={selected} clip={clip} onPlay={playClip} />
+      <audio ref={audioRef} onEnded={() => setClip((c) => ({ ...c, state: "idle" }))} onError={() => setClip((c) => ({ ...c, state: "error" }))} style={{ display: "none" }} />
+      <div className="sa-chart-note" style={NOTE_PAD}>
+        Noise level (relative dBFS — 0 is loudest; currently includes fan/mechanical noise, not calibrated).
+        {" "}<span style={{ color: DANGER, fontWeight: 700 }}>Red dots</span> are sudden spikes vs the recent baseline — click one to hear the ~30 s clip. POC: house1 / mic_001.
+      </div>
+    </section>
+  );
+}
+
+function AnomalyDot(props: { cx?: number; cy?: number; payload?: AnomPt; selectedT: number | null }) {
+  const { cx, cy, payload, selectedT } = props;
+  if (cx == null || cy == null) return <g />;
+  const on = selectedT != null && payload?.t === selectedT;
+  return (
+    <g style={{ cursor: "pointer" }}>
+      {on && <circle cx={cx} cy={cy} r={11} fill="none" stroke={DANGER} strokeWidth={1.5} opacity={0.5} />}
+      <circle cx={cx} cy={cy} r={on ? 6.5 : 4.5} fill={DANGER} stroke="#fff" strokeWidth={1.5} />
+    </g>
+  );
+}
+
+function AcousticChart({ data, anomPts, domainMs, selectedT, onPick, tickFormat, labelFormat }: {
+  data: NoiseDatum[]; anomPts: AnomPt[]; domainMs: [number, number]; selectedT: number | null;
+  onPick: (a: AnomalyRow) => void; tickFormat: (ms: number) => string; labelFormat: (ms: number) => string;
+}) {
+  return (
+    <div style={{ height: 340 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={data} margin={{ top: 16, right: 12, bottom: 4, left: -6 }}>
+          <CartesianGrid strokeDasharray="2 4" stroke={GRID} vertical={false} />
+          <XAxis dataKey="t" type="number" scale="time" domain={domainMs} allowDataOverflow
+            tickFormatter={tickFormat} tick={{ fontSize: 10, fill: AXIS, fontFamily: "Inter" }} axisLine={{ stroke: "#d1dada" }} tickLine={false} minTickGap={44} />
+          {/* dBFS is negative (0 = loudest); let recharts auto-scale — no 0-based assumption */}
+          <YAxis tick={{ fontSize: 11, fill: TEAL, fontFamily: "Inter" }} axisLine={false} tickLine={false} unit=" dB" width={56} domain={["auto", "auto"]} />
+          <Tooltip labelFormatter={(ms) => labelFormat(Number(ms))}
+            formatter={(value, name) => {
+              if (name === "Anomaly") return null;
+              if (Array.isArray(value)) return [`${Math.round(value[0])} – ${Math.round(value[1])} dB`, "Range"];
+              return [dbFmt(Number(value)), name];
+            }}
+            contentStyle={{ background: PRIMARY, border: `1px solid ${TEAL}`, borderRadius: 0, fontSize: 12, color: "#fff" }} labelStyle={{ color: TEAL }} />
+          <Legend wrapperStyle={{ fontSize: 12, fontWeight: 600 }} />
+          <Area type="monotone" dataKey="band" name="Loudest (per bucket)" stroke="none" fill={TEAL} fillOpacity={0.16} legendType="none" isAnimationActive={false} connectNulls={false} />
+          <Line type="monotone" dataKey="baseline" name="Baseline" stroke={AXIS} strokeWidth={1} strokeDasharray="5 4" dot={false} connectNulls isAnimationActive={false} />
+          <Line type="monotone" dataKey="mean" name="Noise level" stroke={TEAL} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+          <Scatter name="Anomaly" data={anomPts} dataKey="y" isAnimationActive={false}
+            shape={(p) => <AnomalyDot {...(p as { cx?: number; cy?: number; payload?: AnomPt })} selectedT={selectedT} />}
+            onClick={(d) => { const a = (d as unknown as { payload?: AnomPt }).payload?.a; if (a) onPick(a); }} />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function AnomalyInbox({ anomalies, selected, clip, onPlay }: {
+  anomalies: AnomalyRow[]; selected: AnomalyRow | null; clip: ClipState; onPlay: (a: AnomalyRow) => void;
+}) {
+  if (anomalies.length === 0) {
+    return <div style={{ padding: "2px 16px 4px", fontSize: 12, color: "var(--t3)" }}>No spike anomalies detected in this range.</div>;
+  }
+  const recent = [...anomalies].reverse(); // newest first
+  return (
+    <div style={{ padding: "4px 12px 6px" }}>
+      <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)", padding: "2px 4px 6px" }}>Anomaly inbox</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 176, overflowY: "auto" }}>
+        {recent.map((a) => {
+          const key = anomKey(a);
+          const on = selected != null && anomKey(selected) === key;
+          const busy = clip.key === a.clipKey && clip.state === "loading";
+          const errored = clip.key === a.clipKey && clip.state === "error";
+          return (
+            <button key={key} onClick={() => onPlay(a)}
+              style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left", padding: "7px 10px", border: "1px solid var(--divider)", borderLeft: `3px solid ${DANGER}`, background: on ? "var(--card-alt)" : "#fff", cursor: "pointer" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, borderRadius: "50%", background: on && clip.state === "playing" ? DANGER : "rgba(185,28,28,0.1)", color: on && clip.state === "playing" ? "#fff" : DANGER, flexShrink: 0, fontSize: 12 }}>
+                {busy ? "…" : errored ? "!" : "▶"}
+              </span>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--t1)", minWidth: 128 }}>
+                {new Date(a.time).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+              </span>
+              <span style={{ fontSize: 11.5, color: "var(--t2)" }}>
+                peak <strong style={{ color: DANGER }}>{dbFmt(a.peakDb)}</strong> vs baseline {dbFmt(a.baselineDb)}
+              </span>
+              <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--t3)" }}>
+                {errored ? "clip unavailable" : a.clipSeconds ? `${a.clipSeconds}s clip` : "clip"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
