@@ -167,20 +167,34 @@ export async function GET(request: Request) {
       ? (cumulativeMortality / (TOTAL_HENS + cumulativeMortality)) * 100
       : null;
 
-    // Aggregate egg/revenue by date
-    const dailyMap = new Map<string, { eggs: number; revenue: number }>();
+    // Aggregate per day (a day may have several house rows). r[10] = avg egg weight (g).
+    type DayAgg = {
+      eggs: number; revenue: number; small: number; medium: number; large: number; xl: number; jumbo: number;
+      damaged: number; mortality: number; weightSum: number; weightCount: number;
+    };
+    const emptyAgg = (): DayAgg => ({ eggs: 0, revenue: 0, small: 0, medium: 0, large: 0, xl: 0, jumbo: 0, damaged: 0, mortality: 0, weightSum: 0, weightCount: 0 });
+    const dailyMap = new Map<string, DayAgg>();
     for (const { key, r } of dataRows) {
       const s = toInt(r[2]), me = toInt(r[3]), la = toInt(r[4]), x = toInt(r[5]), j = toInt(r[6]);
+      const dmg = toInt(r[7]), mort = toInt(r[8]), w = toNum(r[10]);
       const dayEggs = s + me + la + x + j;
       const p = getPrices(key, farm.priceTiers);
-      const dayRev = s * p.small + me * p.medium + la * p.large + x * p.xl + j * p.jumbo;
-      const existing = dailyMap.get(key);
-      if (existing) {
-        existing.eggs += dayEggs;
-        existing.revenue += dayRev;
-      } else {
-        dailyMap.set(key, { eggs: dayEggs, revenue: dayRev });
-      }
+      const cur = dailyMap.get(key) ?? emptyAgg();
+      cur.eggs += dayEggs;
+      cur.revenue += s * p.small + me * p.medium + la * p.large + x * p.xl + j * p.jumbo;
+      cur.small += s; cur.medium += me; cur.large += la; cur.xl += x; cur.jumbo += j;
+      cur.damaged += dmg; cur.mortality += mort;
+      if (w !== null) { cur.weightSum += w; cur.weightCount += 1; }
+      dailyMap.set(key, cur);
+    }
+
+    // Running live-hens by day across ALL logged days (ascending), for accurate per-day HDEP.
+    const allDaysAsc = [...dailyMap.keys()].sort((a, b) => a.localeCompare(b));
+    const liveHensByDay = new Map<string, number>();
+    let runningMort = 0;
+    for (const day of allDaysAsc) {
+      runningMort += dailyMap.get(day)!.mortality;
+      liveHensByDay.set(day, Math.max(1, TOTAL_HENS - runningMort));
     }
 
     const defaultCutoff = new Date(latestKey);
@@ -188,10 +202,11 @@ export async function GET(request: Request) {
     const cutoffKey = fromParam ?? defaultCutoff.toISOString().slice(0, 10);
     const endKey    = toParam   ?? latestKey;
 
-    const daily30d = Array.from(dailyMap.entries())
-      .filter(([k]) => k >= cutoffKey && k <= endKey)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, v]) => {
+    const daily30d = allDaysAsc
+      .filter((k) => k >= cutoffKey && k <= endKey)
+      .map((date) => {
+        const v = dailyMap.get(date)!;
+        const lh = liveHensByDay.get(date) ?? liveHens;
         const feedPulses = feedByDay.get(date) ?? null;
         // FCR: feed consumed on Day N-1 produced eggs collected on Day N
         const prevFeed = feedByDay.get(prevDayKey(date)) ?? null;
@@ -201,8 +216,13 @@ export async function GET(request: Request) {
         return {
           date,
           eggs: v.eggs,
+          small: v.small, medium: v.medium, large: v.large, xl: v.xl, jumbo: v.jumbo,
+          damaged: v.damaged,
+          mortality: v.mortality,
+          liveHens: lh,
+          avgWeight: v.weightCount > 0 ? Math.round((v.weightSum / v.weightCount) * 10) / 10 : null,
           revenue: Math.round(v.revenue * 100) / 100,
-          hdep: TOTAL_HENS > 0 ? Math.round((v.eggs / liveHens) * 1000) / 10 : null,
+          hdep: TOTAL_HENS > 0 ? Math.round((v.eggs / lh) * 1000) / 10 : null,
           feedPulses,
           fcr,
         };

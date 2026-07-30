@@ -1,9 +1,10 @@
 "use client";
 
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip,
-} from "recharts";
+import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip } from "recharts";
+
+// Environment sensor tiles (2 per row): a compact trend chart with the NORMAL band shaded (so
+// too-low / too-high is obvious), a threshold line where relevant, time on the x-axis and the
+// working min/max on the y-axis. Fine + coarse dust share one plot; light level added.
 
 export interface EnvData {
   temperature: { current: number | null; status: string; sparkline: SparklinePoint[] };
@@ -12,316 +13,159 @@ export interface EnvData {
   tvoc:        { current: number | null; sparkline: SparklinePoint[]; mean: number; std: number };
   pm2_5?:      { current: number | null; sparkline: SparklinePoint[] };
   pm10?:       { current: number | null; sparkline: SparklinePoint[] };
+  light?:      { current: number | null; sparkline: SparklinePoint[] };
   water:       { current: number | null; today: number | null; sparkline: SparklinePoint[]; mean: number; std: number };
 }
+export interface SparklinePoint { time: string; value: number; cumulative?: number; lo?: number | null; hi?: number | null; }
 
-export interface SparklinePoint {
-  time: string;
-  value: number;
-  cumulative?: number;
-  lo?: number | null; // 15-min bucket min (particulates band)
-  hi?: number | null; // 15-min bucket max
+const TEAL = "#2A8E9A", GOLD = "#B8860B", GREEN = "#16A34A", AMBER = "#D97706", RED = "#B91C1C", NEUTRAL = "#6B7C80", AXIS = "#5a6a6c";
+
+function statusInfo(status?: string): { color: string; word: string } {
+  if (status === "danger") return { color: RED, word: "Out of range" };
+  if (status === "warning") return { color: AMBER, word: "Watch" };
+  if (status === "good" || status === "normal" || status === "ok") return { color: GREEN, word: "In range" };
+  return { color: NEUTRAL, word: "" };
 }
 
-const TEAL    = "#2A8E9A";
-const GOLD    = "#D4AF37";
-const GREEN   = "#166534";
-const RED     = "#B91C1C";
-const GRID    = "#C8CCCC";
-const TICK  = { fontSize: 11, fontWeight: 600, fill: "#3a4d4f", fontFamily: "Inter,sans-serif" } as const;
-const AXIS_LINE = { stroke: "#BEC8CA", strokeWidth: 1 };
+const fmtTime = (ts: string) => new Date(ts).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false });
+const yFmt = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v * 10) / 10}`);
 
-function fmtTime(ts: string) {
-  return new Date(ts).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false });
-}
-
-function evenTicks(min: number, max: number, count = 5): number[] {
-  return Array.from({ length: count }, (_, i) => min + (max - min) * i / (count - 1));
-}
-
-interface SparkCfg {
-  color: string;
-  gradId: string;
-  chartMin: number;
-  chartMax: number;
-  ticks?: number[];
-  tickFmt?: (v: number) => string;
-  tooltipUnit?: string;
-  tooltipFmt?: (v: number) => string;
-  bandLo?: number;
-  bandHi?: number;
-  bandColor?: string;
-  thresholdHi?: number;
-  thresholdColor?: string;
-}
-
-
-function SparkTooltip({ active, payload, label, unit, fmt }: {
-  active?: boolean;
-  payload?: { value: number }[];
-  label?: string;
-  unit?: string;
-  fmt?: (v: number) => string;
-}) {
+function ChartTip({ active, payload, label, unit }: { active?: boolean; payload?: { value: number; name?: string; color?: string }[]; label?: string; unit?: string }) {
   if (!active || !payload?.length) return null;
-  const val = payload[0].value;
-  const display = fmt ? fmt(val) : `${Math.round(val * 10) / 10}${unit ? ` ${unit}` : ""}`;
   return (
-    <div style={{
-      background: "#002E35", color: "#fff", fontSize: 10,
-      padding: "3px 8px", fontFamily: "Inter,sans-serif",
-      boxShadow: "0 2px 8px rgba(0,0,0,0.18)",
-    }}>
-      <span style={{ opacity: 0.55, marginRight: 5 }}>{label}</span>
-      <strong>{display}</strong>
+    <div style={{ background: "#002E35", color: "#fff", fontSize: 10, padding: "4px 8px", fontFamily: "Inter,sans-serif" }}>
+      <div style={{ opacity: 0.6, marginBottom: 1 }}>{label}</div>
+      {payload.map((p, i) => (
+        <div key={i}><span style={{ color: p.color ?? "#fff" }}>{p.name ? `${p.name}: ` : ""}</span><strong>{Math.round(p.value * 100) / 100}{unit ? ` ${unit}` : ""}</strong></div>
+      ))}
     </div>
   );
 }
 
-function SparklineChart({ data, cfg }: { data: SparklinePoint[]; cfg: SparkCfg }) {
-  const pts = data
-    .filter(pt => isFinite(pt.value))
-    .map(pt => ({ v: pt.value, t: fmtTime(pt.time) }));
+// Auto y-range for sensors without a fixed band (TVOC, PM, light).
+function autoScale(vals: number[], dp = 0): { domain: [number, number]; ticks: number[] } {
+  const v = vals.filter(Number.isFinite);
+  const rnd = (x: number) => (dp ? Math.round(x * 10 ** dp) / 10 ** dp : Math.round(x));
+  if (!v.length) return { domain: [0, 1], ticks: [0, 1] };
+  const lo0 = Math.min(...v), hi0 = Math.max(...v), pad = Math.max((hi0 - lo0) * 0.18, hi0 * 0.05, dp ? 0.3 : 2);
+  const lo = Math.max(0, lo0 - pad), hi = hi0 + pad;
+  return { domain: [rnd(lo), rnd(hi)], ticks: [rnd(lo), rnd((lo + hi) / 2), rnd(hi)] };
+}
 
-  const gid = `sa-g-${cfg.gradId}`;
-
+function EnvChart({ data, domain, ticks, band, threshold, tipUnit, height }: {
+  data: SparklinePoint[]; domain: [number, number]; ticks: number[]; band?: [number, number]; threshold?: number; tipUnit: string; height: number;
+}) {
+  const pts = data.filter((d) => Number.isFinite(d.value)).map((d) => ({ t: fmtTime(d.time), v: d.value }));
+  if (pts.length < 2) return <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--t4)", fontSize: 11 }}>No recent data</div>;
   return (
-    <ResponsiveContainer width="100%" height={210}>
-      <AreaChart data={pts} margin={{ top: 6, right: 10, bottom: 0, left: 0 }}>
+    <ResponsiveContainer width="100%" height={height}>
+      <AreaChart data={pts} margin={{ top: 6, right: 10, bottom: 0, left: 4 }}>
         <defs>
-          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor={cfg.color} stopOpacity={0.22} />
-            <stop offset="95%" stopColor={cfg.color} stopOpacity={0.02} />
+          <linearGradient id={`env-${tipUnit}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor={TEAL} stopOpacity={0.2} />
+            <stop offset="95%" stopColor={TEAL} stopOpacity={0.02} />
           </linearGradient>
         </defs>
-        {cfg.bandLo !== undefined && cfg.bandHi !== undefined && (
-          <ReferenceArea y1={cfg.bandLo} y2={cfg.bandHi} fill={cfg.bandColor ?? cfg.color} fillOpacity={0.09} stroke="none" />
-        )}
-        {cfg.thresholdHi !== undefined && cfg.thresholdColor && (
-          <ReferenceArea y1={cfg.thresholdHi} y2={cfg.chartMax} fill={cfg.thresholdColor} fillOpacity={0.08} stroke="none" />
-        )}
-
-        <CartesianGrid stroke={GRID} vertical={false} strokeDasharray="3 3" />
-
-        {cfg.bandLo !== undefined && (
-          <ReferenceLine y={cfg.bandLo} stroke={cfg.bandColor ?? cfg.color} strokeWidth={1} strokeOpacity={0.5}
-            label={{ value: `${Math.round(cfg.bandLo * 10) / 10}`, position: "insideBottomRight", fontSize: 7, fill: cfg.bandColor ?? cfg.color }} />
-        )}
-        {cfg.bandHi !== undefined && (
-          <ReferenceLine y={cfg.bandHi} stroke={cfg.bandColor ?? cfg.color} strokeWidth={1} strokeOpacity={0.5}
-            label={{ value: `${Math.round(cfg.bandHi * 10) / 10}`, position: "insideTopRight", fontSize: 7, fill: cfg.bandColor ?? cfg.color }} />
-        )}
-        {cfg.thresholdHi !== undefined && cfg.thresholdColor && (
-          <ReferenceLine y={cfg.thresholdHi} stroke={cfg.thresholdColor} strokeWidth={1} strokeOpacity={0.6}
-            label={{ value: `${cfg.thresholdHi.toLocaleString()}`, position: "insideTopRight", fontSize: 7, fill: cfg.thresholdColor }} />
-        )}
-
-        <XAxis dataKey="t" tick={TICK} tickLine={false} axisLine={AXIS_LINE}
-          interval={Math.max(1, Math.floor(pts.length / 5))} />
-        <YAxis
-          domain={[cfg.chartMin, cfg.chartMax]}
-          ticks={cfg.ticks ?? evenTicks(cfg.chartMin, cfg.chartMax, 5)}
-          tick={TICK} tickLine={false} axisLine={AXIS_LINE}
-          width={38}
-          tickFormatter={cfg.tickFmt ?? ((v: number) => `${Math.round(v)}`)}
-        />
-        <Tooltip
-          content={<SparkTooltip unit={cfg.tooltipUnit} fmt={cfg.tooltipFmt ?? cfg.tickFmt} />}
-          cursor={{ stroke: cfg.color, strokeWidth: 1, strokeOpacity: 0.5 }}
-        />
-        <Area type="monotone" dataKey="v" stroke={cfg.color} strokeWidth={1.8}
-          fill={`url(#${gid})`} dot={false}
-          activeDot={{ r: 3.5, fill: cfg.color, strokeWidth: 0 }}
-          isAnimationActive={false} />
+        {band && <ReferenceArea y1={band[0]} y2={band[1]} fill={GREEN} fillOpacity={0.09} stroke="none" ifOverflow="hidden" />}
+        <CartesianGrid stroke="#E6EBEB" vertical={false} strokeDasharray="3 3" />
+        <XAxis dataKey="t" tick={{ fontSize: 8.5, fill: AXIS }} tickLine={false} axisLine={{ stroke: "#DCE2E2" }} interval={Math.max(1, Math.floor(pts.length / 4))} minTickGap={28} />
+        <YAxis domain={domain} ticks={ticks} tick={{ fontSize: 9, fill: AXIS }} tickLine={false} axisLine={false} width={40} tickFormatter={yFmt} />
+        {band && [band[0], band[1]].map((y) => <ReferenceLine key={y} y={y} stroke={GREEN} strokeOpacity={0.4} strokeDasharray="2 2" />)}
+        {threshold != null && <ReferenceLine y={threshold} stroke={RED} strokeDasharray="4 3" strokeOpacity={0.7}
+          label={{ value: threshold.toLocaleString(), position: "insideTopRight", fontSize: 8, fill: RED }} />}
+        <Tooltip content={<ChartTip unit={tipUnit} />} cursor={{ stroke: TEAL, strokeOpacity: 0.4 }} />
+        <Area type="monotone" dataKey="v" stroke={TEAL} strokeWidth={1.8} fill={`url(#env-${tipUnit})`} dot={false} isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
   );
 }
 
-function BandTooltip({ active, payload, label, unit }: {
-  active?: boolean; payload?: { dataKey?: string | number; value: number | number[] }[]; label?: string; unit?: string;
+// Fine + coarse dust on one plot (two lines, shared axis).
+function ParticulatesChart({ pm25, pm10, height }: { pm25: SparklinePoint[]; pm10: SparklinePoint[]; height: number }) {
+  const merged = pm25.map((p, i) => ({ t: fmtTime(p.time), pm25: p.value, pm10: pm10[i]?.value ?? null }));
+  const { domain, ticks } = autoScale([...pm25.map((p) => p.value), ...pm10.map((p) => p.value)]);
+  if (merged.length < 2) return <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--t4)", fontSize: 11 }}>No recent data</div>;
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <ComposedChart data={merged} margin={{ top: 6, right: 10, bottom: 0, left: 4 }}>
+        <CartesianGrid stroke="#E6EBEB" vertical={false} strokeDasharray="3 3" />
+        <XAxis dataKey="t" tick={{ fontSize: 8.5, fill: AXIS }} tickLine={false} axisLine={{ stroke: "#DCE2E2" }} interval={Math.max(1, Math.floor(merged.length / 4))} minTickGap={28} />
+        <YAxis domain={domain} ticks={ticks} tick={{ fontSize: 9, fill: AXIS }} tickLine={false} axisLine={false} width={40} tickFormatter={yFmt} />
+        <Tooltip content={<ChartTip unit="µg/m³" />} cursor={{ stroke: TEAL, strokeOpacity: 0.4 }} />
+        <Line type="monotone" dataKey="pm25" name="PM2.5" stroke={TEAL} strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
+        <Line type="monotone" dataKey="pm10" name="PM10" stroke={GOLD} strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
+
+function TileShell({ children }: { children: React.ReactNode }) {
+  return <div style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.07)", borderRadius: 12, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.035)", padding: "12px 14px 8px", display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>{children}</div>;
+}
+
+function EnvTile({ name, value, unit, status, normal, chart }: {
+  name: string; value: string | null; unit: string; status?: string; normal: string; chart: React.ReactNode;
 }) {
-  if (!active || !payload?.length) return null;
-  const v = payload.find((p) => p.dataKey === "v")?.value as number | undefined;
-  const band = payload.find((p) => p.dataKey === "band")?.value as number[] | undefined;
+  const si = statusInfo(status);
+  const alert = status === "danger" || status === "warning";
   return (
-    <div style={{ background: "#002E35", color: "#fff", fontSize: 10, padding: "3px 8px", fontFamily: "Inter,sans-serif", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" }}>
-      <span style={{ opacity: 0.55, marginRight: 5 }}>{label}</span>
-      <strong>{v != null ? Math.round(v * 10) / 10 : "—"}{unit ? ` ${unit}` : ""}</strong>
-      {band && <span style={{ opacity: 0.6, marginLeft: 5 }}>({Math.round(band[0])}–{Math.round(band[1])})</span>}
-    </div>
-  );
-}
-
-// Mean line with a shaded min–max band per bucket; y-axis scaled to the working range.
-function BandSparkline({ data, color, unit }: { data: SparklinePoint[]; color: string; unit: string }) {
-  const pts = data.filter((p) => isFinite(p.value)).map((p) => ({
-    t: fmtTime(p.time), v: p.value,
-    band: [p.lo ?? p.value, p.hi ?? p.value] as [number, number],
-  }));
-  const los = pts.map((p) => p.band[0]).filter(isFinite);
-  const his = pts.map((p) => p.band[1]).filter(isFinite);
-  const lo = los.length ? Math.min(...los) : 0;
-  const hi = his.length ? Math.max(...his) : 1;
-  const pad = Math.max(1, (hi - lo) * 0.15);
-  const dMin = Math.max(0, Math.floor(lo - pad));
-  const dMax = Math.ceil(hi + pad);
-  return (
-    <ResponsiveContainer width="100%" height={210}>
-      <AreaChart data={pts} margin={{ top: 6, right: 10, bottom: 0, left: 0 }}>
-        <CartesianGrid stroke={GRID} vertical={false} strokeDasharray="3 3" />
-        <XAxis dataKey="t" tick={TICK} tickLine={false} axisLine={AXIS_LINE} interval={Math.max(1, Math.floor(pts.length / 5))} />
-        <YAxis domain={[dMin, dMax]} ticks={evenTicks(dMin, dMax, 5).map((v) => Math.round(v))} tick={TICK} tickLine={false} axisLine={AXIS_LINE} width={38} tickFormatter={(v: number) => `${Math.round(v)}`} />
-        <Tooltip content={<BandTooltip unit={unit} />} cursor={{ stroke: color, strokeWidth: 1, strokeOpacity: 0.5 }} />
-        <Area type="monotone" dataKey="band" stroke="none" fill={color} fillOpacity={0.16} isAnimationActive={false} />
-        <Area type="monotone" dataKey="v" stroke={color} strokeWidth={1.8} fill="none" dot={false} activeDot={{ r: 3.5, fill: color, strokeWidth: 0 }} isAnimationActive={false} />
-      </AreaChart>
-    </ResponsiveContainer>
-  );
-}
-
-interface EnvCardProps {
-  name: string;
-  current: number | null;
-  displayVal?: string;
-  unitLabel: string;
-  status?: string;
-  smallReading?: boolean;
-  sparkline: SparklinePoint[];
-  band?: SparklinePoint[]; // when set, render a min–max band chart instead of a plain sparkline
-  cfg: SparkCfg;
-  note: string;
-}
-
-function hexGlow(hex: string, a1 = 0.35, a2 = 0.15) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `0 0 14px rgba(${r},${g},${b},${a1}), 0 0 4px rgba(${r},${g},${b},${a2})`;
-}
-
-function EnvCard({ name, current, displayVal, unitLabel, status, smallReading, sparkline, band, cfg, note }: EnvCardProps) {
-  const readingColor =
-    status === "danger" ? RED :
-    status === "warning" ? "#D97706" :
-    cfg.color;
-  const readingStyle = { color: readingColor, textShadow: hexGlow(readingColor) };
-  const readingClass = `sa-env-reading${smallReading ? " small" : ""}`;
-  const shown = displayVal ?? (current !== null ? String(Math.round(current * 10) / 10) : "—");
-
-  return (
-    <div className="sa-env-card">
-      <div className="sa-env-head">
-        <span className="sa-env-name">{name}</span>
-        <span className={readingClass} style={readingStyle}>{shown} <span className="sa-env-unit">{unitLabel}</span></span>
+    <TileShell>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--t3)" }}>{name}</span>
+        {si.word && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 800, color: si.color }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: si.color }} />{si.word}</span>}
       </div>
-      {band ? <BandSparkline data={band} color={cfg.color} unit={cfg.tooltipUnit ?? ""} /> : <SparklineChart data={sparkline} cfg={cfg} />}
-      <div className="sa-env-foot">{note}</div>
-    </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+        <span style={{ fontFamily: "var(--font-d)", fontSize: 24, fontWeight: 800, lineHeight: 1, color: alert ? si.color : "var(--primary)" }}>{value ?? "—"}</span>
+        <span style={{ fontSize: 11, color: "var(--t3)", fontWeight: 600 }}>{unit}</span>
+        <span style={{ marginLeft: "auto", fontSize: 9.5, color: "var(--t4)" }}>{normal}</span>
+      </div>
+      {chart}
+    </TileShell>
   );
 }
 
-export default function DashEnvCol({ env }: { env: EnvData | null }) {
-  const temp  = env?.temperature;
-  const hum   = env?.humidity;
-  const co2   = env?.co2;
-  const tvoc  = env?.tvoc;
-  const pm25  = env?.pm2_5;
-  const pm10  = env?.pm10;
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, color: "var(--t2)" }}><span style={{ width: 9, height: 3, borderRadius: 2, background: color }} />{label}</span>;
+}
 
-  const tempColor = TEAL;
+const r1 = (v: number | null | undefined) => (v == null ? null : `${Math.round(v * 10) / 10}`);
+const r0 = (v: number | null | undefined) => (v == null ? null : `${Math.round(v).toLocaleString()}`);
 
-  const tvocMean = tvoc?.mean ?? 0;
-  const tvocStd  = tvoc?.std ?? 1;
-  const tvocBandLo = Math.max(0, tvocMean - tvocStd * 2);
-  const tvocBandHi = tvocMean + tvocStd * 2;
-  // Scale the axis to the working range (data + baseline band) so small TVOC values fill the
-  // chart instead of sitting flat along the bottom.
-  const tvocVals = [...(tvoc?.sparkline ?? []).map((p) => p.value).filter(isFinite), tvocBandLo, tvocBandHi];
-  const tvocLo = tvocVals.length ? Math.min(...tvocVals) : 0;
-  const tvocHi = tvocVals.length ? Math.max(...tvocVals) : 3;
-  const tvocPad = Math.max(0.2, (tvocHi - tvocLo) * 0.2);
-  const tvocChartMin = Math.max(0, Math.round((tvocLo - tvocPad) * 10) / 10);
-  const tvocChartMax = Math.round((tvocHi + tvocPad) * 10) / 10;
-  const tvocTicks = evenTicks(tvocChartMin, tvocChartMax, 4).map((v) => Math.round(v * 10) / 10);
+export default function DashEnvCol({ env, narrow }: { env: EnvData | null; narrow?: boolean }) {
+  const H = narrow ? 108 : 120;
+  const tvocVals = (env?.tvoc.sparkline ?? []).map((p) => p.value);
+  const tvocMean = env?.tvoc.mean ?? 0, tvocStd = env?.tvoc.std ?? 0;
+  const tvocScale = autoScale([...tvocVals, Math.max(0, tvocMean - 2 * tvocStd), tvocMean + 2 * tvocStd], 1);
+  const lightScale = autoScale((env?.light?.sparkline ?? []).map((p) => p.value));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
-      <EnvCard
-        name="Temperature"
-        current={temp?.current ?? null}
-        displayVal={temp?.current != null ? `${Math.round(temp.current * 10) / 10}°C` : undefined}
-        unitLabel="norm 18–26°C"
-        status={temp?.status}
-        sparkline={temp?.sparkline ?? []}
-        cfg={{ color: tempColor, gradId: "T", chartMin: 8, chartMax: 35, ticks: [10,15,20,25,30], bandLo: 18, bandHi: 26, bandColor: GREEN, tooltipUnit: "°C" }}
-        note="Normal range 18–26°C · configurable"
-      />
+    <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "repeat(2, minmax(0,1fr))", gap: 12 }}>
+      <EnvTile name="Temperature" value={r1(env?.temperature.current)} unit="°C" status={env?.temperature.status} normal="18–26°C"
+        chart={<EnvChart data={env?.temperature.sparkline ?? []} domain={[8, 36]} ticks={[10, 20, 30]} band={[18, 26]} tipUnit="°C" height={H} />} />
+      <EnvTile name="Humidity" value={r0(env?.humidity.current)} unit="% RH" status={env?.humidity.status} normal="50–70%"
+        chart={<EnvChart data={env?.humidity.sparkline ?? []} domain={[20, 105]} ticks={[30, 60, 90]} band={[50, 70]} tipUnit="%" height={H} />} />
+      <EnvTile name="CO₂ / Ventilation" value={r0(env?.co2.current)} unit="ppm" status={env?.co2.status} normal="max 1,400"
+        chart={<EnvChart data={env?.co2.sparkline ?? []} domain={[300, 2200]} ticks={[500, 1200, 1900]} threshold={1400} tipUnit="ppm" height={H} />} />
+      <EnvTile name="Air quality" value={env?.tvoc.current != null ? `${Math.round(env.tvoc.current * 100) / 100}` : null} unit="TVOC" normal="±2σ baseline"
+        chart={<EnvChart data={env?.tvoc.sparkline ?? []} domain={tvocScale.domain} ticks={tvocScale.ticks} band={tvocStd > 0 ? [Math.max(0, Math.round((tvocMean - 2 * tvocStd) * 10) / 10), Math.round((tvocMean + 2 * tvocStd) * 10) / 10] : undefined} tipUnit="idx" height={H} />} />
 
-      <EnvCard
-        name="Humidity"
-        current={hum?.current ?? null}
-        displayVal={hum?.current != null ? `${Math.round(hum.current)}%` : undefined}
-        unitLabel="RH · norm 50–70%"
-        status={hum?.status}
-        sparkline={hum?.sparkline ?? []}
-        cfg={{ color: TEAL, gradId: "H", chartMin: 25, chartMax: 110, ticks: [30,50,70,90], bandLo: 50, bandHi: 70, bandColor: GREEN, tooltipUnit: "%" }}
-        note="Normal range 50–70% RH · configurable"
-      />
+      {/* Particulates — fine + coarse dust on one plot */}
+      <TileShell>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--t3)" }}>Particulates · dust</span>
+          <span style={{ display: "inline-flex", gap: 10 }}><LegendDot color={TEAL} label="PM2.5" /><LegendDot color={GOLD} label="PM10" /></span>
+        </div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+          <span style={{ fontFamily: "var(--font-d)", fontSize: 24, fontWeight: 800, lineHeight: 1, color: TEAL }}>{r0(env?.pm2_5?.current) ?? "—"}</span>
+          <span style={{ fontFamily: "var(--font-d)", fontSize: 18, fontWeight: 800, color: GOLD, marginLeft: 6 }}>{r0(env?.pm10?.current) ?? "—"}</span>
+          <span style={{ fontSize: 11, color: "var(--t3)", fontWeight: 600 }}>µg/m³</span>
+          <span style={{ marginLeft: "auto", fontSize: 9.5, color: "var(--t4)" }}>15-min avg</span>
+        </div>
+        <ParticulatesChart pm25={env?.pm2_5?.sparkline ?? []} pm10={env?.pm10?.sparkline ?? []} height={H} />
+      </TileShell>
 
-      <EnvCard
-        name="Ventilation"
-        current={co2?.current ?? null}
-        displayVal={co2?.current != null ? `${Math.round(co2.current).toLocaleString()}` : undefined}
-        unitLabel="ppm CO₂ · max 1,400"
-        status={co2?.status}
-        sparkline={co2?.sparkline ?? []}
-        cfg={{ color: TEAL, gradId: "V", chartMin: 300, chartMax: 2500,
-          ticks: [500,1000,1500,2000],
-          thresholdHi: 1400, thresholdColor: RED,
-          tickFmt: (v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`,
-          tooltipFmt: (v) => `${Math.round(v).toLocaleString()} ppm` }}
-        note="CO₂ proxy · threshold 1,400 ppm configurable"
-      />
-
-      <EnvCard
-        name="Air quality"
-        current={tvoc?.current ?? null}
-        displayVal={tvoc?.current != null ? `${Math.round(tvoc.current * 100) / 100}` : undefined}
-        unitLabel="TVOC index"
-        sparkline={tvoc?.sparkline ?? []}
-        cfg={{
-          color: TEAL, gradId: "A", chartMin: tvocChartMin, chartMax: tvocChartMax,
-          ticks: tvocTicks,
-          bandLo: tvocBandLo,
-          bandHi: tvocBandHi,
-          bandColor: TEAL,
-          tooltipUnit: "idx",
-        }}
-        note="±2σ adaptive baseline · farm normal"
-      />
-
-      <EnvCard
-        name="PM2.5"
-        current={pm25?.current ?? null}
-        displayVal={pm25?.current != null ? `${Math.round(pm25.current)}` : undefined}
-        unitLabel="µg/m³ · 15-min avg"
-        sparkline={[]}
-        band={pm25?.sparkline ?? []}
-        cfg={{ color: GOLD, gradId: "PM25", chartMin: 0, chartMax: 1, tooltipUnit: "µg/m³" }}
-        note="Fine dust — mean with 15-min min/max range"
-      />
-
-      <EnvCard
-        name="PM10"
-        current={pm10?.current ?? null}
-        displayVal={pm10?.current != null ? `${Math.round(pm10.current)}` : undefined}
-        unitLabel="µg/m³ · 15-min avg"
-        sparkline={[]}
-        band={pm10?.sparkline ?? []}
-        cfg={{ color: "#7A5C00", gradId: "PM10", chartMin: 0, chartMax: 1, tooltipUnit: "µg/m³" }}
-        note="Coarse dust — mean with 15-min min/max range"
-      />
+      <EnvTile name="Light" value={r0(env?.light?.current)} unit="lux" normal="photoperiod"
+        chart={<EnvChart data={env?.light?.sparkline ?? []} domain={lightScale.domain} ticks={lightScale.ticks} tipUnit="lux" height={H} />} />
     </div>
   );
 }

@@ -162,7 +162,7 @@ export async function GET() {
 
   try {
     // Latest AM308 reading
-    const [latestRows, sparkRows, waterSparkRows, feedSparkRows, pmSparkRows] = await Promise.all([
+    const [latestRows, sparkRows, waterSparkRows, feedSparkRows, pmSparkRows, lightRows] = await Promise.all([
       queryInflux<Record<string, unknown>>(`
         SELECT
           AVG(temperature) AS temperature,
@@ -225,6 +225,18 @@ export async function GET() {
         GROUP BY bucket
         ORDER BY bucket ASC
       `),
+      // Light level (lux) — defensively caught so a missing column can't break the dashboard.
+      queryInflux<Record<string, unknown>>(`
+        SELECT
+          date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
+          AVG(light_level) AS light
+        FROM sensors
+        WHERE farm_id = '${farm.farmId}'
+          AND device_type = 'AM308-1'
+          AND time > now() - INTERVAL '24 hours'
+        GROUP BY bucket
+        ORDER BY bucket ASC
+      `).catch(() => [] as Record<string, unknown>[]),
     ]);
 
     const latest = latestRows[0] ?? {};
@@ -250,6 +262,10 @@ export async function GET() {
       }).filter((p): p is { time: string; value: number; lo: number | null; hi: number | null } => p !== null);
     const pm25Spark = toBand(pmSparkRows, "pm25_avg", "pm25_min", "pm25_max");
     const pm10Spark = toBand(pmSparkRows, "pm10_avg", "pm10_min", "pm10_max");
+
+    // Light (lux) — empty if the sensor/column isn't reporting it.
+    const lightSpark = lightRows.map((r) => toPoint(r.bucket as string | Date, r.light)).filter((v): v is { time: string; value: number } => v !== null);
+    const lightCurrent = lightSpark.length ? lightSpark[lightSpark.length - 1].value : null;
 
     // Consumption is derived from consecutive cumulative meter readings.
     const allWaterPoints = cumulativeMeterPoints(waterSparkRows, farm.waterLitresPerPulse);
@@ -295,6 +311,7 @@ export async function GET() {
         },
         pm2_5: { current: pm25Current, sparkline: pm25Spark },
         pm10: { current: pm10Current, sparkline: pm10Spark },
+        light: { current: lightCurrent, sparkline: lightSpark },
         water: {
           current: waterCurrent,
           today: waterSpark.length > 0 ? waterToday : null,
