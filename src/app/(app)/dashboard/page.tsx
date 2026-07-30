@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { type AlertItem } from "@/components/DashAlertRow";
+import { buildAttention, type AttentionAlert } from "@/lib/attention";
 import DashAlertChat from "@/components/DashAlertChat";
 import DashAcousticCard from "@/components/DashAcousticCard";
 import DashEnvCol, { type EnvData } from "@/components/DashEnvCol";
@@ -14,6 +15,9 @@ interface DashboardSummary {
   alerts: AlertItem[];
   updatedAt: string;
 }
+
+const sevStatus = (s: AttentionAlert["severity"]): AlertItem["status"] =>
+  s === "danger" ? "danger" : s === "warning" ? "warning" : "neutral";
 
 // Responsive without CSS media queries (globals.css can go stale in dev).
 function useIsNarrow(bp = 760): boolean {
@@ -32,6 +36,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [production, setProduction] = useState<ProductionData | null>(null);
+  const [attention, setAttention] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isNarrow = useIsNarrow();
@@ -50,7 +55,14 @@ export default function DashboardPage() {
       }
       setSummary(await summaryRes.json());
       setError(null);
-      if (productionRes.ok) setProduction(await productionRes.json());
+      if (productionRes.ok) {
+        const prod: ProductionData = await productionRes.json();
+        setProduction(prod);
+        const now = Date.now();
+        setAttention(buildAttention({ lastLogDate: prod.date ?? null, now }).map((a) => ({
+          metric: a.title, status: sevStatus(a.severity), message: a.detail, updatedAt: null,
+        })));
+      }
     } catch {
       setError("Connection error — check your network");
     } finally {
@@ -82,7 +94,7 @@ export default function DashboardPage() {
       {/* Environment + alerts */}
       <div style={{ display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "minmax(0, 1fr) 340px", gap: 14, alignItems: "start" }}>
         <DashEnvCol env={summary?.env ?? null} narrow={isNarrow} />
-        <DashAlertChat alerts={summary?.alerts ?? []} updatedAt={summary?.updatedAt} />
+        <DashAlertChat alerts={[...attention, ...(summary?.alerts ?? [])]} updatedAt={summary?.updatedAt} />
       </div>
     </main>
   );

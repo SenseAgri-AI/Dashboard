@@ -25,6 +25,7 @@ export function buildAttention(input: { lastLogDate?: string | null; now: number
   const alerts: AttentionAlert[] = [];
 
   // Daily-log staleness — the flock's daily production log should be filled in each day.
+  // Fires once the log is >2 days behind (warning), escalating past a week (danger).
   const d = input.lastLogDate ? daysSince(input.lastLogDate, input.now) : null;
   if (!input.lastLogDate || d == null) {
     alerts.push({
@@ -33,11 +34,11 @@ export function buildAttention(input: { lastLogDate?: string | null; now: number
       title: "No daily log found",
       detail: "No egg / daily-log entries yet — start logging daily production so tracking stays accurate.",
     });
-  } else if (d > 7) {
+  } else if (d > 2) {
     alerts.push({
       id: "daily-log",
-      severity: d > 30 ? "danger" : "warning",
-      title: "Daily log overdue",
+      severity: d > 7 ? "danger" : "warning",
+      title: "Daily log not up to date",
       detail: `Last daily log was ${ago(d)} (${input.lastLogDate}). Fill in the daily log so production and HDEP stay accurate.`,
     });
   }
