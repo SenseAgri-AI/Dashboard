@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import DashStatusBar from "@/components/DashStatusBar";
 import { type AlertItem } from "@/components/DashAlertRow";
+import { buildAttention, type AttentionAlert } from "@/lib/attention";
 import DashAlertChat from "@/components/DashAlertChat";
 import DashAcousticCard from "@/components/DashAcousticCard";
 import DashEnvCol, { type EnvData } from "@/components/DashEnvCol";
@@ -12,19 +12,34 @@ import { DashKpiGrid, type ProductionData } from "@/components/DashMetricCol";
 interface DashboardSummary {
   env: EnvData;
   metrics: { vapour_pressure: number | null };
-  health: number;
-  healthWord: string;
-  healthLabel: "good" | "normal" | "warning" | "danger";
   alerts: AlertItem[];
   updatedAt: string;
+}
+
+const sevStatus = (s: AttentionAlert["severity"]): AlertItem["status"] =>
+  s === "danger" ? "danger" : s === "warning" ? "warning" : "neutral";
+
+// Responsive without CSS media queries (globals.css can go stale in dev).
+function useIsNarrow(bp = 760): boolean {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${bp}px)`);
+    const on = () => setNarrow(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, [bp]);
+  return narrow;
 }
 
 export default function DashboardPage() {
   const router = useRouter();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [production, setProduction] = useState<ProductionData | null>(null);
+  const [attention, setAttention] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const isNarrow = useIsNarrow();
 
   const fetchAll = useCallback(async () => {
     try {
@@ -32,25 +47,21 @@ export default function DashboardPage() {
         fetch("/api/dashboard/summary"),
         fetch("/api/production"),
       ]);
-
-      if (summaryRes.status === 401) {
-        router.push("/sign-in");
-        return;
-      }
-
+      if (summaryRes.status === 401) { router.push("/sign-in"); return; }
       if (!summaryRes.ok) {
         const data = await summaryRes.json();
         setError(data.error ?? "Failed to load sensor data");
         return;
       }
-
-      const summaryData = await summaryRes.json();
-      setSummary(summaryData);
+      setSummary(await summaryRes.json());
       setError(null);
-
       if (productionRes.ok) {
-        const prodData = await productionRes.json();
-        setProduction(prodData);
+        const prod: ProductionData = await productionRes.json();
+        setProduction(prod);
+        const now = Date.now();
+        setAttention(buildAttention({ lastLogDate: prod.date ?? null, now }).map((a) => ({
+          metric: a.title, status: sevStatus(a.severity), message: a.detail, updatedAt: null,
+        })));
       }
     } catch {
       setError("Connection error — check your network");
@@ -66,46 +77,24 @@ export default function DashboardPage() {
   }, [fetchAll]);
 
   if (loading) {
-    return (
-      <main className="sa-main">
-        <div style={{ color: "var(--t3)", fontSize: 13, padding: "60px 0", textAlign: "center", fontFamily: "var(--font-s)" }}>
-          Loading sensor data…
-        </div>
-      </main>
-    );
+    return <main className="sa-main"><div style={{ color: "var(--t3)", fontSize: 13, padding: "60px 0", textAlign: "center" }}>Loading dashboard…</div></main>;
   }
-
   if (error) {
-    return (
-      <main className="sa-main">
-        <div style={{ color: "var(--danger)", fontSize: 13, padding: "60px 0", textAlign: "center", fontFamily: "var(--font-s)" }}>
-          {error}
-        </div>
-      </main>
-    );
+    return <main className="sa-main"><div style={{ color: "var(--danger)", fontSize: 13, padding: "60px 0", textAlign: "center" }}>{error}</div></main>;
   }
 
   return (
-    <main className="sa-main">
-      {/* Top — compact health gauge + equal-size KPI cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "200px minmax(0, 1fr)", gap: 10, alignItems: "stretch" }}>
-        <DashStatusBar
-          health={summary?.health ?? 0}
-          word={summary?.healthWord ?? "Unknown"}
-          label={summary?.healthLabel ?? "normal"}
-        />
-        <DashKpiGrid production={production} />
-      </div>
+    <main className="sa-main" style={{ maxWidth: 1240, width: "100%", margin: "0 auto", gap: 14 }}>
+      {/* Production KPIs */}
+      <DashKpiGrid production={production} narrow={isNarrow} />
 
-      {/* Welfare — flock-noise acoustic tracker (full width) */}
-      <div style={{ marginTop: 10 }}>
-        <DashAcousticCard />
-      </div>
+      {/* Flock-noise welfare heat */}
+      <DashAcousticCard narrow={isNarrow} />
 
-      {/* Body — environment plots (stacked) on the left, alerts chat on the right */}
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 340px", gap: 10, alignItems: "stretch", marginTop: 10 }}>
-        <DashEnvCol env={summary?.env ?? null} />
-        <DashAlertChat alerts={summary?.alerts ?? []} updatedAt={summary?.updatedAt} />
+      {/* Environment + alerts */}
+      <div style={{ display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "minmax(0, 1fr) 340px", gap: 14, alignItems: "start" }}>
+        <DashEnvCol env={summary?.env ?? null} narrow={isNarrow} />
+        <DashAlertChat alerts={[...attention, ...(summary?.alerts ?? [])]} updatedAt={summary?.updatedAt} />
       </div>
     </main>
   );
