@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { queryInflux, FARM_ID } from "@/lib/influxdb";
-import { getSession } from "@/lib/session";
+import { queryInflux } from "@/lib/influxdb";
+import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
 import {
   tempStatus,
   humidityStatus,
@@ -24,9 +24,8 @@ interface MeterRow {
   cumulative?: number;
 }
 
-const WATER_DEVICE_ID = "24e124136f451854";
-const FEED_DEVICE_ID = "24e124136f452271";
-const WATER_LITRES_PER_PULSE = 10;
+// Device IDs and litres-per-pulse now come from per-farm config (src/lib/farms.ts).
+// SAST offset stays a constant — all current farms are UTC+2.
 const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
 
 function toPoint(bucket: string | Date, value: unknown): { time: string; value: number } | null {
@@ -151,21 +150,30 @@ function alertMessage(
 }
 
 export async function GET() {
-  const session = await getSession();
-  if (!session.isLoggedIn) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let farm;
+  try {
+    farm = await getFarmForRequest();
+  } catch (err) {
+    if (err instanceof FarmAccessError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Failed to resolve farm" }, { status: 500 });
+  }
 
   try {
     // Latest AM308 reading
-    const [latestRows, sparkRows, waterSparkRows, feedSparkRows] = await Promise.all([
+    const [latestRows, sparkRows, waterSparkRows, feedSparkRows, pmSparkRows] = await Promise.all([
       queryInflux<Record<string, unknown>>(`
         SELECT
           AVG(temperature) AS temperature,
           AVG(humidity)    AS humidity,
           AVG(co2)         AS co2,
           AVG(tvoc)        AS tvoc,
+          AVG(pm2_5)       AS pm2_5,
+          AVG(pm10)        AS pm10,
           AVG(pressure)    AS pressure
         FROM sensors
-        WHERE farm_id = '${FARM_ID}'
+        WHERE farm_id = '${farm.farmId}'
           AND device_type = 'AM308-1'
           AND time > now() - INTERVAL '1 hour'
       `),
@@ -177,7 +185,7 @@ export async function GET() {
           AVG(co2)         AS co2,
           AVG(tvoc)        AS tvoc
         FROM sensors
-        WHERE farm_id = '${FARM_ID}'
+        WHERE farm_id = '${farm.farmId}'
           AND device_type = 'AM308-1'
           AND time > now() - INTERVAL '24 hours'
         GROUP BY bucket
@@ -188,8 +196,8 @@ export async function GET() {
           date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
           MAX(pulse_total) AS cumulative
         FROM sensors
-        WHERE farm_id = '${FARM_ID}'
-          AND device_id = '${WATER_DEVICE_ID}'
+        WHERE farm_id = '${farm.farmId}'
+          AND device_id = '${farm.waterDeviceId}'
           AND time > now() - INTERVAL '25 hours'
         GROUP BY bucket
         ORDER BY bucket ASC
@@ -199,9 +207,21 @@ export async function GET() {
           date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
           MAX(pulse_total) AS cumulative
         FROM sensors
-        WHERE farm_id = '${FARM_ID}'
-          AND device_id = '${FEED_DEVICE_ID}'
+        WHERE farm_id = '${farm.farmId}'
+          AND device_id = '${farm.feedDeviceId}'
           AND time > now() - INTERVAL '25 hours'
+        GROUP BY bucket
+        ORDER BY bucket ASC
+      `),
+      queryInflux<Record<string, unknown>>(`
+        SELECT
+          date_bin(INTERVAL '15 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
+          AVG(pm2_5) AS pm25_avg, MIN(pm2_5) AS pm25_min, MAX(pm2_5) AS pm25_max,
+          AVG(pm10)  AS pm10_avg, MIN(pm10)  AS pm10_min, MAX(pm10)  AS pm10_max
+        FROM sensors
+        WHERE farm_id = '${farm.farmId}'
+          AND device_type = 'AM308-1'
+          AND time > now() - INTERVAL '24 hours'
         GROUP BY bucket
         ORDER BY bucket ASC
       `),
@@ -219,8 +239,20 @@ export async function GET() {
     const tvocSpark = sparkRows.map((r) => toPoint(r.bucket, r.tvoc)).filter((v): v is { time: string; value: number } => v !== null);
     const tvocVals = tvocSpark.map((pt) => pt.value);
 
+    // Particulates — 15-min mean with the bucket's min/max range.
+    const pm25Current = toNum(latest.pm2_5);
+    const pm10Current = toNum(latest.pm10);
+    const toBand = (rows: Record<string, unknown>[], avg: string, lo: string, hi: string) =>
+      rows.map((r) => {
+        const p = toPoint(r.bucket as string | Date, r[avg]); // reuse the proven bucket→time conversion
+        if (!p) return null;
+        return { time: p.time, value: Math.round(p.value * 10) / 10, lo: toNum(r[lo]), hi: toNum(r[hi]) };
+      }).filter((p): p is { time: string; value: number; lo: number | null; hi: number | null } => p !== null);
+    const pm25Spark = toBand(pmSparkRows, "pm25_avg", "pm25_min", "pm25_max");
+    const pm10Spark = toBand(pmSparkRows, "pm10_avg", "pm10_min", "pm10_max");
+
     // Consumption is derived from consecutive cumulative meter readings.
-    const allWaterPoints = cumulativeMeterPoints(waterSparkRows, WATER_LITRES_PER_PULSE);
+    const allWaterPoints = cumulativeMeterPoints(waterSparkRows, farm.waterLitresPerPulse);
     const cutoff3h = Date.now() - 3 * 60 * 60 * 1000;
     const waterLast3h = allWaterPoints
       .filter((pt) => new Date(pt.time).getTime() >= cutoff3h)
@@ -261,6 +293,8 @@ export async function GET() {
           mean: tvocStats.mean,
           std: tvocStats.std,
         },
+        pm2_5: { current: pm25Current, sparkline: pm25Spark },
+        pm10: { current: pm10Current, sparkline: pm10Spark },
         water: {
           current: waterCurrent,
           today: waterSpark.length > 0 ? waterToday : null,

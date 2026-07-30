@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { queryInflux, FARM_ID } from "@/lib/influxdb";
-import { getSession } from "@/lib/session";
+import { queryInflux } from "@/lib/influxdb";
+import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
-  if (!session.isLoggedIn) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let farm;
+  try {
+    farm = await getFarmForRequest();
+  } catch (err) {
+    if (err instanceof FarmAccessError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Failed to resolve farm" }, { status: 500 });
+  }
 
   const { searchParams } = new URL(req.url);
   const deviceId = searchParams.get("device_id");
@@ -24,7 +31,7 @@ export async function GET(req: NextRequest) {
   const rows = await queryInflux(`
     SELECT ${selectFields}
     FROM sensors
-    WHERE farm_id = '${FARM_ID}'
+    WHERE farm_id = '${farm.farmId}'
       AND device_id = '${deviceId}'
       AND device_type = '${deviceType}'
     ORDER BY time DESC

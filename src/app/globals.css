@@ -19,6 +19,12 @@
   --primary:    #002E35;
   --teal:       #2A8E9A;
   --gold:       #D4AF37;
+  /* on-theme button gradients */
+  --grad-primary: linear-gradient(135deg, #0c5c69 0%, #00363f 55%, #002229 100%);
+  --grad-teal:    linear-gradient(135deg, #37a7b4 0%, #2A8E9A 100%);
+  --grad-gold:    linear-gradient(135deg, #E4C24E 0%, #C79A1E 100%);
+  --shadow-primary: 0 2px 10px rgba(0,46,53,0.32);
+  --shadow-teal:    0 2px 10px rgba(42,142,154,0.34);
   --danger:     #B91C1C;
   --danger-bg:  #FEF2F2;
   --warn:       #92400E;
@@ -198,6 +204,72 @@ html, body {
 
 @keyframes sa-pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
 
+/* ── APP SHELL (sidebar + content) ──────────────── */
+.sa-shell { display: flex; min-height: 100vh; }
+.sa-sidebar {
+  width: 218px; flex-shrink: 0; background: var(--bg-nav); color: #fff;
+  display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; z-index: 60;
+}
+.sa-side-brand { display: flex; align-items: center; gap: 11px; padding: 16px 16px 15px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.sa-side-brand img { box-shadow: 0 0 0 1px rgba(255,255,255,0.1); }
+.sa-side-brand-text { font-family: var(--font-d); font-size: 16px; font-weight: 800; letter-spacing: -0.01em; color: #fff; }
+.sa-side-brand-sub { font-size: 9px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: #5FC5D2; margin-top: 3px; }
+.sa-side-nav { display: flex; flex-direction: column; gap: 3px; padding: 12px 10px; flex: 1; }
+.sa-side-link {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px;
+  color: rgba(255,255,255,0.82); font-size: 14px; font-weight: 600; text-decoration: none;
+  transition: background 120ms, color 120ms;
+}
+.sa-side-link:hover { background: rgba(255,255,255,0.09); color: #fff; }
+.sa-side-link.active { background: linear-gradient(135deg, rgba(42,142,154,0.5) 0%, rgba(42,142,154,0.16) 100%); color: #fff; font-weight: 700; box-shadow: inset 3px 0 0 var(--gold); }
+.sa-side-link svg { width: 19px; height: 19px; flex-shrink: 0; opacity: 0.95; }
+.sa-side-foot { border-top: 1px solid rgba(255,255,255,0.1); padding: 12px; display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.18); }
+.sa-side-user { display: flex; align-items: center; color: #fff; }
+
+.sa-content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sa-topbar {
+  height: 52px; flex-shrink: 0; background: var(--bg-nav); border-bottom: 1px solid rgba(255,255,255,0.08);
+  display: flex; align-items: center; gap: 14px; padding: 0 20px; position: sticky; top: 0; z-index: 50;
+}
+.sa-topbar-title { font-family: var(--font-d); font-size: 15px; font-weight: 800; color: #fff; }
+.sa-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+/* Always-visible top-bar menu toggle (collapse on desktop, drawer on mobile) */
+.sa-menu-btn { display: inline-flex; align-items: center; justify-content: center; background: transparent; border: none; color: #fff; cursor: pointer; padding: 4px; }
+
+/* Secondary collapse control inside the sidebar header (desktop only) */
+.sa-collapse-btn { display: inline-flex; align-items: center; justify-content: center; background: transparent; border: none; color: rgba(255,255,255,0.5); cursor: pointer; padding: 4px; flex-shrink: 0; }
+.sa-collapse-btn:hover { color: #fff; }
+@media (min-width: 901px) {
+  .sa-shell.collapsed .sa-sidebar { display: none; }
+}
+@media (max-width: 900px) {
+  .sa-collapse-btn { display: none; }
+}
+
+/* Mobile drawer + bottom nav */
+.sa-drawer-backdrop { display: none; }
+.sa-mobile-nav { display: none; }
+
+@media (max-width: 900px) {
+  .sa-sidebar {
+    position: fixed; left: 0; top: 0; height: 100vh; transform: translateX(-100%);
+    transition: transform 220ms ease; box-shadow: 0 0 40px rgba(0,0,0,0.4);
+  }
+  .sa-sidebar.open { transform: translateX(0); }
+  .sa-drawer-backdrop.open { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 55; }
+  .sa-content { padding-bottom: 58px; }
+  .sa-mobile-nav {
+    display: flex; position: fixed; bottom: 0; left: 0; right: 0; height: 58px; z-index: 58;
+    background: var(--bg-nav); border-top: 1px solid rgba(255,255,255,0.1);
+  }
+  .sa-mobile-link {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    color: rgba(255,255,255,0.6); font-size: 10px; font-weight: 700; text-decoration: none; letter-spacing: 0.02em;
+  }
+  .sa-mobile-link svg { width: 20px; height: 20px; }
+  .sa-mobile-link.active { color: var(--gold); }
+}
+
 /* ── RESPONSIVE ─────────────────────────────────── */
 
 /* Desktop (>1280px): sections become transparent → true flat 4-col grid, all cards equal width */
@@ -240,4 +312,55 @@ html, body {
   .sa-env-name { font-size: 14px; }
   .sa-env-reading { font-size: 18px; }
   .sa-trend-title, .sa-chart-title { font-size: 15px; }
+}
+
+/* ─────────────  Dashboard redesign  ───────────── */
+/* Top zone: compact gauge + equal KPI cards */
+.sa-dash-top { display: grid; grid-template-columns: 210px 1fr; gap: 10px; align-items: stretch; }
+.sa-dash-top .sa-gauge-card { padding: 8px; }
+.sa-dash-top .sa-gauge-value { font-size: 26px; }
+
+.sa-kpi-grid2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-content: stretch; }
+.sa-kpi2 { background: var(--card); border: 1px solid rgba(0,0,0,0.09); border-left: 3px solid var(--t4); box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 11px 14px; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+.sa-kpi2--production { border-left-color: var(--primary); }
+.sa-kpi2--welfare    { border-left-color: var(--teal); }
+.sa-kpi2--financial  { border-left-color: var(--gold); }
+.sa-kpi2-lbl { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; color: var(--t2); }
+.sa-kpi2-val { font-family: var(--font-d); font-size: 25px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; color: var(--t1); }
+.sa-kpi2--production .sa-kpi2-val { color: var(--primary); }
+.sa-kpi2--welfare    .sa-kpi2-val { color: var(--teal); }
+.sa-kpi2--financial  .sa-kpi2-val { color: #7A5C00; }
+.sa-kpi2-sub { font-size: 10.5px; color: var(--t3); line-height: 1.3; }
+.sa-kpi2-status { font-size: 10px; font-weight: 700; margin-top: 1px; }
+.sa-kpi2-status.ok { color: var(--ok); } .sa-kpi2-status.warn { color: #B45309; } .sa-kpi2-status.danger { color: var(--danger); }
+.sa-kpi2-pending { font-size: 22px; color: var(--t4); }
+
+/* Body zone: stacked plots (left) + alerts chat (right) */
+.sa-dash-body { display: grid; grid-template-columns: 1fr 340px; gap: 10px; align-items: stretch; }
+.sa-env-stack { display: flex; flex-direction: column; gap: 10px; }
+
+/* WhatsApp-style alerts window */
+.sa-chat { display: flex; flex-direction: column; background: var(--card); border: 1px solid rgba(0,0,0,0.09); box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; min-height: 320px; }
+.sa-chat-hd { background: var(--primary); color: #fff; padding: 10px 14px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.sa-chat-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ADE80; box-shadow: 0 0 6px #4ADE80; }
+.sa-chat-title { font-family: var(--font-d); font-weight: 800; font-size: 14px; }
+.sa-chat-sub { font-size: 10px; opacity: 0.75; margin-left: auto; }
+.sa-chat-body { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; background: #ECE5DD; }
+.sa-chat-empty { color: var(--t3); font-size: 12px; text-align: center; margin: auto; }
+.sa-chat-msg { max-width: 92%; align-self: flex-start; background: #fff; border-radius: 2px 10px 10px 10px; padding: 8px 11px; box-shadow: 0 1px 1px rgba(0,0,0,0.12); border-left: 3px solid var(--t4); }
+.sa-chat-msg.danger  { border-left-color: var(--danger); }
+.sa-chat-msg.warning { border-left-color: #D97706; }
+.sa-chat-msg.normal  { border-left-color: #16A34A; }
+.sa-chat-metric { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px; }
+.sa-chat-msg.danger  .sa-chat-metric { color: var(--danger); }
+.sa-chat-msg.warning .sa-chat-metric { color: #92400E; }
+.sa-chat-msg.normal  .sa-chat-metric { color: var(--ok); }
+.sa-chat-msg.neutral .sa-chat-metric { color: var(--t2); }
+.sa-chat-text { font-size: 12.5px; color: var(--t1); line-height: 1.4; }
+.sa-chat-time { font-size: 9px; color: var(--t4); text-align: right; margin-top: 3px; }
+
+@media (max-width: 900px) {
+  .sa-dash-top { grid-template-columns: 1fr; }
+  .sa-dash-body { grid-template-columns: 1fr; }
+  .sa-kpi-grid2 { grid-template-columns: 1fr 1fr; }
 }

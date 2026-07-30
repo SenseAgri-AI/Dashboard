@@ -1,4 +1,4 @@
-import { google } from "googleapis";
+import { google, sheets_v4 } from "googleapis";
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 
 let cachedAuth: InstanceType<typeof google.auth.GoogleAuth> | null = null;
@@ -22,16 +22,22 @@ async function getAuth(): Promise<InstanceType<typeof google.auth.GoogleAuth>> {
   const credentials = await getServiceAccountKey();
   const auth = new google.auth.GoogleAuth({
     credentials,
-    scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
+    // Read-write: the dashboard reads production data, the Farm Logs section writes entries.
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
   cachedAuth = auth;
   authFetchedAt = Date.now();
   return auth;
 }
 
-export async function getSheetValues(spreadsheetId: string, range: string): Promise<string[][]> {
+/** Authorized Sheets v4 client (read-write). */
+export async function getSheetsClient(): Promise<sheets_v4.Sheets> {
   const auth = await getAuth();
-  const sheets = google.sheets({ version: "v4", auth });
+  return google.sheets({ version: "v4", auth });
+}
+
+export async function getSheetValues(spreadsheetId: string, range: string): Promise<string[][]> {
+  const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({ spreadsheetId, range });
   return (res.data.values as string[][]) ?? [];
 }

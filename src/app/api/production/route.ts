@@ -1,27 +1,15 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
 import { getSheetValues } from "@/lib/sheets";
-import { queryInflux, FARM_ID } from "@/lib/influxdb";
+import { queryInflux } from "@/lib/influxdb";
+import { getFarmForRequest, FarmAccessError, type PriceTier } from "@/lib/farms";
 
-const SPREADSHEET_ID = "1KjAr1wjfptYbE0n3qCWY_7gTVnR-XMTRy8xzRgCDpkA";
-const SHEET_RANGE = "DailyLog!A:J";
-const FEED_DEVICE_ID = "24e124136f452271";
-
-const HOUSE_HENS: Record<string, number> = {
-  house1: 4479,
-};
-const TOTAL_HENS = Object.values(HOUSE_HENS).reduce((a, b) => a + b, 0);
-
-const PRICE_TIERS = [
-  { from: "2026-04-01", small: 1.20, medium: 1.50, large: 1.80, xl: 2.00, jumbo: 2.20 },
-  { from: "2025-10-01", small: 1.00, medium: 1.30, large: 1.60, xl: 1.80, jumbo: 2.00 },
-];
-
-function getPrices(dateKey: string) {
-  for (const tier of PRICE_TIERS) {
+// Farm-specific values (sheet, feed device, hens, price tiers) come from per-farm
+// config (src/lib/farms.ts). priceTiers must be ordered newest-first.
+function getPrices(dateKey: string, tiers: PriceTier[]): PriceTier {
+  for (const tier of tiers) {
     if (dateKey >= tier.from) return tier;
   }
-  return PRICE_TIERS[PRICE_TIERS.length - 1];
+  return tiers[tiers.length - 1];
 }
 
 function normDate(raw: string): string | null {
@@ -103,8 +91,16 @@ function feedDailyMap(rows: FeedRow[]): Map<string, number> {
 }
 
 export async function GET(request: Request) {
-  const session = await getSession();
-  if (!session.isLoggedIn) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  let farm;
+  try {
+    farm = await getFarmForRequest();
+  } catch (err) {
+    if (err instanceof FarmAccessError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Failed to resolve farm" }, { status: 500 });
+  }
+  const TOTAL_HENS = Object.values(farm.houseHens).reduce((a, b) => a + b, 0);
 
   const { searchParams } = new URL(request.url);
   const fromParam = searchParams.get("from"); // YYYY-MM-DD, optional
@@ -112,14 +108,14 @@ export async function GET(request: Request) {
 
   try {
     const [sheetRows, feedRows] = await Promise.all([
-      getSheetValues(SPREADSHEET_ID, SHEET_RANGE),
+      getSheetValues(farm.spreadsheetId, farm.sheetRange),
       queryInflux<FeedRow>(`
         SELECT
           date_bin(INTERVAL '1 hour', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
           MAX(pulse_total) AS cumulative
         FROM sensors
-        WHERE farm_id = '${FARM_ID}'
-          AND device_id = '${FEED_DEVICE_ID}'
+        WHERE farm_id = '${farm.farmId}'
+          AND device_id = '${farm.feedDeviceId}'
           AND time > now() - INTERVAL '32 days'
         GROUP BY bucket
         ORDER BY bucket ASC
@@ -153,7 +149,7 @@ export async function GET(request: Request) {
     }
 
     const totalEggs = small + medium + large + xl + jumbo;
-    const prices = getPrices(latestKey);
+    const prices = getPrices(latestKey, farm.priceTiers);
     const revenue =
       small  * prices.small  +
       medium * prices.medium +
@@ -176,7 +172,7 @@ export async function GET(request: Request) {
     for (const { key, r } of dataRows) {
       const s = toInt(r[2]), me = toInt(r[3]), la = toInt(r[4]), x = toInt(r[5]), j = toInt(r[6]);
       const dayEggs = s + me + la + x + j;
-      const p = getPrices(key);
+      const p = getPrices(key, farm.priceTiers);
       const dayRev = s * p.small + me * p.medium + la * p.large + x * p.xl + j * p.jumbo;
       const existing = dailyMap.get(key);
       if (existing) {

@@ -37,7 +37,8 @@ export async function getInfluxClient(): Promise<InfluxDBClient> {
 }
 
 export const BUCKET = process.env.INFLUXDB_BUCKET ?? "senseagri-telemetry";
-export const FARM_ID = "farm_anike_001";
+// NOTE: farm_id is no longer a global constant — it is resolved per request from the
+// caller's farm config (see src/lib/farms.ts) and passed into each query.
 
 export async function queryInflux<T = Record<string, unknown>>(sql: string): Promise<T[]> {
   const client = await getInfluxClient();

@@ -10,6 +10,8 @@ export interface EnvData {
   humidity:    { current: number | null; status: string; sparkline: SparklinePoint[] };
   co2:         { current: number | null; status: string; sparkline: SparklinePoint[] };
   tvoc:        { current: number | null; sparkline: SparklinePoint[]; mean: number; std: number };
+  pm2_5?:      { current: number | null; sparkline: SparklinePoint[] };
+  pm10?:       { current: number | null; sparkline: SparklinePoint[] };
   water:       { current: number | null; today: number | null; sparkline: SparklinePoint[]; mean: number; std: number };
 }
 
@@ -17,12 +19,12 @@ export interface SparklinePoint {
   time: string;
   value: number;
   cumulative?: number;
+  lo?: number | null; // 15-min bucket min (particulates band)
+  hi?: number | null; // 15-min bucket max
 }
 
 const TEAL    = "#2A8E9A";
-const PRIMARY = "#002E35";
 const GOLD    = "#D4AF37";
-const T3      = "#6B7C80";
 const GREEN   = "#166534";
 const RED     = "#B91C1C";
 const GRID    = "#C8CCCC";
@@ -35,18 +37,6 @@ function fmtTime(ts: string) {
 
 function evenTicks(min: number, max: number, count = 5): number[] {
   return Array.from({ length: count }, (_, i) => min + (max - min) * i / (count - 1));
-}
-
-function niceTicks(max: number, targetCount = 4): number[] {
-  if (max <= 0) return [0];
-  const rough = max / targetCount;
-  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
-  const n = rough / mag;
-  const step = n < 1.5 ? mag : n < 3 ? 2 * mag : n < 7 ? 5 * mag : 10 * mag;
-  const domainMax = Math.ceil(max / step) * step;
-  const ticks: number[] = [];
-  for (let t = 0; t <= domainMax; t += step) ticks.push(t);
-  return ticks;
 }
 
 interface SparkCfg {
@@ -148,6 +138,48 @@ function SparklineChart({ data, cfg }: { data: SparklinePoint[]; cfg: SparkCfg }
   );
 }
 
+function BandTooltip({ active, payload, label, unit }: {
+  active?: boolean; payload?: { dataKey?: string | number; value: number | number[] }[]; label?: string; unit?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const v = payload.find((p) => p.dataKey === "v")?.value as number | undefined;
+  const band = payload.find((p) => p.dataKey === "band")?.value as number[] | undefined;
+  return (
+    <div style={{ background: "#002E35", color: "#fff", fontSize: 10, padding: "3px 8px", fontFamily: "Inter,sans-serif", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" }}>
+      <span style={{ opacity: 0.55, marginRight: 5 }}>{label}</span>
+      <strong>{v != null ? Math.round(v * 10) / 10 : "—"}{unit ? ` ${unit}` : ""}</strong>
+      {band && <span style={{ opacity: 0.6, marginLeft: 5 }}>({Math.round(band[0])}–{Math.round(band[1])})</span>}
+    </div>
+  );
+}
+
+// Mean line with a shaded min–max band per bucket; y-axis scaled to the working range.
+function BandSparkline({ data, color, unit }: { data: SparklinePoint[]; color: string; unit: string }) {
+  const pts = data.filter((p) => isFinite(p.value)).map((p) => ({
+    t: fmtTime(p.time), v: p.value,
+    band: [p.lo ?? p.value, p.hi ?? p.value] as [number, number],
+  }));
+  const los = pts.map((p) => p.band[0]).filter(isFinite);
+  const his = pts.map((p) => p.band[1]).filter(isFinite);
+  const lo = los.length ? Math.min(...los) : 0;
+  const hi = his.length ? Math.max(...his) : 1;
+  const pad = Math.max(1, (hi - lo) * 0.15);
+  const dMin = Math.max(0, Math.floor(lo - pad));
+  const dMax = Math.ceil(hi + pad);
+  return (
+    <ResponsiveContainer width="100%" height={210}>
+      <AreaChart data={pts} margin={{ top: 6, right: 10, bottom: 0, left: 0 }}>
+        <CartesianGrid stroke={GRID} vertical={false} strokeDasharray="3 3" />
+        <XAxis dataKey="t" tick={TICK} tickLine={false} axisLine={AXIS_LINE} interval={Math.max(1, Math.floor(pts.length / 5))} />
+        <YAxis domain={[dMin, dMax]} ticks={evenTicks(dMin, dMax, 5).map((v) => Math.round(v))} tick={TICK} tickLine={false} axisLine={AXIS_LINE} width={38} tickFormatter={(v: number) => `${Math.round(v)}`} />
+        <Tooltip content={<BandTooltip unit={unit} />} cursor={{ stroke: color, strokeWidth: 1, strokeOpacity: 0.5 }} />
+        <Area type="monotone" dataKey="band" stroke="none" fill={color} fillOpacity={0.16} isAnimationActive={false} />
+        <Area type="monotone" dataKey="v" stroke={color} strokeWidth={1.8} fill="none" dot={false} activeDot={{ r: 3.5, fill: color, strokeWidth: 0 }} isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
 interface EnvCardProps {
   name: string;
   current: number | null;
@@ -156,6 +188,7 @@ interface EnvCardProps {
   status?: string;
   smallReading?: boolean;
   sparkline: SparklinePoint[];
+  band?: SparklinePoint[]; // when set, render a min–max band chart instead of a plain sparkline
   cfg: SparkCfg;
   note: string;
 }
@@ -167,7 +200,7 @@ function hexGlow(hex: string, a1 = 0.35, a2 = 0.15) {
   return `0 0 14px rgba(${r},${g},${b},${a1}), 0 0 4px rgba(${r},${g},${b},${a2})`;
 }
 
-function EnvCard({ name, current, displayVal, unitLabel, status, smallReading, sparkline, cfg, note }: EnvCardProps) {
+function EnvCard({ name, current, displayVal, unitLabel, status, smallReading, sparkline, band, cfg, note }: EnvCardProps) {
   const readingColor =
     status === "danger" ? RED :
     status === "warning" ? "#D97706" :
@@ -182,7 +215,7 @@ function EnvCard({ name, current, displayVal, unitLabel, status, smallReading, s
         <span className="sa-env-name">{name}</span>
         <span className={readingClass} style={readingStyle}>{shown} <span className="sa-env-unit">{unitLabel}</span></span>
       </div>
-      <SparklineChart data={sparkline} cfg={cfg} />
+      {band ? <BandSparkline data={band} color={cfg.color} unit={cfg.tooltipUnit ?? ""} /> : <SparklineChart data={sparkline} cfg={cfg} />}
       <div className="sa-env-foot">{note}</div>
     </div>
   );
@@ -193,21 +226,27 @@ export default function DashEnvCol({ env }: { env: EnvData | null }) {
   const hum   = env?.humidity;
   const co2   = env?.co2;
   const tvoc  = env?.tvoc;
+  const pm25  = env?.pm2_5;
+  const pm10  = env?.pm10;
 
   const tempColor = TEAL;
 
-  const tvocCurrent = tvoc?.current ?? 0;
-  const tvocMean    = tvoc?.mean ?? 0;
-  const tvocStd     = tvoc?.std ?? 1;
-  const tvocBandHi  = tvocMean + tvocStd * 2;
-  const tvocRawMax  = Math.max(tvocCurrent * 1.3, tvocBandHi * 1.2, 4);
-  const tvocTicks   = niceTicks(tvocRawMax, 4);
-  const tvocLastTick = tvocTicks[tvocTicks.length - 1];
-  const tvocStep    = tvocTicks.length > 1 ? tvocTicks[1] - tvocTicks[0] : 1;
-  const tvocChartMax = tvocLastTick + tvocStep;
+  const tvocMean = tvoc?.mean ?? 0;
+  const tvocStd  = tvoc?.std ?? 1;
+  const tvocBandLo = Math.max(0, tvocMean - tvocStd * 2);
+  const tvocBandHi = tvocMean + tvocStd * 2;
+  // Scale the axis to the working range (data + baseline band) so small TVOC values fill the
+  // chart instead of sitting flat along the bottom.
+  const tvocVals = [...(tvoc?.sparkline ?? []).map((p) => p.value).filter(isFinite), tvocBandLo, tvocBandHi];
+  const tvocLo = tvocVals.length ? Math.min(...tvocVals) : 0;
+  const tvocHi = tvocVals.length ? Math.max(...tvocVals) : 3;
+  const tvocPad = Math.max(0.2, (tvocHi - tvocLo) * 0.2);
+  const tvocChartMin = Math.max(0, Math.round((tvocLo - tvocPad) * 10) / 10);
+  const tvocChartMax = Math.round((tvocHi + tvocPad) * 10) / 10;
+  const tvocTicks = evenTicks(tvocChartMin, tvocChartMax, 4).map((v) => Math.round(v * 10) / 10);
 
   return (
-    <div className="sa-env-row">
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
       <EnvCard
         name="Temperature"
         current={temp?.current ?? null}
@@ -252,14 +291,36 @@ export default function DashEnvCol({ env }: { env: EnvData | null }) {
         unitLabel="TVOC index"
         sparkline={tvoc?.sparkline ?? []}
         cfg={{
-          color: TEAL, gradId: "A", chartMin: 0, chartMax: tvocChartMax,
+          color: TEAL, gradId: "A", chartMin: tvocChartMin, chartMax: tvocChartMax,
           ticks: tvocTicks,
-          bandLo: Math.max(0, tvocMean - tvocStd * 2),
+          bandLo: tvocBandLo,
           bandHi: tvocBandHi,
           bandColor: TEAL,
           tooltipUnit: "idx",
         }}
         note="±2σ adaptive baseline · farm normal"
+      />
+
+      <EnvCard
+        name="PM2.5"
+        current={pm25?.current ?? null}
+        displayVal={pm25?.current != null ? `${Math.round(pm25.current)}` : undefined}
+        unitLabel="µg/m³ · 15-min avg"
+        sparkline={[]}
+        band={pm25?.sparkline ?? []}
+        cfg={{ color: GOLD, gradId: "PM25", chartMin: 0, chartMax: 1, tooltipUnit: "µg/m³" }}
+        note="Fine dust — mean with 15-min min/max range"
+      />
+
+      <EnvCard
+        name="PM10"
+        current={pm10?.current ?? null}
+        displayVal={pm10?.current != null ? `${Math.round(pm10.current)}` : undefined}
+        unitLabel="µg/m³ · 15-min avg"
+        sparkline={[]}
+        band={pm10?.sparkline ?? []}
+        cfg={{ color: "#7A5C00", gradId: "PM10", chartMin: 0, chartMax: 1, tooltipUnit: "µg/m³" }}
+        note="Coarse dust — mean with 15-min min/max range"
       />
     </div>
   );
