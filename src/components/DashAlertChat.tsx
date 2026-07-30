@@ -1,10 +1,8 @@
 import type { AlertItem } from "./DashAlertRow";
 
-// A chat-style alerts panel (WhatsApp-like): each worded alert is a message bubble,
-// colour-coded and time-stamped. Inline-styled so it renders regardless of global CSS.
-const PRIMARY = "#002E35";
-const BORDER: Record<string, string> = { danger: "#B91C1C", warning: "#D97706", normal: "#16A34A", neutral: "#9AA6A8" };
-const METRIC_COLOR: Record<string, string> = { danger: "#B91C1C", warning: "#92400E", normal: "#166534", neutral: "#3F4849" };
+// Slim, color-coded alert list (was a tall WhatsApp panel). Compact rows, scrolls if many.
+const RED = "#B91C1C", AMBER = "#D97706", GREEN = "#16A34A", NEUTRAL = "#9AA6A8";
+const dotColor = (s: string) => (s === "danger" ? RED : s === "warning" ? AMBER : s === "normal" ? GREEN : NEUTRAL);
 
 export default function DashAlertChat({ alerts, updatedAt }: { alerts: AlertItem[]; updatedAt?: string | null }) {
   const time = (iso?: string | null) => {
@@ -15,21 +13,26 @@ export default function DashAlertChat({ alerts, updatedAt }: { alerts: AlertItem
   const stamp = time(updatedAt);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", background: "var(--card)", border: "1px solid rgba(0,0,0,0.09)", boxShadow: "0 1px 4px rgba(0,0,0,0.08)", overflow: "hidden", minHeight: 320 }}>
-      <div style={{ background: PRIMARY, color: "#fff", padding: "10px 14px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ADE80", boxShadow: "0 0 6px #4ADE80" }} />
-        <span style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 14 }}>Farm alerts</span>
-        {stamp && <span style={{ fontSize: 10, opacity: 0.75, marginLeft: "auto" }}>updated {stamp}</span>}
+    <div style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.07)", borderRadius: 12, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 15px", borderBottom: "1px solid var(--divider)" }}>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: GREEN, boxShadow: `0 0 6px ${GREEN}` }} />
+        <span style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 14, color: "var(--primary)" }}>Farm alerts</span>
+        {stamp && <span style={{ fontSize: 10, color: "var(--t3)", marginLeft: "auto" }}>updated {stamp}</span>}
       </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: 12, display: "flex", flexDirection: "column", gap: 8, background: "#ECE5DD" }}>
+      <div style={{ display: "flex", flexDirection: "column", overflowY: "auto", maxHeight: 300 }}>
         {alerts.length === 0 ? (
-          <div style={{ color: "var(--t3)", fontSize: 12, textAlign: "center", margin: "auto" }}>No alerts — all readings normal.</div>
+          <div style={{ color: "var(--t3)", fontSize: 12, textAlign: "center", padding: "24px 12px" }}>No alerts — all readings normal.</div>
         ) : (
-          alerts.map((a) => (
-            <div key={a.metric} style={{ maxWidth: "92%", alignSelf: "flex-start", background: "#fff", borderRadius: "2px 10px 10px 10px", padding: "8px 11px", boxShadow: "0 1px 1px rgba(0,0,0,0.12)", borderLeft: `3px solid ${BORDER[a.status] ?? BORDER.neutral}` }}>
-              <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2, color: METRIC_COLOR[a.status] ?? METRIC_COLOR.neutral }}>{a.metric}</div>
-              <div style={{ fontSize: 12.5, color: "var(--t1)", lineHeight: 1.4 }}>{a.message}</div>
-              <div style={{ fontSize: 9, color: "var(--t4)", textAlign: "right", marginTop: 3 }}>{time(a.updatedAt) || stamp}</div>
+          alerts.map((a, i) => (
+            <div key={a.metric} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 14px", borderTop: i ? "1px solid var(--divider)" : "none" }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor(a.status), flexShrink: 0, marginTop: 4 }} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--t2)" }}>{a.metric}</span>
+                  <span style={{ fontSize: 9, color: "var(--t4)", flexShrink: 0 }}>{time(a.updatedAt) || stamp}</span>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--t1)", lineHeight: 1.4, marginTop: 1 }}>{a.message}</div>
+              </div>
             </div>
           ))
         )}
