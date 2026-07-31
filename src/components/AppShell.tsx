@@ -74,6 +74,15 @@ const NAV = [
       </svg>
     ),
   },
+  {
+    href: "/egg-counting",
+    label: "Egg Counting",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3c-3.3 0-6 4.5-6 8.5A6 6 0 0 0 12 18a6 6 0 0 0 6-6.5C18 7.5 15.3 3 12 3Z" />
+      </svg>
+    ),
+  },
 ];
 
 const ADMIN_ITEM = {
