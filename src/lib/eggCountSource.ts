@@ -12,21 +12,23 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { queryInflux } from "./influxdb";
 
 const REGION = process.env.AWS_REGION ?? "af-south-1";
-const CLIP_BUCKET = "senseagri-dev-media-inference";
+export const CLIP_BUCKET = "senseagri-dev-media-inference";
 const CLIP_ROOT = "clips/"; // clips/farm_id=<farm>/camera_id=<cam>/date=<YYYY-MM-DD>/job_id=no_job/<ts>_<uuid>.mp4
 
 export const ID_RE = /^[A-Za-z0-9_-]+$/;
 export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 86_400_000;
 
-// Fallback camera→house map (per handover). Live counts carry house_id directly; this
-// only fills in labels for cameras discovered via S3 that have no recent counts.
+// Fallback camera→frame map (per handover). The two cameras cover the two A-frames (A / B) — these
+// are collectors, NOT separate houses. Live counts carry the id in the house_id tag; this only fills
+// in labels for cameras discovered via S3 that have no recent counts.
 export const CAMERA_HOUSE: Record<string, string> = { cam_001: "house_a", cam_002: "house_b" };
 
-export function houseLabel(houseId: string | null | undefined): string {
-  if (!houseId) return "Unknown house";
-  const m = houseId.match(/^house[_-]?(.+)$/i);
-  return `House ${(m ? m[1] : houseId).toUpperCase()}`;
+/** Display label for an A-frame from its tag id, e.g. "house_a" → "A-frame A". */
+export function frameLabel(frameId: string | null | undefined): string {
+  if (!frameId) return "A-frame";
+  const m = frameId.match(/^house[_-]?(.+)$/i);
+  return `A-frame ${(m ? m[1] : frameId).toUpperCase()}`;
 }
 
 export type EggRange = "24h" | "7d" | "30d";
@@ -152,4 +154,17 @@ export async function resolveLatestEggClips(farmId: string, cameraId: string, lo
     }
   }
   return { cameraId, date: null, isFallback: false, clips: [] };
+}
+
+/** True if `key` is a clip that belongs to this farm (used to gate the transcode proxy). */
+export function isFarmClipKey(farmId: string, key: string): boolean {
+  return ID_RE.test(farmId) && key.startsWith(CLIP_ROOT) && key.includes(`farm_id=${farmId}/`) && key.endsWith(".mp4");
+}
+
+/** Raw bytes of a clip object (caller must have validated the key belongs to the farm). */
+export async function fetchClipBytes(key: string): Promise<Buffer> {
+  const res = await s3().send(new GetObjectCommand({ Bucket: CLIP_BUCKET, Key: key }));
+  const bytes = await res.Body?.transformToByteArray();
+  if (!bytes) throw new Error("Empty clip body");
+  return Buffer.from(bytes);
 }

@@ -140,8 +140,11 @@ export default function EggCountingPage() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <h1 style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: narrow ? 20 : 26, color: PRIMARY, margin: 0, lineHeight: 1.1 }}>Egg Counting</h1>
-          <div style={{ fontSize: 13, color: "var(--t3)", marginTop: 3 }}>Live camera counts on the Bierman collectors, one per A-frame house.</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <h1 style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: narrow ? 20 : 26, color: PRIMARY, margin: 0, lineHeight: 1.1 }}>Egg Counting</h1>
+            <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "#9A3412", background: "#FFF7ED", border: "1px solid #FED7AA", borderRadius: 999, padding: "2px 9px" }}>Pre-release</span>
+          </div>
+          <div style={{ fontSize: 13, color: "var(--t3)", marginTop: 3 }}>Live camera counts on the Bierman collectors — one per A-frame (A &amp; B).</div>
         </div>
         <div style={{ display: "flex", gap: 4, background: "#fff", border: "1px solid var(--divider)", borderRadius: 8, padding: 3 }}>
           {RANGES.map((r) => (
@@ -174,7 +177,7 @@ export default function EggCountingPage() {
             {data!.totals.perCamera.map((c, i) => (
               <TotalCard key={c.cameraId} label={c.label} sub={c.cameraId} value={c.eggsToday} accent={PALETTE[i % PALETTE.length]} />
             ))}
-            <TotalCard label="Farm total" sub="both cameras · today" value={data!.totals.combined} accent={PRIMARY} highlight />
+            <TotalCard label="Total today" sub="both A-frames" value={data!.totals.combined} accent={PRIMARY} highlight />
           </div>
 
           {/* Counts over time */}
@@ -246,6 +249,8 @@ function PlayerCard({ camera, accent, state, onSelectClip, onChangeDate }: {
   const clips = state?.clips ?? [];
   const selected = clips[state?.selectedIdx ?? 0];
   const date = state?.date ?? "";
+  // Play through the transcode proxy (mp4v → H.264) so it plays inline in the browser.
+  const streamSrc = selected ? `/api/egg-count/clip-stream?key=${encodeURIComponent(selected.key)}` : "";
 
   return (
     <div style={{ background: "#fff", border: "1px solid var(--divider)", borderRadius: 10, overflow: "hidden", display: "flex", flexDirection: "column", minWidth: 0 }}>
@@ -260,7 +265,7 @@ function PlayerCard({ camera, accent, state, onSelectClip, onChangeDate }: {
         {state?.loading ? (
           <span style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>Loading clips…</span>
         ) : selected ? (
-          <video key={selected.key} src={selected.url} controls playsInline preload="metadata"
+          <video key={selected.key} src={streamSrc} controls playsInline preload="metadata"
             style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }} />
         ) : (
           <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 13, padding: "0 16px", textAlign: "center" }}>No clips available for this camera yet.</span>
@@ -282,6 +287,12 @@ function PlayerCard({ camera, accent, state, onSelectClip, onChangeDate }: {
         </select>
         <input type="date" value={date} max={todayUtc()} onChange={(e) => e.target.value && onChangeDate(e.target.value)}
           style={{ minHeight: 40, padding: "8px 10px", border: "1px solid var(--divider)", borderRadius: 8, fontSize: 13, fontFamily: "var(--font-s)", background: "#fff", color: "var(--t1)" }} />
+        {selected && (
+          <a href={streamSrc} target="_blank" rel="noreferrer" title="Open the clip in a new tab"
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, minHeight: 40, padding: "8px 12px", border: `1px solid ${accent}`, borderRadius: 8, fontSize: 13, fontWeight: 700, color: accent, textDecoration: "none", background: "#fff" }}>
+            Open ↗
+          </a>
+        )}
       </div>
     </div>
   );
