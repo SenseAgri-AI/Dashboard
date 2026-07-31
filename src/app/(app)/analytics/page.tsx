@@ -97,6 +97,7 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
   { key: "pressure", label: "Pressure", unit: "hPa", env: true },
   { key: "light_level", label: "Light", unit: "lux", env: true },
   { key: "battery", label: "Battery", unit: "%", env: true },
+  { key: "noise", label: "Sound level", unit: "dB", env: false },
   { key: "eggs_total", label: "Eggs / day", unit: "", env: false },
   { key: "egg_sizes", label: "Egg sizes (all)", unit: "", env: false },
   { key: "eggs_damaged", label: "Breakages", unit: "", env: false },
@@ -107,6 +108,8 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
 ];
 const META: Record<string, { key: string; label: string; unit: string }> = Object.fromEntries(CATALOG.map((c) => [c.key, c]));
 const ENV_OPTIONS = CATALOG.filter((c) => c.env);
+// High-res chart draws from InfluxDB: env sensors + the acoustic sound level (audio_noise).
+const HR_OPTIONS = CATALOG.filter((c) => c.env || c.key === "noise");
 // Only sensor metrics vary within a day → only they get a min–max band. Sheet-derived daily
 // values (eggs, sizes, breakages, weight, mortality) are broadcast across the 24 hours, so their
 // min = max = the day's value (a flat, meaningless band).
@@ -296,8 +299,8 @@ function HighResExplorer() {
       <div className="sa-panel-hd sa-panel-hd--welfare">High-res (recent)</div>
       <div style={TOOLBAR}>
         <div style={GROUP}>
-          <MetricSelect label="Left" value={left} onChange={setLeft} accent={TEAL} options={ENV_OPTIONS} />
-          <MetricSelect label="Right" value={right} onChange={setRight} accent={GOLD} allowNone options={ENV_OPTIONS} />
+          <MetricSelect label="Left" value={left} onChange={setLeft} accent={TEAL} options={HR_OPTIONS} />
+          <MetricSelect label="Right" value={right} onChange={setRight} accent={GOLD} allowNone options={HR_OPTIONS} />
         </div>
         <div style={GROUP_END}>
           <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
