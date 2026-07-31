@@ -66,6 +66,15 @@ const NAV = [
     ),
   },
   {
+    href: "/assistant",
+    label: "Flock Vet",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4.5 3v5a4.5 4.5 0 0 0 9 0V3" /><path d="M9 12.5v2a6 6 0 0 0 6 6 5 5 0 0 0 5-5v-2" /><circle cx="20" cy="11.5" r="2" />
+      </svg>
+    ),
+  },
+  {
     href: "/egg-counting",
     label: "Egg Counting",
     icon: (
