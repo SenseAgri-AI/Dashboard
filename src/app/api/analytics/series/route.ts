@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
 import { fetchSilverDaily, isSilverMetric, type DailyRow } from "@/lib/silverSource";
+import { queryInflux } from "@/lib/influxdb";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,8 +10,15 @@ export const runtime = "nodejs";
 const HDEP = "hdep";
 const CUM_MORT = "cum_mortality"; // cumulative deaths since day 1 / starting flock × 100
 const BREAKAGE = "breakage_rate"; // damaged eggs / total eggs × 100 (per day)
+const NOISE = "noise"; // acoustic sound level (dBFS), from InfluxDB audio_noise — not a silver column
 const COMPUTED = [HDEP, CUM_MORT, BREAKAGE];
 const round = (v: number | null, dp = 2) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 10 ** dp) / 10 ** dp);
+
+// audio_noise `bucket` comes back as BigInt ns (only a column literally named `time` is auto-dated).
+const bucketToDay = (v: unknown): string => {
+  const ms = typeof v === "bigint" ? Number(v) / 1e6 : typeof v === "number" ? v : Date.parse(String(v));
+  return Number.isFinite(ms) ? new Date(ms).toISOString().slice(0, 10) : "";
+};
 
 // Deep-history analytics from the silver layer (Athena), daily-aggregated. Farm-scoped:
 // the caller's Clerk org resolves to a farm_id server-side. Returns a merged daily frame
@@ -33,10 +41,10 @@ export async function GET(req: NextRequest) {
 
   if (!metrics.length) return NextResponse.json({ error: "metrics required" }, { status: 400 });
   if (!from || !to) return NextResponse.json({ error: "from and to are required" }, { status: 400 });
-  const bad = metrics.find((m) => !COMPUTED.includes(m) && !isSilverMetric(m));
+  const bad = metrics.find((m) => !COMPUTED.includes(m) && m !== NOISE && !isSilverMetric(m));
   if (bad) return NextResponse.json({ error: `Unknown metric: ${bad}` }, { status: 400 });
 
-  const rawCols = metrics.filter((m) => !COMPUTED.includes(m));
+  const rawCols = metrics.filter((m) => !COMPUTED.includes(m) && m !== NOISE);
   const wantHdep = metrics.includes(HDEP);
   const wantCumMort = metrics.includes(CUM_MORT);
   const wantBreakage = metrics.includes(BREAKAGE);
@@ -83,6 +91,29 @@ export async function GET(req: NextRequest) {
           point[BREAKAGE] = eggs != null && eggs > 0 && dmg != null ? round((dmg / eggs) * 100, 2) : null;
         }
         byDay.set(day, point);
+      }
+    }
+
+    // Sound level lives in InfluxDB (audio_noise), not silver — fetch it daily-averaged over the
+    // same window and merge by day. Influx filters relative to now(), so derive an hours span.
+    if (metrics.includes(NOISE)) {
+      try {
+        const hours = Math.max(1, Math.ceil((Date.now() - Date.parse(from)) / 3_600_000));
+        const rows = await queryInflux<Record<string, unknown>>(`
+          SELECT date_bin(INTERVAL '1 day', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket, avg(noise_db_mean) AS noise
+          FROM audio_noise
+          WHERE farm_id = '${farm.farmId}' AND time > now() - interval '${hours} hours'
+          GROUP BY bucket ORDER BY bucket ASC`);
+        const fromDay = from.slice(0, 10), toDay = to.slice(0, 10);
+        for (const r of rows) {
+          const day = bucketToDay(r.bucket);
+          if (!day || day < fromDay || day > toDay) continue;
+          const point = byDay.get(day) ?? { time: `${day}T00:00:00.000Z` };
+          point[NOISE] = round(Number(r.noise), 1);
+          byDay.set(day, point);
+        }
+      } catch (e) {
+        console.error("Silver noise merge failed:", e); // other metrics still render
       }
     }
 
