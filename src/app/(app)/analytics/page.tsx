@@ -189,14 +189,16 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
   }, [annos, domain]);
 
   return (
-    <div style={{ position: "relative", height: 372 }}>
+    // touchAction: pan-y → a vertical swipe still scrolls the page, a horizontal drag zooms.
+    <div style={{ position: "relative", height: 372, touchAction: "pan-y" }}>
       {zoom && (
         <button onClick={() => setZoom(null)}
           style={{ position: "absolute", top: 0, right: 8, zIndex: 2, fontSize: 10, fontWeight: 700, padding: "3px 8px", border: "1px solid var(--divider)", background: "#fff", cursor: "pointer" }}>Reset zoom</button>
       )}
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 16, right: right ? 4 : 12, bottom: 4, left: -12 }}
-          onMouseDown={down} onMouseMove={move} onMouseUp={up}>
+          onMouseDown={down} onMouseMove={move} onMouseUp={up}
+          onTouchStart={down} onTouchMove={move} onTouchEnd={up}>
           <CartesianGrid strokeDasharray="2 4" stroke={GRID} vertical={false} />
           <XAxis dataKey="t" type="number" scale="time" domain={domain} allowDataOverflow
             tickFormatter={tickFormat} tick={{ fontSize: 10, fill: AXIS, fontFamily: "Inter" }} axisLine={{ stroke: "#d1dada" }} tickLine={false} minTickGap={44} />
@@ -621,14 +623,15 @@ function AcousticChart({ data, domainMs, selectedT, onPick, tickFormat, labelFor
   };
 
   return (
-    <div style={{ position: "relative", height: 340 }}>
+    <div style={{ position: "relative", height: 340, touchAction: "pan-y" }}>
       {zoom && (
         <button onClick={() => setZoom(null)}
           style={{ position: "absolute", top: 0, right: 8, zIndex: 2, fontSize: 10, fontWeight: 700, padding: "3px 8px", border: "1px solid var(--divider)", background: "#fff", cursor: "pointer" }}>Reset zoom</button>
       )}
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 16, right: 12, bottom: 4, left: -6 }}
-          onMouseDown={down} onMouseMove={move} onMouseUp={up}>
+          onMouseDown={down} onMouseMove={move} onMouseUp={up}
+          onTouchStart={down} onTouchMove={move} onTouchEnd={up}>
           <CartesianGrid strokeDasharray="2 4" stroke={GRID} vertical={false} />
           <XAxis dataKey="t" type="number" scale="time" domain={domain} allowDataOverflow
             tickFormatter={tickFormat} tick={{ fontSize: 10, fill: AXIS, fontFamily: "Inter" }} axisLine={{ stroke: "#d1dada" }} tickLine={false} minTickGap={44} />
