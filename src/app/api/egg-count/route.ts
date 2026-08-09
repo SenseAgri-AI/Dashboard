@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
 import {
   fetchEggSeries, fetchEggTotalsToday, discoverEggCameras, resolveLatestEggClips,
-  CAMERA_HOUSE, frameLabel, isEggRange, type EggRange, type ResolvedClips,
+  CAMERA_HOUSE, frameLabelForCamera, isEggRange, type EggRange, type ResolvedClips,
 } from "@/lib/eggCountSource";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
   const cameraIds = [...new Set([...houseByCamera.keys(), ...s3Cameras])].sort();
   const cameras: CameraInfo[] = cameraIds.map((cameraId) => {
     const houseId = houseByCamera.get(cameraId) ?? CAMERA_HOUSE[cameraId] ?? null;
-    return { cameraId, houseId, label: houseId ? frameLabel(houseId) : cameraId };
+    return { cameraId, houseId, label: frameLabelForCamera(cameraId) };
   });
 
   // Pivot the long series into one row per bucket with a column per camera (for a multi-series chart).

@@ -31,6 +31,13 @@ export function frameLabel(frameId: string | null | undefined): string {
   return `A-frame ${(m ? m[1] : frameId).toUpperCase()}`;
 }
 
+// The two cameras are two A-frames within ONE house, so the house_id tag is the SAME for both and
+// can't distinguish them (it would label both "A-frame 1"). Label by CAMERA — which is unique.
+export const CAMERA_FRAME: Record<string, string> = { cam_001: "A-frame A", cam_002: "A-frame B" };
+export function frameLabelForCamera(cameraId: string): string {
+  return CAMERA_FRAME[cameraId] ?? cameraId;
+}
+
 export type EggRange = "24h" | "7d" | "30d";
 const RANGES: Record<EggRange, { hours: number; bin: string }> = {
   "24h": { hours: 24, bin: "15 minutes" },
