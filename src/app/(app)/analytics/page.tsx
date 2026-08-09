@@ -460,8 +460,16 @@ function SilverExplorer() {
 // ── Flock noise (acoustic welfare): noise level over time + clickable anomaly clips ──
 type NoiseRow = { time: string; mean: number | null; max: number | null; baseline: number | null };
 type AnomalyRow = { time: string; peakDb: number | null; baselineDb: number | null; clipKey: string | null; clipSeconds: number | null };
-type NoiseDatum = { t: number; mean: number | null; baseline: number | null; band?: [number, number] };
-type AnomPt = { t: number; y: number; a: AnomalyRow };
+type NoiseDatum = {
+  t: number;
+  mean: number | null;
+  max: number | null;         // bucket loudest (peak) — for the tooltip
+  baseline: number | null;
+  band?: [number, number];
+  anomY?: number;             // anomaly marker (peak dB) — set only on anomaly rows
+  anomBaseline?: number;      // that anomaly's own baseline (tooltip only)
+  anom?: AnomalyRow;          // the anomaly, for click-to-play
+};
 type ClipState = { key: string | null; state: "idle" | "loading" | "playing" | "error" };
 const ACOUSTIC_RANGES = [{ key: "24h", label: "24h" }, { key: "7d", label: "7d" }, { key: "30d", label: "30d" }];
 const dbFmt = (v: number | null | undefined) => (v == null ? "—" : `${Math.round(v * 10) / 10} dB`);
@@ -504,14 +512,26 @@ function AcousticExplorer() {
     } catch { setClip({ key: a.clipKey, state: "error" }); }
   }, []);
 
-  const data = useMemo<NoiseDatum[]>(() => series.map((r) => ({
-    t: new Date(r.time).getTime(), mean: r.mean, baseline: r.baseline,
-    band: r.mean != null && r.max != null ? [r.mean, r.max] : undefined,
-  })), [series]);
-  const anomPts = useMemo<AnomPt[]>(() => anomalies
-    .filter((a) => a.peakDb != null || a.baselineDb != null)
-    .map((a) => ({ t: new Date(a.time).getTime(), y: (a.peakDb ?? a.baselineDb) as number, a })), [anomalies]);
-  const hasNoise = data.some((d) => d.mean != null);
+  // Merge noise buckets + anomalies into ONE series so the shared hover tooltip tracks every
+  // point. (A <Scatter> with its own `data` array breaks Recharts' active-point tracking — the
+  // tooltip freezes and stops updating as you move across the plot.)
+  const chartData = useMemo<NoiseDatum[]>(() => {
+    const buckets: NoiseDatum[] = series.map((r) => ({
+      t: new Date(r.time).getTime(), mean: r.mean, max: r.max, baseline: r.baseline,
+      band: r.mean != null && r.max != null ? [r.mean, r.max] : undefined,
+    }));
+    const anoms: NoiseDatum[] = anomalies
+      .filter((a) => a.peakDb != null || a.baselineDb != null)
+      .map((a) => ({
+        t: new Date(a.time).getTime(), mean: null, max: null, baseline: null,
+        anomY: (a.peakDb ?? a.baselineDb) as number,
+        anomBaseline: a.baselineDb ?? undefined,
+        anom: a,
+      }));
+    return [...buckets, ...anoms].sort((x, y) => x.t - y.t);
+  }, [series, anomalies]);
+  const hasNoise = chartData.some((d) => d.mean != null);
+  const hasAnom = chartData.some((d) => d.anomY != null);
   const selectedT = selected ? new Date(selected.time).getTime() : null;
 
   return (
@@ -529,8 +549,8 @@ function AcousticExplorer() {
       <div style={CHART_PAD}>
         {loading ? <div style={{ height: 340 }}><Placeholder text="Loading…" /></div>
           : err ? <div style={{ height: 340 }}><Placeholder text={err} /></div>
-          : !hasNoise && anomPts.length === 0 ? <div style={{ height: 340 }}><Placeholder text="No acoustic data yet — the mic feed will show here once it's flowing." /></div>
-          : <AcousticChart data={data} anomPts={anomPts} domainMs={[win.fromMs, win.toMs]} selectedT={selectedT} onPick={playClip}
+          : !hasNoise && !hasAnom ? <div style={{ height: 340 }}><Placeholder text="No acoustic data yet — the mic feed will show here once it's flowing." /></div>
+          : <AcousticChart data={chartData} domainMs={[win.fromMs, win.toMs]} selectedT={selectedT} onPick={playClip}
               tickFormat={(ms) => new Date(ms).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: rangeKey === "24h" ? "2-digit" : undefined, minute: rangeKey === "24h" ? "2-digit" : undefined })}
               labelFormat={(ms) => new Date(ms).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} />}
       </div>
@@ -544,9 +564,9 @@ function AcousticExplorer() {
   );
 }
 
-function AnomalyDot(props: { cx?: number; cy?: number; payload?: AnomPt; selectedT: number | null }) {
+function AnomalyDot(props: { cx?: number; cy?: number; payload?: NoiseDatum; selectedT: number | null }) {
   const { cx, cy, payload, selectedT } = props;
-  if (cx == null || cy == null) return <g />;
+  if (cx == null || cy == null || payload?.anomY == null) return <g />;
   const on = selectedT != null && payload?.t === selectedT;
   return (
     <g style={{ cursor: "pointer" }}>
@@ -556,33 +576,73 @@ function AnomalyDot(props: { cx?: number; cy?: number; payload?: AnomPt; selecte
   );
 }
 
-function AcousticChart({ data, anomPts, domainMs, selectedT, onPick, tickFormat, labelFormat }: {
-  data: NoiseDatum[]; anomPts: AnomPt[]; domainMs: [number, number]; selectedT: number | null;
+// Tooltip: exactly date-time, noise level, peak, baseline — read straight off the hovered row so
+// it updates for every point (buckets and anomaly dots alike).
+function AcousticTip({ active, payload, labelFormat }: {
+  active?: boolean; payload?: { payload?: NoiseDatum }[]; labelFormat: (ms: number) => string;
+}) {
+  const row = active && payload && payload.length ? payload[0].payload : null;
+  if (!row) return null;
+  const noise = row.mean ?? null;
+  const peak = row.max ?? row.anomY ?? null;
+  const baseline = row.baseline ?? row.anomBaseline ?? null;
+  if (noise == null && peak == null && baseline == null) return null;
+  const line = (label: string, v: number | null) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
+      <span style={{ opacity: 0.8 }}>{label}</span><strong>{dbFmt(v)}</strong>
+    </div>
+  );
+  return (
+    <div style={{ background: PRIMARY, border: `1px solid ${TEAL}`, padding: "7px 10px", fontSize: 12, color: "#fff", fontFamily: "Inter", minWidth: 158 }}>
+      <div style={{ color: TEAL, marginBottom: 4 }}>{labelFormat(row.t)}</div>
+      {line("Noise level", noise)}
+      {line("Peak", peak)}
+      {line("Baseline", baseline)}
+    </div>
+  );
+}
+
+function AcousticChart({ data, domainMs, selectedT, onPick, tickFormat, labelFormat }: {
+  data: NoiseDatum[]; domainMs: [number, number]; selectedT: number | null;
   onPick: (a: AnomalyRow) => void; tickFormat: (ms: number) => string; labelFormat: (ms: number) => string;
 }) {
+  // Drag-to-zoom + reset, matching the other explorer charts.
+  const [zoom, setZoom] = useState<[number, number] | null>(null);
+  const [selA, setSelA] = useState<number | null>(null);
+  const [selB, setSelB] = useState<number | null>(null);
+  useEffect(() => { setZoom(null); }, [domainMs[0], domainMs[1]]); // reset when the window changes
+
+  const domain = zoom ?? domainMs;
+  const down = (e: ChartMouse) => { if (e?.activeLabel != null) { setSelA(Number(e.activeLabel)); setSelB(Number(e.activeLabel)); } };
+  const move = (e: ChartMouse) => { if (selA != null && e?.activeLabel != null) setSelB(Number(e.activeLabel)); };
+  const up = () => {
+    if (selA != null && selB != null && selA !== selB) setZoom([Math.min(selA, selB), Math.max(selA, selB)]);
+    setSelA(null); setSelB(null);
+  };
+
   return (
-    <div style={{ height: 340 }}>
+    <div style={{ position: "relative", height: 340 }}>
+      {zoom && (
+        <button onClick={() => setZoom(null)}
+          style={{ position: "absolute", top: 0, right: 8, zIndex: 2, fontSize: 10, fontWeight: 700, padding: "3px 8px", border: "1px solid var(--divider)", background: "#fff", cursor: "pointer" }}>Reset zoom</button>
+      )}
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 16, right: 12, bottom: 4, left: -6 }}>
+        <ComposedChart data={data} margin={{ top: 16, right: 12, bottom: 4, left: -6 }}
+          onMouseDown={down} onMouseMove={move} onMouseUp={up}>
           <CartesianGrid strokeDasharray="2 4" stroke={GRID} vertical={false} />
-          <XAxis dataKey="t" type="number" scale="time" domain={domainMs} allowDataOverflow
+          <XAxis dataKey="t" type="number" scale="time" domain={domain} allowDataOverflow
             tickFormatter={tickFormat} tick={{ fontSize: 10, fill: AXIS, fontFamily: "Inter" }} axisLine={{ stroke: "#d1dada" }} tickLine={false} minTickGap={44} />
           {/* dBFS is negative (0 = loudest); let recharts auto-scale — no 0-based assumption */}
           <YAxis tick={{ fontSize: 11, fill: TEAL, fontFamily: "Inter" }} axisLine={false} tickLine={false} unit=" dB" width={56} domain={["auto", "auto"]} />
-          <Tooltip labelFormatter={(ms) => labelFormat(Number(ms))}
-            formatter={(value, name) => {
-              if (name === "Anomaly") return null;
-              if (Array.isArray(value)) return [`${Math.round(value[0])} – ${Math.round(value[1])} dB`, "Range"];
-              return [dbFmt(Number(value)), name];
-            }}
-            contentStyle={{ background: PRIMARY, border: `1px solid ${TEAL}`, borderRadius: 0, fontSize: 12, color: "#fff" }} labelStyle={{ color: TEAL }} />
+          <Tooltip content={<AcousticTip labelFormat={labelFormat} />} cursor={{ stroke: TEAL, strokeWidth: 1, strokeOpacity: 0.4 }} />
           <Legend wrapperStyle={{ fontSize: 12, fontWeight: 600 }} />
-          <Area type="monotone" dataKey="band" name="Loudest (per bucket)" stroke="none" fill={TEAL} fillOpacity={0.16} legendType="none" isAnimationActive={false} connectNulls={false} />
+          <Area type="monotone" dataKey="band" name="Loudest (per bucket)" stroke="none" fill={TEAL} fillOpacity={0.16} legendType="none" isAnimationActive={false} connectNulls />
           <Line type="monotone" dataKey="baseline" name="Baseline" stroke={AXIS} strokeWidth={1} strokeDasharray="5 4" dot={false} connectNulls isAnimationActive={false} />
           <Line type="monotone" dataKey="mean" name="Noise level" stroke={TEAL} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-          <Scatter name="Anomaly" data={anomPts} dataKey="y" isAnimationActive={false}
-            shape={(p) => <AnomalyDot {...(p as { cx?: number; cy?: number; payload?: AnomPt })} selectedT={selectedT} />}
-            onClick={(d) => { const a = (d as unknown as { payload?: AnomPt }).payload?.a; if (a) onPick(a); }} />
+          <Scatter name="Anomaly" dataKey="anomY" isAnimationActive={false}
+            shape={(p) => <AnomalyDot {...(p as { cx?: number; cy?: number; payload?: NoiseDatum })} selectedT={selectedT} />}
+            onClick={(d) => { const a = (d as unknown as { payload?: NoiseDatum }).payload?.anom; if (a) onPick(a); }} />
+          {selA != null && selB != null && selA !== selB && <ReferenceArea x1={Math.min(selA, selB)} x2={Math.max(selA, selB)} strokeOpacity={0} fill={PRIMARY} fillOpacity={0.08} />}
         </ComposedChart>
       </ResponsiveContainer>
     </div>
