@@ -61,8 +61,8 @@ function ChartTooltip({ active, payload, label, range }: {
   return (
     <div style={{ background: "#002E35", color: "#fff", fontSize: 11, padding: "6px 10px", fontFamily: "Inter,sans-serif", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" }}>
       <div style={{ opacity: 0.6, marginBottom: 3 }}>{when}</div>
-      {payload.map((p) => (
-        <div key={p.name} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      {payload.map((p, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color, display: "inline-block" }} />
           <span>{p.name}</span>
           <strong style={{ marginLeft: "auto" }}>{nInt(Math.round(p.value))}</strong>
