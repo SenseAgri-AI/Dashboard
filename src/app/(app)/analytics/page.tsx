@@ -165,16 +165,23 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
   tickFormat: (ms: number) => string; labelFormat: (ms: number) => string;
 }) {
   const [zoom, setZoom] = useState<[number, number] | null>(null);
-  const [selA, setSelA] = useState<number | null>(null);
-  const [selB, setSelB] = useState<number | null>(null);
+  const [sel, setSel] = useState<[number, number] | null>(null);
+  const startRef = useRef<number | null>(null);
   useEffect(() => { setZoom(null); }, [domainMs[0], domainMs[1]]); // reset zoom when the window changes
 
   const domain = zoom ?? domainMs;
-  const down = (e: ChartMouse) => { if (e?.activeLabel != null) { setSelA(Number(e.activeLabel)); setSelB(Number(e.activeLabel)); } };
-  const move = (e: ChartMouse) => { if (selA != null && e?.activeLabel != null) setSelB(Number(e.activeLabel)); };
+  // Track the drag start in a REF, not state — setting state on mousedown would re-render the
+  // dots mid-press so their onClick (play clip) never fires. Selection engages only on drag.
+  const down = (e: ChartMouse) => { startRef.current = e?.activeLabel != null ? Number(e.activeLabel) : null; };
+  const move = (e: ChartMouse) => {
+    if (startRef.current != null && e?.activeLabel != null) {
+      const b = Number(e.activeLabel);
+      if (b !== startRef.current) setSel([startRef.current, b]);
+    }
+  };
   const up = () => {
-    if (selA != null && selB != null && selA !== selB) setZoom([Math.min(selA, selB), Math.max(selA, selB)]);
-    setSelA(null); setSelB(null);
+    if (sel && sel[0] !== sel[1]) setZoom([Math.min(sel[0], sel[1]), Math.max(sel[0], sel[1])]);
+    startRef.current = null; setSel(null);
   };
 
   // Stack marker labels vertically when markers cluster near the same x, so they don't overprint.
@@ -220,7 +227,7 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
           {right && right.series.map((s) => <Line key={s.key} yAxisId="right" type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2} dot={false} connectNulls />)}
           {standardAxis && <Line yAxisId={standardAxis} type="monotone" dataKey="standard" name="Breed standard" stroke={STD} strokeWidth={1.5} strokeDasharray="5 4" dot={false} connectNulls />}
           {stacked.map((a, i) => <ReferenceLine key={`a${i}`} yAxisId="left" x={a.t} stroke={a.color} strokeDasharray={a.dash ? "3 3" : undefined} strokeWidth={1} label={<MarkLabel text={a.label} color={a.color} row={a.row} />} />)}
-          {selA != null && selB != null && selA !== selB && <ReferenceArea yAxisId="left" x1={Math.min(selA, selB)} x2={Math.max(selA, selB)} strokeOpacity={0} fill={PRIMARY} fillOpacity={0.08} />}
+          {sel && sel[0] !== sel[1] && <ReferenceArea yAxisId="left" x1={Math.min(sel[0], sel[1])} x2={Math.max(sel[0], sel[1])} strokeOpacity={0} fill={PRIMARY} fillOpacity={0.08} />}
         </ComposedChart>
       </ResponsiveContainer>
     </div>
@@ -610,16 +617,23 @@ function AcousticChart({ data, domainMs, selectedT, onPick, tickFormat, labelFor
 }) {
   // Drag-to-zoom + reset, matching the other explorer charts.
   const [zoom, setZoom] = useState<[number, number] | null>(null);
-  const [selA, setSelA] = useState<number | null>(null);
-  const [selB, setSelB] = useState<number | null>(null);
+  const [sel, setSel] = useState<[number, number] | null>(null);
+  const startRef = useRef<number | null>(null);
   useEffect(() => { setZoom(null); }, [domainMs[0], domainMs[1]]); // reset when the window changes
 
   const domain = zoom ?? domainMs;
-  const down = (e: ChartMouse) => { if (e?.activeLabel != null) { setSelA(Number(e.activeLabel)); setSelB(Number(e.activeLabel)); } };
-  const move = (e: ChartMouse) => { if (selA != null && e?.activeLabel != null) setSelB(Number(e.activeLabel)); };
+  // Track the drag start in a REF, not state — setting state on mousedown would re-render the
+  // dots mid-press so their onClick (play clip) never fires. Selection engages only on drag.
+  const down = (e: ChartMouse) => { startRef.current = e?.activeLabel != null ? Number(e.activeLabel) : null; };
+  const move = (e: ChartMouse) => {
+    if (startRef.current != null && e?.activeLabel != null) {
+      const b = Number(e.activeLabel);
+      if (b !== startRef.current) setSel([startRef.current, b]);
+    }
+  };
   const up = () => {
-    if (selA != null && selB != null && selA !== selB) setZoom([Math.min(selA, selB), Math.max(selA, selB)]);
-    setSelA(null); setSelB(null);
+    if (sel && sel[0] !== sel[1]) setZoom([Math.min(sel[0], sel[1]), Math.max(sel[0], sel[1])]);
+    startRef.current = null; setSel(null);
   };
 
   return (
@@ -645,7 +659,7 @@ function AcousticChart({ data, domainMs, selectedT, onPick, tickFormat, labelFor
           <Scatter name="Anomaly" dataKey="anomY" isAnimationActive={false}
             shape={(p) => <AnomalyDot {...(p as { cx?: number; cy?: number; payload?: NoiseDatum })} selectedT={selectedT} />}
             onClick={(d) => { const a = (d as unknown as { payload?: NoiseDatum }).payload?.anom; if (a) onPick(a); }} />
-          {selA != null && selB != null && selA !== selB && <ReferenceArea x1={Math.min(selA, selB)} x2={Math.max(selA, selB)} strokeOpacity={0} fill={PRIMARY} fillOpacity={0.08} />}
+          {sel && sel[0] !== sel[1] && <ReferenceArea x1={Math.min(sel[0], sel[1])} x2={Math.max(sel[0], sel[1])} strokeOpacity={0} fill={PRIMARY} fillOpacity={0.08} />}
         </ComposedChart>
       </ResponsiveContainer>
     </div>
