@@ -364,3 +364,20 @@ html, body {
   .sa-dash-body { grid-template-columns: 1fr; }
   .sa-kpi-grid2 { grid-template-columns: 1fr 1fr; }
 }
+
+/* Charts: never let a click/finger-drag paint the big blue box. That box is the browser's focus
+   ring on the SVG (outline) plus, on mobile, a native selection — kill both. Every Recharts plot. */
+.recharts-wrapper,
+.recharts-surface {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.recharts-wrapper:focus,
+.recharts-wrapper:focus-visible,
+.recharts-surface:focus,
+.recharts-surface:focus-visible,
+.recharts-wrapper :focus,
+.recharts-wrapper :focus-visible {
+  outline: none;
+}
