@@ -3,6 +3,7 @@ export interface AlertItem {
   status: "normal" | "warning" | "danger" | "neutral";
   message: string;
   updatedAt?: string | null;
+  clipKey?: string | null; // S3 audio clip to play (night disturbance etc.)
 }
 
 export default function DashAlertRow({ alerts }: { alerts: AlertItem[] }) {
