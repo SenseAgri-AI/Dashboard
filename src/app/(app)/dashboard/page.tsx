@@ -6,6 +6,7 @@ import { type AlertItem } from "@/components/DashAlertRow";
 import DashAlertChat from "@/components/DashAlertChat";
 import type { Alert, AlertSeverity } from "@/lib/alerts";
 import DashAcousticCard from "@/components/DashAcousticCard";
+import DashSleepScore from "@/components/DashSleepScore";
 import DashEnvCol, { type EnvData } from "@/components/DashEnvCol";
 import { DashKpiGrid, type ProductionData } from "@/components/DashMetricCol";
 
@@ -92,6 +93,9 @@ export default function DashboardPage() {
 
       {/* Flock-noise welfare heat */}
       <DashAcousticCard narrow={isNarrow} />
+
+      {/* Flock night-rest (sleep) score */}
+      <DashSleepScore />
 
       {/* Environment + alerts */}
       <div style={{ display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "minmax(0, 1fr) 340px", gap: 14, alignItems: "start" }}>

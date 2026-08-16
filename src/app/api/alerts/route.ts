@@ -3,7 +3,8 @@ import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
 import { queryInflux } from "@/lib/influxdb";
 import { listEntries } from "@/lib/logService";
 import { fetchAnomalies } from "@/lib/acousticSource";
-import { powerOutageAlert, logsOverdueAlert, nightDisturbanceAlert, type Alert, type NoisePoint } from "@/lib/alerts";
+import { nightScores, type ClimateSample } from "@/lib/sleepScore";
+import { powerOutageAlert, logsOverdueAlert, nightDisturbanceAlert, sleepDeclineAlert, type Alert, type NoisePoint } from "@/lib/alerts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -56,15 +57,29 @@ function toMs(t: unknown): number {
     : new Date(String(t)).getTime();
 }
 
-// Recent mean-noise series for the night-disturbance rule — last ~18 h covers last night.
+// Mean-noise series over the last ~8 days — drives both the night-disturbance rule (last night)
+// and the sleep-score decline rule (recent nights).
 async function nightNoise(farmId: string): Promise<NoisePoint[]> {
   const rows = await queryInflux<Record<string, unknown>>(`
     SELECT time, noise_db_mean FROM audio_noise
-    WHERE farm_id = '${farmId}' AND time > now() - interval '18 hours'
+    WHERE farm_id = '${farmId}' AND time > now() - interval '8 days'
     ORDER BY time ASC`);
   return rows.map((r) => {
     const n = Number(r.noise_db_mean);
     return { t: toMs(r.time), mean: Number.isFinite(n) ? n : null };
+  });
+}
+
+// Overnight climate (temp + humidity) over the same ~8-day window — drives the heat (THI) factor of the
+// sleep score, so the poor-sleep alert can name heat as the likely cause when the nights ran hot.
+async function nightClimate(farmId: string): Promise<ClimateSample[]> {
+  const rows = await queryInflux<Record<string, unknown>>(`
+    SELECT time, temperature, humidity FROM sensors
+    WHERE farm_id = '${farmId}' AND device_type = 'AM308-1' AND time > now() - interval '8 days'
+    ORDER BY time ASC`);
+  return rows.map((r) => {
+    const temp = Number(r.temperature), rh = Number(r.humidity);
+    return { t: toMs(r.time), temp: Number.isFinite(temp) ? temp : null, rh: Number.isFinite(rh) ? rh : null };
   });
 }
 
@@ -78,11 +93,12 @@ export async function GET() {
   }
 
   // Each source is fetched independently so one failing never blocks — or false-fires — another rule.
-  const [climateR, acousticR, logR, nightR] = await Promise.allSettled([
+  const [climateR, acousticR, logR, nightR, nightClimateR] = await Promise.allSettled([
     lastSeenMs("sensors", farm.farmId),
     lastSeenMs("audio_noise", farm.farmId),
     lastLogDate(farm.spreadsheetId),
     nightNoise(farm.farmId),
+    nightClimate(farm.farmId),
   ]);
   const now = Date.now();
   const alerts: Alert[] = [];
@@ -106,7 +122,9 @@ export async function GET() {
 
   // Night disturbance (welfare) — sustained rise in the mean flock-noise level overnight.
   if (nightR.status === "fulfilled") {
-    const night = nightDisturbanceAlert({ series: nightR.value, now });
+    // Disturbance: only the last ~18 h (so it's about LAST night, not an old event).
+    const cutoff = now - 18 * 3_600_000;
+    const night = nightDisturbanceAlert({ series: nightR.value.filter((s) => s.t >= cutoff), now });
     if (night) {
       // Only when it fires: attach the nearest saved anomaly clip so the farmer can listen.
       try {
@@ -122,8 +140,13 @@ export async function GET() {
       }
       alerts.push(night);
     }
+    // Poor-sleep trend — score every night in the window (with heat/THI when climate is available),
+    // alert if bad several nights running.
+    const climate = nightClimateR.status === "fulfilled" ? nightClimateR.value : [];
+    const decline = sleepDeclineAlert({ nights: nightScores(nightR.value, climate) });
+    if (decline) alerts.push(decline);
   } else {
-    console.error("alerts: night-noise query failed — skipping night rule", nightR.reason);
+    console.error("alerts: night-noise query failed — skipping night rules", nightR.reason);
   }
 
   return NextResponse.json({ alerts, updatedAt: new Date(now).toISOString() });

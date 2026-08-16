@@ -171,3 +171,33 @@ export function nightDisturbanceAlert(input: {
     eventStartMs: ev.start,
   };
 }
+
+// Poor-sleep trend: the Night-Rest Score (src/lib/sleepScore.ts, docs/flock-night-rest-score.md) low
+// several nights running = a recurring overnight problem, not a one-off. Fires on `run` consecutive
+// nights below `poorScore`.
+export const SLEEP_POOR_SCORE = 70;   // a night below this = poor rest
+export const SLEEP_BAD_RUN = 2;       // consecutive poor nights before we flag
+
+type SleepNight = { date: string; score: number; thiZone?: string | null };
+
+export function sleepDeclineAlert(input: { nights: SleepNight[]; poorScore?: number; run?: number }): Alert | null {
+  const poor = input.poorScore ?? SLEEP_POOR_SCORE;
+  const need = input.run ?? SLEEP_BAD_RUN;
+  const recent = input.nights.slice(-need);
+  if (recent.length < need || !recent.every((n) => n.score < poor)) return null;
+  const list = recent.map((n) => Math.round(n.score)).join(", ");
+  // Research puts heat as the #1 sleep disruptor — if the poor nights ran hot, name it as the cause
+  // rather than the generic list (see docs/flock-night-rest-score.md → Research basis).
+  const hot = recent.every((n) => n.thiZone === "danger" || n.thiZone === "emergency");
+  const cause = hot
+    ? "overnight heat is the likely cause (experienced heat high in the dark period) — improve night ventilation / cooling."
+    : "look for a recurring cause: predator, light leak, red mite, or equipment.";
+  return {
+    id: "sleep_decline",
+    category: "welfare",
+    severity: "warning",
+    title: "Poor flock sleep",
+    message: `The flock's night-rest score has been low ${need} nights running (${list} /100). Persistent overnight disruption — ${cause}`,
+    since: `${recent[recent.length - 1].date}T00:00:00.000Z`,
+  };
+}
