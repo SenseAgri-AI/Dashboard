@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 // Flock Night-Rest Score tile — last night's score, the change vs the night before, a short reason,
 // a sparkline of recent nights, and the factor breakdown (why the score is what it is). Reads
 // /api/sleep-score. See docs/flock-night-rest-score.md.
-type ThiZone = "comfort" | "alert" | "danger" | "emergency";
+type ThiZone = "comfort" | "moderate" | "severe" | "extreme";
 type Breakdown = { noise: number; bouts: number; severity: number; predawn: number; heat: number };
 type NightScore = {
   date: string; score: number; disruptMin: number; bouts: number; severity: number; predawn: number;
@@ -14,7 +14,7 @@ type NightScore = {
 
 const PRIMARY = "#002E35", TEAL = "#2A8E9A", GREEN = "#166534", AMBER = "#D97706", RED = "#B91C1C", INK = "#4A5A5E";
 const band = (s: number) => (s >= 85 ? { c: GREEN, label: "Restful" } : s >= 60 ? { c: AMBER, label: "Some disruption" } : { c: RED, label: "Disturbed" });
-const zoneColor = (z: ThiZone | null) => (z === "emergency" || z === "danger" ? RED : z === "alert" ? AMBER : GREEN);
+const zoneColor = (z: ThiZone | null) => (z === "extreme" || z === "severe" ? RED : z === "moderate" ? AMBER : GREEN);
 const fmtDate = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" });
 
 // Interactive sparkline of the last 12 nights. Click (mouse) or tap (touch) a night to inspect it —
@@ -112,7 +112,7 @@ export default function DashSleepScore() {
   const change = cur && curPrev ? Math.round(cur.score - curPrev.score) : null;
   const reason = !cur ? "" : cur.disruptMin === 0 && cur.breakdown.heat < 0.05
     ? "No disruptions — the flock slept quietly."
-    : `${cur.disruptMin} min of raised noise${cur.bouts > 1 ? `, ${cur.bouts} bouts` : ""}${cur.predawn > 0 ? " (some pre-dawn unrest)" : ""}${cur.breakdown.heat >= 0.05 ? `; experienced heat elevated (THI ${cur.thi})` : ""}.`;
+    : `${cur.disruptMin} min of raised noise${cur.bouts > 1 ? `, ${cur.bouts} bouts` : ""}${cur.predawn > 0 ? " (some pre-dawn unrest)" : ""}${cur.breakdown.heat >= 0.05 ? `; experienced heat elevated (felt like ${cur.thi}°C)` : ""}.`;
 
   return (
     <div style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.07)", borderRadius: 12, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04)", overflow: "hidden" }}>
@@ -178,7 +178,7 @@ export default function DashSleepScore() {
                   <Factor label="Bouts" deduction={cur.breakdown.bouts} color={TEAL} />
                   <Factor label="Loudness" deduction={cur.breakdown.severity} color={TEAL} />
                   <Factor label="Pre-dawn" deduction={cur.breakdown.predawn} color={PRIMARY} />
-                  <Factor label="Heat" note={cur.thi != null ? `THI ${cur.thi}` : "no data"} deduction={cur.breakdown.heat} color={zoneColor(cur.thiZone)} />
+                  <Factor label="Heat" note={cur.thi != null ? `felt ${cur.thi}°C` : "no data"} deduction={cur.breakdown.heat} color={zoneColor(cur.thiZone)} />
                 </div>
               )}
             </div>

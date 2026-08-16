@@ -1,15 +1,20 @@
-// Temperature-Humidity Index (THI) — "experienced heat" for poultry. A bird cools evaporatively (by
-// panting), so high humidity blocks that cooling and makes a given temperature feel hotter. THI folds
-// both into one number. Standard Thom/NRC form (T in °C, RH in %), widely used in poultry heat-stress
-// work; laying-hen stress zones from the layer literature (hens stress EARLIER than broilers).
+// Experienced heat ("feels-like" temperature) for poultry, in °C. A bird cools evaporatively (by
+// panting), so high humidity blocks that cooling and makes a given temperature feel hotter. This folds
+// temperature + humidity into ONE effective temperature on the Celsius scale — so it reads like a
+// thermometer for a metric (South African) farm, and is directly comparable to the research (which
+// talks in °C). Marai et al. poultry index; zones from the poultry heat-stress literature.
 // See docs/flock-night-rest-score.md → Research basis.
 
+/** Effective ("feels-like") temperature in °C from dry-bulb temp (°C) and relative humidity (%). */
 export function thi(tempC: number, rhPct: number): number {
-  return (1.8 * tempC + 32) - (0.55 - 0.0055 * rhPct) * (1.8 * tempC - 26);
+  const rh = rhPct / 100;
+  return tempC - (0.31 - 0.31 * rh) * (tempC - 14.4);
 }
 
-// Physically plausible reading bounds — the AM308 reports a fault as 6553.5 °C (0xFFFF ÷ 10), which
-// would otherwise blow up the THI. Anything outside these is treated as a sensor error and ignored.
+// Physically plausible reading bounds — the water/feed meters (EM300) leave the temperature field at
+// 6553.5 °C (0xFFFF ÷ 10), which would otherwise blow up the index. Anything outside these is a bad
+// reading and is ignored. (Climate should already be scoped to device_type = 'AM308-1' upstream; this
+// is belt-and-suspenders.)
 export const TEMP_MIN = -20, TEMP_MAX = 60;   // °C, shed conditions
 export const RH_MIN = 0, RH_MAX = 100;        // %
 export function plausibleClimate(tempC: number, rhPct: number): boolean {
@@ -17,26 +22,29 @@ export function plausibleClimate(tempC: number, rhPct: number): boolean {
     && tempC >= TEMP_MIN && tempC <= TEMP_MAX && rhPct >= RH_MIN && rhPct <= RH_MAX;
 }
 
-// Laying-hen zones: comfort < 70 · alert 70–75 · danger 76–81 · emergency > 81. Onset of stress ~72.
-export const THI_COMFORT = 70;
-export const THI_DANGER = 76;
-export const THI_EMERGENCY = 82; // i.e. > 81
+// Laying-hen heat-stress zones on the °C effective-temperature scale (Marai poultry classification):
+// comfort < 27.8 · moderate 27.8–28.8 · severe 28.9–29.9 · extreme ≥ 30. Hens stress earlier than
+// broilers. All tunable.
+export const THI_COMFORT = 27.8;   // below this = no heat stress
+export const THI_SEVERE = 28.9;    // moderate 27.8–28.8; severe starts here
+export const THI_EXTREME = 30;     // ≥ this = very severe / extreme
 
-export type ThiZone = "comfort" | "alert" | "danger" | "emergency";
+export type ThiZone = "comfort" | "moderate" | "severe" | "extreme";
 
 export function thiZone(v: number): ThiZone {
   if (!Number.isFinite(v)) return "comfort";
-  if (v >= THI_EMERGENCY) return "emergency";
-  if (v >= THI_DANGER) return "danger";
-  if (v >= THI_COMFORT) return "alert";
+  if (v >= THI_EXTREME) return "extreme";
+  if (v >= THI_SEVERE) return "severe";
+  if (v >= THI_COMFORT) return "moderate";
   return "comfort";
 }
 
 // Heat's contribution to the sleep-score penalty. Zero in the comfort zone; scales with how far the
-// night's mean THI sits above comfort; capped so heat can't dominate the acoustic disruption signal.
-// Grounded in the finding that heat is the single biggest sleep disruptor (nearly eliminates REM).
+// night's mean effective temperature sits above comfort; capped so heat can't dominate the acoustic
+// disruption signal. Grounded in the finding that heat is the single biggest sleep disruptor.
+// At comfort (27.8) → 0; severe (28.9) → ~7; extreme (30) → ~13; ~32 °C-eff and above → capped at 25.
 export const HEAT_CAP = 25;   // max points heat can remove
-export const HEAT_K = 2.5;    // points per THI unit above comfort
+export const HEAT_K = 6;      // points per °C above comfort
 
 export function heatPenalty(thiValue: number | null): number {
   if (thiValue == null || !Number.isFinite(thiValue) || thiValue <= THI_COMFORT) return 0;

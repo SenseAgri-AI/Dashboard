@@ -188,7 +188,7 @@ export function sleepDeclineAlert(input: { nights: SleepNight[]; poorScore?: num
   const list = recent.map((n) => Math.round(n.score)).join(", ");
   // Research puts heat as the #1 sleep disruptor — if the poor nights ran hot, name it as the cause
   // rather than the generic list (see docs/flock-night-rest-score.md → Research basis).
-  const hot = recent.every((n) => n.thiZone === "danger" || n.thiZone === "emergency");
+  const hot = recent.every((n) => n.thiZone === "severe" || n.thiZone === "extreme");
   const cause = hot
     ? "overnight heat is the likely cause (experienced heat high in the dark period) — improve night ventilation / cooling."
     : "look for a recurring cause: predator, light leak, red mite, or equipment.";

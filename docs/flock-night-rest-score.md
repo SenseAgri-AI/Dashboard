@@ -63,28 +63,31 @@ score = 100
 | **bouts** | separate episodes — a run of ≥ 2 min above the line (`BOUT_MIN`) | Repeated waking is worse than one continuous event of the same length. −5 each. |
 | **severity** | average dB *above* −32 during disrupted minutes | How loud, not just how long. −2 per dB over the line. |
 | **predawn** | fraction of **03:00–05:00 SAST** that was disrupted | Weighted heavily (−25 × fraction). Sustained pre-dawn restlessness is the tell-tale **red-mite** signature, and pre-dawn is the window that most damages REM sleep. |
-| **heat (THI)** | mean **experienced heat** over the dark period | Heat is the single biggest sleep disruptor and suppresses sleep (esp. REM) *even when the birds are quiet* — a dimension the mic can't hear. Zero in the comfort zone; scales above THI 70; **capped at 25** so it can't dominate the acoustic signal. See *Experienced heat (THI)* below. |
+| **heat** | mean **experienced heat** over the dark period, as a feels-like °C | Heat is the single biggest sleep disruptor and suppresses sleep (esp. REM) *even when the birds are quiet* — a dimension the mic can't hear. Zero in the comfort zone; scales above 27.8 °C-eff; **capped at 25** so it can't dominate the acoustic signal. See *Experienced heat* below. |
 
 A quiet, cool night with zero disrupted minutes scores a clean **100**. The penalties compound, so a
 night that is loud, repeated, pre-dawn-heavy, *or* hot drops fast — which is exactly the profile that
 warrants a farmer's attention.
 
-### Experienced heat (THI)
+### Experienced heat
 
 It's **experienced heat**, not raw temperature, that disrupts sleep — a bird cools evaporatively (by
 panting), so high humidity blocks that cooling and makes a given temperature feel much hotter. We fold
-temperature and humidity into one **Temperature-Humidity Index** ([`src/lib/thi.ts`](../src/lib/thi.ts),
-standard Thom/NRC form; T in °C, RH in %):
+temperature and humidity into one **effective ("feels-like") temperature in °C**
+([`src/lib/thi.ts`](../src/lib/thi.ts), Marai et al. poultry index). We use the **Celsius** scale
+deliberately: this is a metric (South African) farm, so the number should read like a thermometer —
+and it's then directly comparable to the research, which talks in °C.
 
 ```
-THI = (1.8·T + 32) − (0.55 − 0.0055·RH)·(1.8·T − 26)
+feels-like °C = T − (0.31 − 0.31·RH) · (T − 14.4)      (T in °C, RH as a fraction)
 ```
 
-Laying-hen stress zones (hens stress **earlier** than broilers; onset ~72): **comfort < 70 · alert
-70–75 · danger 76–81 · emergency > 81**. The night's THI is the **mean** over the 20:00–05:00 window
-(from the `sensors` temp + humidity feed). The heat penalty is `0` in the comfort zone and grows `2.5`
-points per THI unit above 70, **capped at 25** (`HEAT_CAP`) — so a dangerously hot night removes a big
-chunk, but heat never swamps the acoustic disruption measure. If there's no climate coverage for a
+e.g. 33 °C / 66 % RH → **feels like ~31 °C**. Laying-hen heat-stress zones on this °C scale (hens stress
+**earlier** than broilers): **comfort < 27.8 · moderate 27.8–28.8 · severe 28.9–29.9 · extreme ≥ 30**.
+The night's value is the **mean** over the 20:00–05:00 window (from the `sensors` feed, `device_type =
+'AM308-1'` only). The heat penalty is `0` in the comfort zone and grows `6` points per °C above 27.8,
+**capped at 25** (`HEAT_CAP`) — so a dangerously hot night removes a big chunk, but heat never swamps
+the acoustic disruption measure. If there's no climate coverage for a
 night, the heat factor is simply `0` (the score falls back to acoustics only).
 
 ### Score bands (the tile)
@@ -108,8 +111,8 @@ shows, for the most recent scored night:
   most recent
 - a **"Why this score" breakdown** for the night on show — the five factors (Noise, Bouts, Loudness,
   Pre-dawn, Heat) with a proportional bar and the points each removed; a factor that took nothing off
-  shows a green "✓ ok". The Heat row shows the night's THI and is coloured by its stress zone (green
-  comfort / amber alert / red danger–emergency)
+  shows a green "✓ ok". The Heat row shows the night's felt temperature (°C) and is coloured by its
+  stress zone (green comfort / amber moderate / red severe–extreme)
 
 It reads [`/api/sleep-score`](../src/app/api/sleep-score/route.ts) (farm-scoped, 15-day window). Empty
 mic data renders a quiet "no night acoustic data yet" state, never an error.
@@ -149,8 +152,8 @@ This mirrors the night-disturbance alert's own backtest (09 Aug mean −29.7 for
 | `MIN_NIGHT_POINTS` | 120 | minimum coverage to score a night |
 | `SLEEP_POOR_SCORE` | 70 | a night below this = poor rest *(alert)* |
 | `SLEEP_BAD_RUN` | 2 | consecutive poor nights before we flag *(alert)* |
-| `THI_COMFORT` | 70 | THI at/above this starts penalising heat *(`thi.ts`)* |
-| `HEAT_K` | 2.5 | penalty points per THI unit above comfort *(`thi.ts`)* |
+| `THI_COMFORT` | 27.8 | feels-like °C at/above which heat starts to penalise *(`thi.ts`)* |
+| `HEAT_K` | 6 | penalty points per °C above comfort *(`thi.ts`)* |
 | `HEAT_CAP` | 25 | max points heat can remove *(`thi.ts`)* |
 
 ## Research basis
