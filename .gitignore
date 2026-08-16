@@ -31,3 +31,4 @@ analysis/egg_forecast.png
 .venv
 analysis/audio_noise.csv
 analysis/clips/
+analysis/*.ipynb
