@@ -28,3 +28,7 @@ poultry-layer-log-/
 analysis/.venv/
 analysis/egg_forecast.csv
 analysis/egg_forecast.png
+.venv
+analysis/audio_noise.csv
+analysis/clips/
+analysis/*.ipynb

@@ -1,10 +1,28 @@
+"use client";
+
+import { useCallback, useRef, useState } from "react";
 import type { AlertItem } from "./DashAlertRow";
 
-// Slim, color-coded alert list (was a tall WhatsApp panel). Compact rows, scrolls if many.
-const RED = "#B91C1C", AMBER = "#D97706", GREEN = "#16A34A", NEUTRAL = "#9AA6A8";
+// Slim, color-coded alert list. Alerts carrying an audio clip (e.g. night disturbance) get a Listen
+// button that presigns + plays the 30 s clip via the existing acoustic-clip endpoint.
+const RED = "#B91C1C", AMBER = "#D97706", GREEN = "#16A34A", NEUTRAL = "#9AA6A8", TEAL = "#2A8E9A";
 const dotColor = (s: string) => (s === "danger" ? RED : s === "warning" ? AMBER : s === "normal" ? GREEN : NEUTRAL);
 
 export default function DashAlertChat({ alerts, updatedAt }: { alerts: AlertItem[]; updatedAt?: string | null }) {
+  const [playing, setPlaying] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const play = useCallback(async (clipKey: string) => {
+    setPlaying(clipKey);
+    try {
+      const res = await fetch(`/api/analytics/acoustic/clip?key=${encodeURIComponent(clipKey)}`);
+      if (!res.ok) throw new Error("clip");
+      const { url } = await res.json();
+      const el = audioRef.current;
+      if (el) { el.src = url; await el.play(); }
+    } catch { setPlaying(null); }
+  }, []);
+
   const time = (iso?: string | null) => {
     if (!iso) return "";
     const d = new Date(iso);
@@ -32,11 +50,18 @@ export default function DashAlertChat({ alerts, updatedAt }: { alerts: AlertItem
                   <span style={{ fontSize: 9, color: "var(--t4)", flexShrink: 0 }}>{time(a.updatedAt) || stamp}</span>
                 </div>
                 <div style={{ fontSize: 12, color: "var(--t1)", lineHeight: 1.4, marginTop: 1 }}>{a.message}</div>
+                {a.clipKey && (
+                  <button onClick={() => play(a.clipKey!)}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 6, padding: "4px 10px", minHeight: 28, border: `1px solid ${TEAL}`, borderRadius: 6, background: playing === a.clipKey ? TEAL : "#fff", color: playing === a.clipKey ? "#fff" : TEAL, fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                    <span style={{ fontSize: 10 }}>▶</span>{playing === a.clipKey ? "Playing…" : "Listen (30s)"}
+                  </button>
+                )}
               </div>
             </div>
           ))
         )}
       </div>
+      <audio ref={audioRef} onEnded={() => setPlaying(null)} onError={() => setPlaying(null)} style={{ display: "none" }} />
     </div>
   );
 }

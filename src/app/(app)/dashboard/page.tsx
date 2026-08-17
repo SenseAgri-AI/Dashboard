@@ -3,9 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { type AlertItem } from "@/components/DashAlertRow";
-import { buildAttention, type AttentionAlert } from "@/lib/attention";
 import DashAlertChat from "@/components/DashAlertChat";
+import type { Alert, AlertSeverity } from "@/lib/alerts";
 import DashAcousticCard from "@/components/DashAcousticCard";
+import DashSleepScore from "@/components/DashSleepScore";
 import DashEnvCol, { type EnvData } from "@/components/DashEnvCol";
 import { DashKpiGrid, type ProductionData } from "@/components/DashMetricCol";
 
@@ -16,7 +17,7 @@ interface DashboardSummary {
   updatedAt: string;
 }
 
-const sevStatus = (s: AttentionAlert["severity"]): AlertItem["status"] =>
+const sevStatus = (s: AlertSeverity): AlertItem["status"] =>
   s === "danger" ? "danger" : s === "warning" ? "warning" : "neutral";
 
 // Responsive without CSS media queries (globals.css can go stale in dev).
@@ -36,16 +37,18 @@ export default function DashboardPage() {
   const router = useRouter();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [production, setProduction] = useState<ProductionData | null>(null);
-  const [attention, setAttention] = useState<AlertItem[]>([]);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [alertsAt, setAlertsAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isNarrow = useIsNarrow();
 
   const fetchAll = useCallback(async () => {
     try {
-      const [summaryRes, productionRes] = await Promise.all([
+      const [summaryRes, productionRes, alertsRes] = await Promise.all([
         fetch("/api/dashboard/summary"),
         fetch("/api/production"),
+        fetch("/api/alerts"),
       ]);
       if (summaryRes.status === 401) { router.push("/sign-in"); return; }
       if (!summaryRes.ok) {
@@ -55,13 +58,13 @@ export default function DashboardPage() {
       }
       setSummary(await summaryRes.json());
       setError(null);
-      if (productionRes.ok) {
-        const prod: ProductionData = await productionRes.json();
-        setProduction(prod);
-        const now = Date.now();
-        setAttention(buildAttention({ lastLogDate: prod.date ?? null, now }).map((a) => ({
-          metric: a.title, status: sevStatus(a.severity), message: a.detail, updatedAt: null,
+      if (productionRes.ok) setProduction(await productionRes.json());
+      if (alertsRes.ok) {
+        const d: { alerts: Alert[]; updatedAt: string } = await alertsRes.json();
+        setAlerts((d.alerts ?? []).map((a) => ({
+          metric: a.title, status: sevStatus(a.severity), message: a.message, updatedAt: a.since, clipKey: a.clipKey,
         })));
+        setAlertsAt(d.updatedAt ?? null);
       }
     } catch {
       setError("Connection error — check your network");
@@ -91,10 +94,13 @@ export default function DashboardPage() {
       {/* Flock-noise welfare heat */}
       <DashAcousticCard narrow={isNarrow} />
 
+      {/* Flock night-rest (sleep) score */}
+      <DashSleepScore />
+
       {/* Environment + alerts */}
       <div style={{ display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "minmax(0, 1fr) 340px", gap: 14, alignItems: "start" }}>
         <DashEnvCol env={summary?.env ?? null} narrow={isNarrow} />
-        <DashAlertChat alerts={[...attention, ...(summary?.alerts ?? [])]} updatedAt={summary?.updatedAt} />
+        <DashAlertChat alerts={alerts} updatedAt={alertsAt} />
       </div>
     </main>
   );
