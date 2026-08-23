@@ -6,10 +6,11 @@ the code links back to it.
 
 ## Alerts
 
-- **[alerts-spec.md](../alerts-spec.md)** — the full alert catalogue. Each alert's fire condition, the
-  message the farmer gets, and its detection logic. Built (v1) so far: **power/connectivity**,
-  **daily-log overdue**, **night disturbance**, **poor flock sleep**. Climate/ventilation/production
-  rules are specced but not yet built.
+- **[alerts-implemented.md](alerts-implemented.md)** — the alerts that are **live today**, with their
+  real logic, thresholds and messages: **power/connectivity**, **daily-log overdue**, **night
+  disturbance**, **poor flock sleep**. Start here for what's actually running.
+- **[alerts-spec.md](../alerts-spec.md)** — the fuller catalogue / **roadmap**: climate, ventilation and
+  production rules that are specced but not yet built.
 
   The alerts run in [`src/lib/alerts.ts`](../src/lib/alerts.ts) (pure rule functions) and
   [`/api/alerts`](../src/app/api/alerts/route.ts) (farm-scoped data fetch + evaluation). Rules are pure
@@ -18,8 +19,12 @@ the code links back to it.
 ## Features
 
 - **[flock-night-rest-score.md](flock-night-rest-score.md)** — the flock **sleep score** (0–100): the
-  dark-period window, the −32 dBFS disruption line, the four-component formula, the score bands, the
+  dark-period window, the −32 dBFS disruption line, the six-factor formula, the score bands, the
   dashboard tile, the poor-sleep alert, and the validation.
+
+- **[research-disease-detection.md](research-disease-detection.md)** — *(research / proposed)* early
+  disease detection incl. avian influenza, using existing data (mortality, HDEP, egg breakage/weight,
+  acoustics) via an **analytical** multi-indicator approach — no trained models.
 
 ## Conventions
 
