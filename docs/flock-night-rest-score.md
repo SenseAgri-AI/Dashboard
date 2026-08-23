@@ -55,6 +55,7 @@ score = 100
         − 2   × severity       (avg dB above the −32 line, during disruption)
         − 25  × predawn        (fraction of the pre-dawn window disrupted)
         − heatPenalty(THI)     (experienced overnight heat, capped at 25)
+        − darknessPenalty      (hours SHORT of 8 h darkness × 3, capped at 20; one-sided)
 ```
 
 | Component | What it measures | Why it's weighted this way |
@@ -62,12 +63,13 @@ score = 100
 | **disruptMin** | total minutes above −32 | The bulk measure: how much of the night was noisy. −2/min. |
 | **bouts** | separate episodes — a run of ≥ 2 min above the line (`BOUT_MIN`) | Repeated waking is worse than one continuous event of the same length. −5 each. |
 | **severity** | average dB *above* −32 during disrupted minutes | How loud, not just how long. −2 per dB over the line. |
-| **predawn** | fraction of **03:00–05:00 SAST** that was disrupted | Weighted heavily (−25 × fraction). Sustained pre-dawn restlessness is the tell-tale **red-mite** signature, and pre-dawn is the window that most damages REM sleep. |
-| **heat** | mean **experienced heat** over the dark period, as a feels-like °C | Heat is the single biggest sleep disruptor and suppresses sleep (esp. REM) *even when the birds are quiet* — a dimension the mic can't hear. Zero in the comfort zone; scales above 27.8 °C-eff; **capped at 25** so it can't dominate the acoustic signal. See *Experienced heat* below. |
+| **predawn** | fraction of **03:00–05:00 SAST** that was disrupted | Weighted heavily (−25 × fraction) — pre-dawn is the window that most damages restorative REM sleep. *(Earlier notes tied this to red mite; the mite research (research.md #8) shows the mite signature is sustained whole-night restlessness, NOT a pre-dawn spike — so this factor rests on the REM rationale, not mites.)* |
+| **heat** | mean **experienced heat** over the dark period, as a feels-like °C | Heat is the single biggest sleep disruptor and suppresses sleep (esp. REM) *even when the birds are quiet* — a dimension the mic can't hear. Zero in the comfort zone; scales above 27.8 °C-eff; **capped at 25**. See *Experienced heat* below. |
+| **darkness** | **hours of darkness** over dusk→dawn vs the ~8 h they need | Hens only rest in the dark and need enough of it. **One-sided** — only a *shortfall* below 8 h is penalised (too much darkness is fine). Penalty = (8 − darkHours) × 3, **capped at 20**. See *Darkness* below. |
 
-A quiet, cool night with zero disrupted minutes scores a clean **100**. The penalties compound, so a
-night that is loud, repeated, pre-dawn-heavy, *or* hot drops fast — which is exactly the profile that
-warrants a farmer's attention.
+A quiet, cool, dark night with zero disrupted minutes scores a clean **100**. The penalties compound, so
+a night that is loud, repeated, pre-dawn-heavy, hot, *or* short on darkness drops fast — which is exactly
+the profile that warrants a farmer's attention.
 
 ### Experienced heat
 
@@ -90,6 +92,28 @@ The night's value is the **mean** over the 20:00–05:00 window (from the `senso
 the acoustic disruption measure. If there's no climate coverage for a
 night, the heat factor is simply `0` (the score falls back to acoustics only).
 
+### Darkness
+
+Hens only rest in the dark, and they need **enough of it** — roughly **8 h**, with a welfare floor
+around 4–6 h. What the research is clear on: **brief light disturbances are compensated the same night**
+(no lasting harm), so the thing that actually matters is the *amount* of darkness, not a momentary light.
+So this factor measures **how many hours of the night were dark**, not whether a light blipped.
+
+- We scan the **whole natural night, dusk→dawn (18:00–07:00, a 13 h window)** — wide on purpose, because
+  in an open (naturally-lit) house the darkness gets squeezed at the *edges* (late summer dusk / early
+  dawn), not the middle. Darkness = the `light_level` index at **Level 0** (≤5 lux); ≥1 is lit.
+- Darkness hours = (fraction of readings at Level 0) × (hours the readings span).
+- **One-sided penalty:** `(8 − darkHours) × 3`, floored at 0 and **capped at 20**. So **12 h reads as
+  optimal → 0** (too much darkness is fine); only a *shortfall* is penalised. No light coverage → `0`.
+
+This matches reality on the farm: normal nights give ~12–13 h dark → no penalty. It only reacts when
+darkness runs short — long summer days, or supplemental lighting extending the day past what the flock
+needs to rest.
+
+> **Not in the sleep score (separate concern):** *too much* darkness means too little **light**, and
+> layers need ~14–16 h of light for peak **egg production**. That's a photoperiod/production check, not a
+> sleep/welfare one — parked for later, see [research.md](research.md).
+
 ### Score bands (the tile)
 
 | Score | Band | Colour |
@@ -109,10 +133,10 @@ shows, for the most recent scored night:
 - an **interactive** sparkline of the last 12 nights (restful line marked at 85) — hover (mouse) or
   tap/drag (touch) any night and the whole tile updates to that night; a "latest" link resets to the
   most recent
-- a **"Why this score" breakdown** for the night on show — the five factors (Noise, Bouts, Loudness,
-  Pre-dawn, Heat) with a proportional bar and the points each removed; a factor that took nothing off
-  shows a green "✓ ok". The Heat row shows the night's felt temperature (°C) and is coloured by its
-  stress zone (green comfort / amber moderate / red severe–extreme)
+- a **"Why this score" breakdown** for the night on show — the six factors (Noise, Bouts, Loudness,
+  Pre-dawn, Heat, Darkness) with a proportional bar and the points each removed; a factor that took
+  nothing off shows a green "✓ ok". The Heat row shows the night's felt temperature (°C) coloured by its
+  stress zone; the Darkness row shows the hours of darkness
 
 It reads [`/api/sleep-score`](../src/app/api/sleep-score/route.ts) (farm-scoped, 15-day window). Empty
 mic data renders a quiet "no night acoustic data yet" state, never an error.
@@ -155,11 +179,18 @@ This mirrors the night-disturbance alert's own backtest (09 Aug mean −29.7 for
 | `THI_COMFORT` | 27.8 | feels-like °C at/above which heat starts to penalise *(`thi.ts`)* |
 | `HEAT_K` | 6 | penalty points per °C above comfort *(`thi.ts`)* |
 | `HEAT_CAP` | 25 | max points heat can remove *(`thi.ts`)* |
+| `DARK_TARGET_H` | 8 | hours of darkness at/above which there's no penalty |
+| `DARK_PENALTY_PER_H` | 3 | points docked per hour short of the target (one-sided) |
+| `DARK_CAP` | 20 | max points the darkness factor can remove |
 
 ## Research basis
 
-Three peer-reviewed studies underpin this score and the thermal design decisions. Each is listed with
-what it found and the specific decision it justifies.
+The full papers list (per feature, with what each contributes) lives in [research.md](research.md). The
+studies underpinning this score are summarised below — each with what it found and the decision it
+justifies. The **darkness factor** rests on a second sleep paper (Putyora et al., "Mild Disturbances")
+and the lighting/dark-period literature: **brief light is compensated the same night, so what matters is
+getting *enough* darkness** — hence a one-sided hours-of-darkness factor, not a light-blip penalty. See
+research.md for those sources.
 
 ### 1. Sleep paper — the backbone of the score
 

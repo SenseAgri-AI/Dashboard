@@ -74,12 +74,17 @@ async function nightNoise(farmId: string): Promise<NoisePoint[]> {
 // sleep score, so the poor-sleep alert can name heat as the likely cause when the nights ran hot.
 async function nightClimate(farmId: string): Promise<ClimateSample[]> {
   const rows = await queryInflux<Record<string, unknown>>(`
-    SELECT time, temperature, humidity FROM sensors
+    SELECT time, temperature, humidity, light_level FROM sensors
     WHERE farm_id = '${farmId}' AND device_type = 'AM308-1' AND time > now() - interval '8 days'
     ORDER BY time ASC`);
   return rows.map((r) => {
-    const temp = Number(r.temperature), rh = Number(r.humidity);
-    return { t: toMs(r.time), temp: Number.isFinite(temp) ? temp : null, rh: Number.isFinite(rh) ? rh : null };
+    const temp = Number(r.temperature), rh = Number(r.humidity), light = Number(r.light_level);
+    return {
+      t: toMs(r.time),
+      temp: Number.isFinite(temp) ? temp : null,
+      rh: Number.isFinite(rh) ? rh : null,
+      light: Number.isFinite(light) ? light : null,
+    };
   });
 }
 
