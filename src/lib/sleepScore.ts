@@ -2,9 +2,9 @@
 // Full logic + rationale: docs/flock-night-rest-score.md (validation notebook: analysis/night_rest_score).
 // Built on the ABSOLUTE night-noise level: a restful night stays quiet; a poor night has loud
 // disruptions (the flock erupting) in the dark period. Quiet/fan nights score 100 (correct); real
-// disturbances rank low. Heat (THI) is a separate factor — it suppresses sleep (esp. REM) even when
-// the birds are not loud, so it captures a dimension the mic can't hear. Pure — the route supplies the
-// noise + climate series.
+// disturbances rank low. Heat (THI) and darkness are separate factors from the climate feed — heat
+// suppresses sleep even when the birds are quiet; darkness checks they got ENOUGH dark time to rest
+// (one-sided — too little is penalised, too much is fine). Pure — the route supplies noise + climate.
 
 import { thi, thiZone, heatPenalty, plausibleClimate, type ThiZone } from "./thi";
 
@@ -12,14 +12,22 @@ export const NIGHT_START_SAST = 20;   // dark period 20:00–05:00 SAST
 export const NIGHT_END_SAST = 5;
 export const DISRUPT_DB = -32;        // mean above this = a loud disruption
 export const BOUT_MIN = 2;            // minutes to count as a disruption bout
+export const DARK_MAX_LEVEL = 0;      // AM308 light_level 0 (≤5 lux) = dark; ≥1 = lit
+export const DARK_TARGET_H = 8;       // ≥ this many hours of darkness = optimal (no penalty)
+export const DARK_PENALTY_PER_H = 3;  // points docked per hour short of the target (ONE-SIDED: too
+export const DARK_CAP = 20;           //   much darkness is fine, only too little is penalised)
+const DARK_START_SAST = 18;           // scan the whole natural night (dusk→dawn), wide enough to catch
+const DARK_END_SAST = 7;              //   the summer edges where darkness gets squeezed (13 h window)
+const DARK_MIN_SAMPLES = 60;          // need ~1 h of light readings to judge a night's darkness
 const SAST_OFFSET_MS = 2 * 3_600_000;
 const MIN_NIGHT_POINTS = 120;         // skip nights with too little coverage to score fairly
 
 export type NoiseSample = { t: number; mean: number | null };              // t = ms epoch (UTC)
-export type ClimateSample = { t: number; temp: number | null; rh: number | null }; // t = ms epoch (UTC)
+// t = ms epoch (UTC); light = AM308 light_level 0–5 index (see docs/sensors.md)
+export type ClimateSample = { t: number; temp: number | null; rh: number | null; light: number | null };
 
 // Points removed from 100 by each factor (before the 0-floor). Surfaced on the dashboard breakdown.
-export type ScoreBreakdown = { noise: number; bouts: number; severity: number; predawn: number; heat: number };
+export type ScoreBreakdown = { noise: number; bouts: number; severity: number; predawn: number; heat: number; darkness: number };
 
 export type NightScore = {
   date: string;        // YYYY-MM-DD — the evening the night starts
@@ -30,6 +38,7 @@ export type NightScore = {
   predawn: number;     // fraction of the final 2 h disrupted (red-mite window)
   thi: number | null;  // mean experienced-heat over the dark period (null if no climate coverage)
   thiZone: ThiZone | null;
+  darknessHours: number | null; // hours of darkness over the dusk→dawn scan (null if no light coverage)
   breakdown: ScoreBreakdown;
   points: number;      // acoustic samples that scored the night
 };
@@ -39,6 +48,13 @@ function nightKey(tMs: number): string | null {
   const h = new Date(tMs + SAST_OFFSET_MS).getUTCHours();
   if (!(h >= NIGHT_START_SAST || h < NIGHT_END_SAST)) return null;
   return new Date(tMs + SAST_OFFSET_MS - NIGHT_START_SAST * 3_600_000).toISOString().slice(0, 10);
+}
+
+// Same idea for the WIDER dusk→dawn darkness scan (18:00–07:00), labelled by the same evening date.
+function darkKey(tMs: number): string | null {
+  const h = new Date(tMs + SAST_OFFSET_MS).getUTCHours();
+  if (!(h >= DARK_START_SAST || h < DARK_END_SAST)) return null;
+  return new Date(tMs + SAST_OFFSET_MS - DARK_START_SAST * 3_600_000).toISOString().slice(0, 10);
 }
 
 // The acoustic metrics for one night (no scoring yet — heat is folded in by the caller).
@@ -70,6 +86,19 @@ function nightThi(pts: ClimateSample[]): number | null {
   return n ? sum / n : null;
 }
 
+// Hours of darkness over the dusk→dawn scan: fraction of readings at Level 0 (dark) × the span the
+// readings actually cover (capped at the 13 h window). Null if there isn't enough light coverage to
+// judge. Layers need enough dark to rest — this measures whether they got it.
+function nightDarkness(pts: ClimateSample[]): number | null {
+  const lit = pts.filter((c) => c.light != null && Number.isFinite(c.light));
+  if (lit.length < DARK_MIN_SAMPLES) return null;
+  const ts = lit.map((c) => c.t).sort((a, b) => a - b);
+  const spanH = (ts[ts.length - 1] - ts[0]) / 3_600_000;
+  const windowH = DARK_END_SAST + (24 - DARK_START_SAST); // 18:00→07:00 = 13 h
+  const darkFrac = lit.filter((c) => (c.light as number) <= DARK_MAX_LEVEL).length / lit.length;
+  return darkFrac * Math.min(spanH, windowH);
+}
+
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
 /** Score each night in the series, oldest → newest. Nights with too few acoustic points are skipped.
@@ -86,15 +115,16 @@ export function nightScores(samples: NoiseSample[], climate: ClimateSample[] = [
     arr.push({ t: s.t, mean: s.mean, hour: new Date(s.t + SAST_OFFSET_MS).getUTCHours() });
   }
 
-  // Group climate samples by the same night key.
+  // Group climate samples by night — the 20:00–05:00 window for heat, plus the wider 18:00–07:00
+  // dusk→dawn window for the darkness measure.
   const climateByNight = new Map<string, ClimateSample[]>();
+  const darkByNight = new Map<string, ClimateSample[]>();
   for (const c of climate) {
     if (!Number.isFinite(c.t)) continue;
-    const key = nightKey(c.t);
-    if (!key) continue;
-    let arr = climateByNight.get(key);
-    if (!arr) { arr = []; climateByNight.set(key, arr); }
-    arr.push(c);
+    const nk = nightKey(c.t);
+    if (nk) { (climateByNight.get(nk) ?? climateByNight.set(nk, []).get(nk)!).push(c); }
+    const dk = darkKey(c.t);
+    if (dk) { (darkByNight.get(dk) ?? darkByNight.set(dk, []).get(dk)!).push(c); }
   }
 
   const out: NightScore[] = [];
@@ -102,6 +132,10 @@ export function nightScores(samples: NoiseSample[], climate: ClimateSample[] = [
     if (pts.length < MIN_NIGHT_POINTS) continue;
     const m = acousticMetrics(pts);
     const tMean = nightThi(climateByNight.get(date) ?? []);
+    const darknessHours = nightDarkness(darkByNight.get(date) ?? []);
+    // One-sided: only a SHORTFALL below the target is penalised; extra darkness is free.
+    const darkPenalty = darknessHours == null ? 0
+      : Math.min(DARK_CAP, Math.max(0, DARK_TARGET_H - darknessHours) * DARK_PENALTY_PER_H);
 
     const breakdown: ScoreBreakdown = {
       noise: r1(2 * m.disruptMin),
@@ -109,8 +143,9 @@ export function nightScores(samples: NoiseSample[], climate: ClimateSample[] = [
       severity: r1(2 * m.severity),
       predawn: r1(25 * m.predawn),
       heat: r1(heatPenalty(tMean)),
+      darkness: r1(darkPenalty),
     };
-    const raw = 100 - breakdown.noise - breakdown.bouts - breakdown.severity - breakdown.predawn - breakdown.heat;
+    const raw = 100 - breakdown.noise - breakdown.bouts - breakdown.severity - breakdown.predawn - breakdown.heat - breakdown.darkness;
 
     out.push({
       date,
@@ -121,6 +156,7 @@ export function nightScores(samples: NoiseSample[], climate: ClimateSample[] = [
       predawn: Math.round(m.predawn * 100) / 100,
       thi: tMean == null ? null : r1(tMean),
       thiZone: tMean == null ? null : thiZone(tMean),
+      darknessHours: darknessHours == null ? null : r1(darknessHours),
       breakdown,
       points: m.points,
     });

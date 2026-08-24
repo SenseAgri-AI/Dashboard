@@ -6,10 +6,10 @@ import { useEffect, useState } from "react";
 // a sparkline of recent nights, and the factor breakdown (why the score is what it is). Reads
 // /api/sleep-score. See docs/flock-night-rest-score.md.
 type ThiZone = "comfort" | "moderate" | "severe" | "extreme";
-type Breakdown = { noise: number; bouts: number; severity: number; predawn: number; heat: number };
+type Breakdown = { noise: number; bouts: number; severity: number; predawn: number; heat: number; darkness: number };
 type NightScore = {
   date: string; score: number; disruptMin: number; bouts: number; severity: number; predawn: number;
-  thi: number | null; thiZone: ThiZone | null; breakdown: Breakdown;
+  thi: number | null; thiZone: ThiZone | null; darknessHours: number | null; breakdown: Breakdown;
 };
 
 const PRIMARY = "#002E35", TEAL = "#2A8E9A", GREEN = "#166534", AMBER = "#D97706", RED = "#B91C1C", INK = "#4A5A5E";
@@ -110,9 +110,9 @@ export default function DashSleepScore() {
   const viewingPast = sel != null && idx !== lastIdx;
   const b = cur ? band(cur.score) : null;
   const change = cur && curPrev ? Math.round(cur.score - curPrev.score) : null;
-  const reason = !cur ? "" : cur.disruptMin === 0 && cur.breakdown.heat < 0.05
+  const reason = !cur ? "" : cur.disruptMin === 0 && cur.breakdown.heat < 0.05 && cur.breakdown.darkness < 0.05
     ? "No disruptions — the flock slept quietly."
-    : `${cur.disruptMin} min of raised noise${cur.bouts > 1 ? `, ${cur.bouts} bouts` : ""}${cur.predawn > 0 ? " (some pre-dawn unrest)" : ""}${cur.breakdown.heat >= 0.05 ? `; experienced heat elevated (felt like ${cur.thi}°C)` : ""}.`;
+    : `${cur.disruptMin} min of raised noise${cur.bouts > 1 ? `, ${cur.bouts} bouts` : ""}${cur.predawn > 0 ? " (some pre-dawn unrest)" : ""}${cur.breakdown.heat >= 0.05 ? `; experienced heat elevated (felt like ${cur.thi}°C)` : ""}${cur.breakdown.darkness >= 0.05 ? `; only ~${cur.darknessHours}h of darkness` : ""}.`;
 
   return (
     <div style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.07)", borderRadius: 12, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04)", overflow: "hidden" }}>
@@ -168,7 +168,8 @@ export default function DashSleepScore() {
                   <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--t3)" }}>Why this score</span>
                 </span>
                 {(() => {
-                  const total = cur.breakdown.noise + cur.breakdown.bouts + cur.breakdown.severity + cur.breakdown.predawn + cur.breakdown.heat;
+                  const bd = cur.breakdown;
+                  const total = bd.noise + bd.bouts + bd.severity + bd.predawn + bd.heat + bd.darkness;
                   return <span style={{ fontSize: 10.5, fontWeight: 700, color: total < 0.5 ? GREEN : INK }}>{total < 0.5 ? "✓ nothing deducted" : `−${Math.round(total)} pts`}</span>;
                 })()}
               </button>
@@ -179,6 +180,7 @@ export default function DashSleepScore() {
                   <Factor label="Loudness" deduction={cur.breakdown.severity} color={TEAL} />
                   <Factor label="Pre-dawn" deduction={cur.breakdown.predawn} color={PRIMARY} />
                   <Factor label="Heat" note={cur.thi != null ? `felt ${cur.thi}°C` : "no data"} deduction={cur.breakdown.heat} color={zoneColor(cur.thiZone)} />
+                  <Factor label="Darkness" note={cur.darknessHours != null ? `${cur.darknessHours}h dark` : "no data"} deduction={cur.breakdown.darkness} color={AMBER} />
                 </div>
               )}
             </div>

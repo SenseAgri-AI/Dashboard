@@ -178,7 +178,7 @@ export function nightDisturbanceAlert(input: {
 export const SLEEP_POOR_SCORE = 70;   // a night below this = poor rest
 export const SLEEP_BAD_RUN = 2;       // consecutive poor nights before we flag
 
-type SleepNight = { date: string; score: number; thiZone?: string | null };
+type SleepNight = { date: string; score: number; thiZone?: string | null; darknessHours?: number | null };
 
 export function sleepDeclineAlert(input: { nights: SleepNight[]; poorScore?: number; run?: number }): Alert | null {
   const poor = input.poorScore ?? SLEEP_POOR_SCORE;
@@ -186,11 +186,14 @@ export function sleepDeclineAlert(input: { nights: SleepNight[]; poorScore?: num
   const recent = input.nights.slice(-need);
   if (recent.length < need || !recent.every((n) => n.score < poor)) return null;
   const list = recent.map((n) => Math.round(n.score)).join(", ");
-  // Research puts heat as the #1 sleep disruptor — if the poor nights ran hot, name it as the cause
-  // rather than the generic list (see docs/flock-night-rest-score.md → Research basis).
+  // Name a specific cause when the data points at one, else the generic list
+  // (see docs/flock-night-rest-score.md → Research basis).
   const hot = recent.every((n) => n.thiZone === "severe" || n.thiZone === "extreme");
+  const short = recent.every((n) => n.darknessHours != null && n.darknessHours < 6); // too little dark
   const cause = hot
     ? "overnight heat is the likely cause (experienced heat high in the dark period) — improve night ventilation / cooling."
+    : short
+    ? "the flock isn't getting enough darkness — long days or supplemental lighting is cutting the dark period below what they need to rest."
     : "look for a recurring cause: predator, light leak, red mite, or equipment.";
   return {
     id: "sleep_decline",

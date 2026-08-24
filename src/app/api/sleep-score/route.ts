@@ -31,7 +31,7 @@ export async function GET() {
         WHERE farm_id = '${farm.farmId}' AND time > now() - interval '15 days'
         ORDER BY time ASC`),
       queryInflux<Record<string, unknown>>(`
-        SELECT time, temperature, humidity FROM sensors
+        SELECT time, temperature, humidity, light_level FROM sensors
         WHERE farm_id = '${farm.farmId}' AND device_type = 'AM308-1' AND time > now() - interval '15 days'
         ORDER BY time ASC`),
     ]);
@@ -40,8 +40,13 @@ export async function GET() {
       return { t: toMs(r.time), mean: Number.isFinite(n) ? n : null };
     });
     const climate: ClimateSample[] = climateRows.map((r) => {
-      const temp = Number(r.temperature), rh = Number(r.humidity);
-      return { t: toMs(r.time), temp: Number.isFinite(temp) ? temp : null, rh: Number.isFinite(rh) ? rh : null };
+      const temp = Number(r.temperature), rh = Number(r.humidity), light = Number(r.light_level);
+      return {
+        t: toMs(r.time),
+        temp: Number.isFinite(temp) ? temp : null,
+        rh: Number.isFinite(rh) ? rh : null,
+        light: Number.isFinite(light) ? light : null,
+      };
     });
     return NextResponse.json({ nights: nightScores(samples, climate), updatedAt: new Date().toISOString() });
   } catch (e) {
