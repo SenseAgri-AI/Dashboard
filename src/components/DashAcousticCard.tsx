@@ -57,12 +57,12 @@ function DayNightSky({ t0, t1 }: { t0: number; t1: number }) {
   return (
     <>
       <div aria-hidden style={{ position: "absolute", left: 28, right: 12, top: 8, bottom: 22, pointerEvents: "none", opacity: 0.42, WebkitMaskImage: fade, maskImage: fade, background: `linear-gradient(to right, ${stops.join(", ")})` }} />
-      <div aria-hidden style={{ position: "absolute", left: 28, right: 12, top: 7, height: 14, pointerEvents: "none" }}>
+      <div aria-hidden style={{ position: "absolute", left: 28, right: 12, top: 6, height: 22, pointerEvents: "none" }}>
         <span style={{ ...icon, left: `${sunF * 100}%` }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#C67C1E" strokeWidth="2.4" strokeLinecap="round"><circle cx="12" cy="12" r="4" fill="#E8A33E" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" /></svg>
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#C67C1E" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="4.2" fill="#E8A33E" /><path d="M12 2v2.2M12 19.8V22M2 12h2.2M19.8 12H22M4.9 4.9l1.5 1.5M17.6 17.6l1.5 1.5M19.1 4.9l-1.5 1.5M6.4 17.6l-1.5 1.5" /></svg>
         </span>
         <span style={{ ...icon, left: `${moonF * 100}%` }}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="#8FA8C0" stroke="none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" /></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="#8FA8C0" stroke="none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" /></svg>
         </span>
       </div>
     </>

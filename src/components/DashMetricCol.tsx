@@ -81,42 +81,45 @@ function KpiTile({ label, value, delta, goodUp }: {
   );
 }
 
+const compact = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${n}`);
+
 // Egg-size STACKED bars per size: a navy base (the amount held from last week) with a coloured cap —
-// green for the week-over-week increase, red for the decrease. Bar height ∝ max(this week, last week).
+// green for the week-over-week increase, red for the decrease. Bar height ∝ max(this week, last week);
+// this week's count shown small above each bar.
 function EggSizeBars({ bars }: { bars: { label: string; last: number; prior: number }[] }) {
   const rows = bars.map((b) => {
-    const total = Math.max(b.last, b.prior), base = Math.min(b.last, b.prior), delta = b.last - b.prior;
+    const total = Math.max(b.last, b.prior), delta = b.last - b.prior;
     const pct = b.prior === 0 ? null : (delta / b.prior) * 100;
-    return { label: b.label, last: b.last, total, base, delta, pct };
+    return { label: b.label, last: b.last, total, delta, pct };
   });
   const max = Math.max(1, ...rows.map((r) => r.total));
   return (
-    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 52 }}>
-      <div style={{ flex: 1, display: "flex", alignItems: "flex-end", gap: 6, minHeight: 36 }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 60 }}>
+      {/* counts (this week) */}
+      <div style={{ display: "flex", gap: 4 }}>
+        {rows.map((r) => (
+          <div key={r.label} style={{ flex: 1, textAlign: "center", fontSize: 9, fontWeight: 800, color: INK, fontVariantNumeric: "tabular-nums" }}>{compact(r.last)}</div>
+        ))}
+      </div>
+      {/* bars */}
+      <div style={{ flex: 1, display: "flex", alignItems: "flex-end", gap: 4, minHeight: 32 }}>
         {rows.map((r) => {
           const capPct = r.total > 0 ? (Math.abs(r.delta) / r.total) * 100 : 0;
-          const capColor = r.delta > 0 ? GREEN : RED;
           const showCap = Math.abs(r.delta) > 0 && capPct >= 1;
           return (
             <div key={r.label} title={`${r.label}: ${r.last.toLocaleString()} eggs (last 7 days)${r.pct != null ? ` · ${r.pct > 0 ? "+" : ""}${r.pct.toFixed(0)}% vs prev week` : ""}`}
               style={{ flex: 1, display: "flex", alignItems: "flex-end", justifyContent: "center", height: "100%" }}>
-              <div style={{ width: "66%", maxWidth: 16, height: `${Math.max(7, (r.total / max) * 100)}%`, display: "flex", flexDirection: "column", borderRadius: "3px 3px 0 0", overflow: "hidden" }}>
-                {showCap && <div style={{ height: `${capPct}%`, background: capColor }} />}
+              <div style={{ width: "82%", maxWidth: 22, height: `${Math.max(8, (r.total / max) * 100)}%`, display: "flex", flexDirection: "column", borderRadius: "4px 4px 0 0", overflow: "hidden" }}>
+                {showCap && <div style={{ height: `${capPct}%`, background: r.delta > 0 ? GREEN : RED }} />}
                 <div style={{ flex: 1, background: NAVY }} />
               </div>
             </div>
           );
         })}
       </div>
-      <div style={{ display: "flex", gap: 6, marginTop: 5 }}>
-        {rows.map((r) => {
-          const arr = r.delta === 0 || r.pct == null ? "" : r.delta > 0 ? "▲" : "▼";
-          return (
-            <div key={r.label} style={{ flex: 1, textAlign: "center", fontSize: 9.5, fontWeight: 800, color: "var(--t2)" }}>
-              {r.label}{arr && <span style={{ color: r.delta > 0 ? GREEN : RED, fontSize: 8, marginLeft: 1 }}>{arr}</span>}
-            </div>
-          );
-        })}
+      {/* size labels */}
+      <div style={{ display: "flex", gap: 4, marginTop: 5 }}>
+        {rows.map((r) => <div key={r.label} style={{ flex: 1, textAlign: "center", fontSize: 9.5, fontWeight: 800, color: "var(--t2)" }}>{r.label}</div>)}
       </div>
     </div>
   );
