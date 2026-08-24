@@ -81,29 +81,42 @@ function KpiTile({ label, value, delta, goodUp }: {
   );
 }
 
-// Egg-size bars: last-7-day count per size (relative heights), each bar navy — green if that size is up
-// vs the previous week, red if down. Slim bars.
-function EggSizeBars({ bars }: { bars: { label: string; value: number; change: number | null }[] }) {
-  const max = Math.max(1, ...bars.map((b) => b.value));
-  const barColor = (c: number | null) => (c == null || Math.abs(c) < 0.5 ? NAVY : c > 0 ? GREEN : RED);
+// Egg-size STACKED bars per size: a navy base (the amount held from last week) with a coloured cap —
+// green for the week-over-week increase, red for the decrease. Bar height ∝ max(this week, last week).
+function EggSizeBars({ bars }: { bars: { label: string; last: number; prior: number }[] }) {
+  const rows = bars.map((b) => {
+    const total = Math.max(b.last, b.prior), base = Math.min(b.last, b.prior), delta = b.last - b.prior;
+    const pct = b.prior === 0 ? null : (delta / b.prior) * 100;
+    return { label: b.label, last: b.last, total, base, delta, pct };
+  });
+  const max = Math.max(1, ...rows.map((r) => r.total));
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 58 }}>
-      <div style={{ flex: 1, display: "flex", alignItems: "flex-end", gap: 12, paddingTop: 4 }}>
-        {bars.map((b) => {
-          const c = barColor(b.change);
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 52 }}>
+      <div style={{ flex: 1, display: "flex", alignItems: "flex-end", gap: 6, minHeight: 36 }}>
+        {rows.map((r) => {
+          const capPct = r.total > 0 ? (Math.abs(r.delta) / r.total) * 100 : 0;
+          const capColor = r.delta > 0 ? GREEN : RED;
+          const showCap = Math.abs(r.delta) > 0 && capPct >= 1;
           return (
-            <div key={b.label} title={`${b.label}: ${b.value.toLocaleString()} eggs (last 7 days)${b.change != null ? ` · ${b.change > 0 ? "+" : ""}${b.change.toFixed(0)}% vs prev week` : ""}`}
-              style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 3, minWidth: 0 }}>
-              <span style={{ fontSize: 9, fontWeight: 800, lineHeight: 1, color: c, height: 10 }}>
-                {b.change == null || Math.abs(b.change) < 0.5 ? "" : b.change > 0 ? "▲" : "▼"}
-              </span>
-              <div style={{ width: 9, height: `${(b.value / max) * 100}%`, minHeight: 3, background: c, borderRadius: 4 }} />
+            <div key={r.label} title={`${r.label}: ${r.last.toLocaleString()} eggs (last 7 days)${r.pct != null ? ` · ${r.pct > 0 ? "+" : ""}${r.pct.toFixed(0)}% vs prev week` : ""}`}
+              style={{ flex: 1, display: "flex", alignItems: "flex-end", justifyContent: "center", height: "100%" }}>
+              <div style={{ width: "66%", maxWidth: 16, height: `${Math.max(7, (r.total / max) * 100)}%`, display: "flex", flexDirection: "column", borderRadius: "3px 3px 0 0", overflow: "hidden" }}>
+                {showCap && <div style={{ height: `${capPct}%`, background: capColor }} />}
+                <div style={{ flex: 1, background: NAVY }} />
+              </div>
             </div>
           );
         })}
       </div>
-      <div style={{ display: "flex", gap: 12, marginTop: 5 }}>
-        {bars.map((b) => <div key={b.label} style={{ flex: 1, textAlign: "center", fontSize: 9.5, fontWeight: 800, color: "var(--t2)" }}>{b.label}</div>)}
+      <div style={{ display: "flex", gap: 6, marginTop: 5 }}>
+        {rows.map((r) => {
+          const arr = r.delta === 0 || r.pct == null ? "" : r.delta > 0 ? "▲" : "▼";
+          return (
+            <div key={r.label} style={{ flex: 1, textAlign: "center", fontSize: 9.5, fontWeight: 800, color: "var(--t2)" }}>
+              {r.label}{arr && <span style={{ color: r.delta > 0 ? GREEN : RED, fontSize: 8, marginLeft: 1 }}>{arr}</span>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -116,15 +129,12 @@ export function DashKpiGrid({ production, narrow }: { production: ProductionData
   const liveHens = col("liveHens"), hdep = col("hdep"), eggs = col("eggs"), weight = col("avgWeight"), damaged = col("damaged"), rev = col("revenue");
   const weeklyRev = sum(rev.slice(-7));
 
-  // Per-size: last-7-day total + change vs the prior 7 days (drives the bar colour).
+  // Per-size: last-7-day total vs the prior 7 days (drives the stacked green/red change segment).
   const sizeBars = ([["S", "small"], ["M", "medium"], ["L", "large"], ["XL", "xl"], ["J", "jumbo"]] as [string, keyof DailyEntry][])
     .map(([label, key]) => {
       const s = col(key);
-      const last7 = sum(s.slice(-7)), prior7 = sum(s.slice(-14, -7));
-      return { label, value: last7, change: prior7 === 0 ? null : ((last7 - prior7) / prior7) * 100 };
+      return { label, last: sum(s.slice(-7)), prior: sum(s.slice(-14, -7)) };
     });
-
-  const span2: React.CSSProperties = { gridColumn: "span 2" };
 
   return (
     <div>
@@ -143,16 +153,9 @@ export function DashKpiGrid({ production, narrow }: { production: ProductionData
         <KpiTile label="Egg count" value={lastOf(eggs)?.toLocaleString() ?? null} delta={flowChange(eggs)} goodUp />
         <KpiTile label="Egg weight" value={lastOf(weight) != null ? `${lastOf(weight)!.toFixed(1)} g` : null} delta={flowChange(weight)} goodUp />
 
-        <div style={span2}>
-          <div style={{ ...cardStyle, height: "100%" }}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-              <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)" }}>Egg sizes · last 7 days</span>
-              <span style={{ fontSize: 9, fontWeight: 700, color: "var(--t4)" }}>
-                <span style={{ color: GREEN }}>▲</span> up · <span style={{ color: RED }}>▼</span> down vs prev week
-              </span>
-            </div>
-            <EggSizeBars bars={sizeBars} />
-          </div>
+        <div style={cardStyle}>
+          <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)" }}>Egg sizes <span style={{ color: "var(--t4)" }}>· 7d</span></span>
+          <EggSizeBars bars={sizeBars} />
         </div>
 
         <KpiTile label="Broken eggs" value={lastOf(damaged)?.toLocaleString() ?? null} delta={flowChange(damaged)} goodUp={false} />
