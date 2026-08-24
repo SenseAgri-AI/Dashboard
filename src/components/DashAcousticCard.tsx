@@ -12,7 +12,6 @@ const HOUR_MS = 3_600_000;
 
 type NoiseRow = { time: string; mean: number | null; max: number | null; baseline: number | null };
 type AnomalyRow = { time: string; peakDb: number | null; baselineDb: number | null; clipKey: string | null; clipSeconds: number | null };
-type AnomPt = { t: number; y: number; a: AnomalyRow };
 type Welfare = { label: string; color: string };
 
 const dbFmt = (v: number | null | undefined) => (v == null ? "—" : `${Math.round(v * 10) / 10} dB`);
@@ -83,6 +82,24 @@ function computeWelfare(series: NoiseRow[], anomalies: AnomalyRow[], now: number
   return { label: "Calm flock", color: GREEN };
 }
 
+// Custom tooltip so the TIME always shows: read it straight from the hovered point (the auto-label is
+// unreliable here because the Scatter carries its own data).
+function NoiseTooltip(props: { active?: boolean; payload?: Array<{ name?: string; value?: number | string; payload?: { t?: number } }> }) {
+  const { active, payload } = props;
+  if (!active || !payload || !payload.length) return null;
+  const noise = payload.find((p) => p.name === "Noise") ?? payload[0];
+  const t = noise?.payload?.t;
+  if (t == null) return null;
+  return (
+    <div style={{ background: "#002E35", border: `1px solid ${LINE}`, borderRadius: 6, padding: "6px 10px", fontSize: 12, color: "#fff" }}>
+      <div style={{ color: "#8fd0d8", fontWeight: 700, marginBottom: 2 }}>
+        {new Date(t).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false })}
+      </div>
+      <div style={{ fontWeight: 800 }}>Noise {dbFmt(Number(noise?.value))}</div>
+    </div>
+  );
+}
+
 function AnomalyDot(props: { cx?: number; cy?: number }) {
   const { cx, cy } = props;
   if (cx == null || cy == null) return <g />;
@@ -145,16 +162,20 @@ export default function DashAcousticCard({ narrow }: { narrow?: boolean }) {
     return { yMin: Math.round(lo - range * 0.25), yMax: Math.round(hi + range * 0.2) };
   }, [data]);
 
-  // Anomaly dots sit ON the smoothed line (at the noise level at that moment) — markers of when a
-  // spike/clip occurred; the actual loud spike is in the clip (tap to hear).
-  const anomPts = useMemo<AnomPt[]>(() => {
-    if (!data.length) return [];
-    return anomalies.filter((a) => a.peakDb != null || a.baselineDb != null).map((a) => {
+  // Merge anomalies onto the nearest smoothed point of the SAME dataset (as an `anom` field) — the dots
+  // sit on the line, and because it's one dataset the tooltip tracks the cursor instead of sticking to
+  // an anomaly. The actual loud spike is in the clip (tap to hear).
+  const chartData = useMemo(() => {
+    const rows = data.map((d) => ({ ...d, anom: null as number | null, a: null as AnomalyRow | null }));
+    if (!rows.length) return rows;
+    for (const a of anomalies) {
+      if (a.peakDb == null && a.baselineDb == null) continue;
       const t = new Date(a.time).getTime();
-      let y = data[0].mean, bd = Infinity;
-      for (const d of data) { const dd = Math.abs(d.t - t); if (dd < bd) { bd = dd; y = d.mean; } }
-      return { t, y, a };
-    });
+      let bi = 0, bd = Infinity;
+      for (let i = 0; i < rows.length; i++) { const dd = Math.abs(rows[i].t - t); if (dd < bd) { bd = dd; bi = i; } }
+      rows[bi].anom = rows[bi].mean; rows[bi].a = a;
+    }
+    return rows;
   }, [anomalies, data]);
 
   const current = data.length ? data[data.length - 1].mean : null;
@@ -183,7 +204,7 @@ export default function DashAcousticCard({ narrow }: { narrow?: boolean }) {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 10, right: 12, bottom: 2, left: -12 }}>
+            <ComposedChart data={chartData} margin={{ top: 10, right: 12, bottom: 2, left: -12 }}>
               <defs>
                 <linearGradient id="sa-noise-heat" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#DC2626" stopOpacity={0.5} />
@@ -196,15 +217,11 @@ export default function DashAcousticCard({ narrow }: { narrow?: boolean }) {
                 tickFormatter={(ms) => new Date(ms).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false })}
                 tick={{ fontSize: 9, fill: AXIS }} axisLine={false} tickLine={false} minTickGap={50} />
               <YAxis tick={{ fontSize: 9, fill: AXIS }} axisLine={false} tickLine={false} width={40} unit=" dB" domain={[yMin, yMax]} allowDataOverflow />
-              <Tooltip cursor={{ stroke: LINE, strokeWidth: 1.25, strokeDasharray: "4 3" }}
-                labelFormatter={(ms) => new Date(Number(ms)).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false })}
-                formatter={(v, name) => (name === "Anomaly" ? null : [dbFmt(Number(v)), "Noise"])}
-                contentStyle={{ background: "#002E35", border: `1px solid ${LINE}`, borderRadius: 6, fontSize: 12, color: "#fff", padding: "6px 10px" }}
-                labelStyle={{ color: "#8fd0d8", fontWeight: 700, marginBottom: 2 }} />
+              <Tooltip cursor={{ stroke: LINE, strokeWidth: 1.25, strokeDasharray: "4 3" }} content={<NoiseTooltip />} />
               <Area type="monotone" dataKey="mean" name="Noise" stroke={LINE} strokeWidth={2} fill="url(#sa-noise-heat)" fillOpacity={1} baseValue={yMin} dot={false} connectNulls isAnimationActive={false} />
-              <Scatter name="Anomaly" data={anomPts} dataKey="y" isAnimationActive={false}
+              <Scatter name="Anomaly" dataKey="anom" isAnimationActive={false}
                 shape={(p) => <AnomalyDot {...(p as { cx?: number; cy?: number })} />}
-                onClick={(d) => { const a = (d as unknown as { payload?: AnomPt }).payload?.a; if (a) play(a); }} />
+                onClick={(d) => { const a = (d as unknown as { payload?: { a?: AnomalyRow | null } }).payload?.a; if (a) play(a); }} />
             </ComposedChart>
           </ResponsiveContainer>
         )}
