@@ -73,7 +73,7 @@ function KpiTile({ label, value, delta, goodUp }: {
   label: string; value: string | null; delta: number | null; goodUp: boolean;
 }) {
   return (
-    <div style={{ ...cardStyle, alignItems: "center", textAlign: "center" }}>
+    <div style={cardStyle}>
       <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)" }}>{label}</span>
       <div style={{ fontFamily: "var(--font-d)", fontSize: 27, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1, color: value == null ? "var(--t4)" : INK }}>{value ?? "—"}</div>
       <Trend delta={delta} goodUp={goodUp} />
