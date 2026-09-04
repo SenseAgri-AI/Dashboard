@@ -14,14 +14,26 @@ export interface ProductionData {
   daily: DailyEntry[];
 }
 
-const INK = "#002E35", TEAL = "#2A8E9A", GOLD = "#7A5C00", GREEN = "#16A34A", RED = "#DC2626";
-const SIZE_RAMP = ["#BFE0E4", "#8CC7CE", "#57ABB4", "#2A8E9A", "#1B6B74"]; // S→J, one hue light→dark
+const INK = "#002E35", TEAL = "#2A8E9A", NAVY = "#2B3F66", GREEN = "#16A34A", RED = "#DC2626", NEUTRAL = "#6B7C80";
+
+const cardStyle: React.CSSProperties = {
+  background: "#fff",
+  border: "1px solid rgba(0,0,0,0.07)",
+  borderRadius: 12,
+  boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04)",
+  padding: "13px 15px",
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+  minWidth: 0,
+};
 
 const fmtR = (v: number) => `R ${v.toLocaleString("en-ZA", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-ZA", { day: "numeric", month: "short" });
 const fmtDateFull = (d: string) => new Date(d).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
 const mean = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
 const lastOf = (a: number[]): number | null => (a.length ? a[a.length - 1] : null);
+const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
 
 // % change: mean(last 7) vs mean(prior 7) for flows.
 function flowChange(vals: number[]): number | null {
@@ -39,68 +51,98 @@ function stockChange(vals: number[]): number | null {
 }
 const sumChange = (vals: number[]): number | null => {
   if (vals.length < 8) return null;
-  const p = vals.slice(-14, -7).reduce((x, y) => x + y, 0);
-  return p === 0 ? null : ((vals.slice(-7).reduce((x, y) => x + y, 0) - p) / p) * 100;
+  const p = sum(vals.slice(-14, -7));
+  return p === 0 ? null : ((sum(vals.slice(-7)) - p) / p) * 100;
 };
 
-// Bare inline-SVG sparkline (last N values), scales to tile width.
-function MiniSpark({ values, color, height = 34 }: { values: number[]; color: string; height?: number }) {
-  const vals = values.filter((v) => Number.isFinite(v)).slice(-14);
-  if (vals.length < 2) return <div style={{ height }} />;
-  const min = Math.min(...vals), max = Math.max(...vals), range = max - min || 1;
-  const W = 100, step = W / (vals.length - 1), pad = 3;
-  const y = (v: number) => (height - pad - ((v - min) / range) * (height - 2 * pad)).toFixed(1);
-  const pts = vals.map((v, i) => `${(i * step).toFixed(1)},${y(v)}`);
-  const lastX = ((vals.length - 1) * step).toFixed(1);
-  return (
-    <svg width="100%" height={height} viewBox={`0 0 ${W} ${height}`} preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }}>
-      <path d={`M 0,${height} L ${pts.join(" L ")} L ${W},${height} Z`} fill={color} fillOpacity={0.1} />
-      <path d={`M ${pts.join(" L ")}`} fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-      <circle cx={lastX} cy={y(vals[vals.length - 1])} r={2.2} fill={color} vectorEffect="non-scaling-stroke" />
-    </svg>
-  );
-}
-
-function DeltaPill({ delta, goodUp }: { delta: number | null; goodUp: boolean }) {
-  if (delta == null || !Number.isFinite(delta)) return null;
+function Trend({ delta, goodUp, compact = false }: { delta: number | null; goodUp: boolean; compact?: boolean }) {
+  if (delta == null || !Number.isFinite(delta)) return <span style={{ fontSize: compact ? 9 : 11, color: "var(--t4)", fontWeight: 700 }}>—</span>;
   const up = delta > 0, flat = Math.abs(delta) < 0.05;
   const good = flat ? null : up === goodUp;
-  const color = good == null ? "#6B7C80" : good ? GREEN : RED;
-  const bg = good == null ? "rgba(107,124,128,0.1)" : good ? "rgba(22,163,74,0.1)" : "rgba(220,38,38,0.1)";
+  const color = good == null ? NEUTRAL : good ? GREEN : RED;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 2, fontSize: 11, fontWeight: 800, color, background: bg, padding: "1px 7px", borderRadius: 20, whiteSpace: "nowrap" }}>
-      {flat ? "▬" : up ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}%
+    <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4, whiteSpace: "nowrap" }}>
+      <span style={{ fontSize: compact ? 9 : 11, fontWeight: 800, color }}>{flat ? "±" : up ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}%</span>
+      {!compact && <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.05em", color: "var(--t4)" }}>7D</span>}
     </span>
   );
 }
 
-function KpiTile({ label, value, accent, delta, goodUp, sparkValues, sparkColor, extra }: {
-  label: string; value: string | null; accent: string; delta: number | null; goodUp: boolean;
-  sparkValues: number[]; sparkColor: string; extra?: React.ReactNode;
+function MiniSpark({ values, compact = false }: { values: number[]; compact?: boolean }) {
+  const points = values.filter(Number.isFinite).slice(-14);
+  const width = compact ? 30 : 54, height = 23, pad = 2;
+  if (points.length < 2) return <span style={{ width, height, display: "block" }} />;
+  const low = Math.min(...points), high = Math.max(...points), span = Math.max(0.001, high - low);
+  const x = (index: number) => pad + (index / (points.length - 1)) * (width - pad * 2);
+  const y = (value: number) => pad + (1 - (value - low) / span) * (height - pad * 2);
+  const path = points.map((point, index) => `${index ? "L" : "M"}${x(index).toFixed(1)} ${y(point).toFixed(1)}`).join(" ");
+  const area = `${path} L${x(points.length - 1).toFixed(1)} ${height - pad} L${x(0).toFixed(1)} ${height - pad} Z`;
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden style={{ display: "block", flexShrink: 1, minWidth: compact ? 20 : 40 }}>
+      <path d={area} fill={NAVY} opacity="0.08" />
+      <path d={path} fill="none" stroke={NAVY} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={x(points.length - 1)} cy={y(points[points.length - 1])} r="2" fill={TEAL} />
+    </svg>
+  );
+}
+
+function KpiTile({ label, value, delta, goodUp, values, compact = false }: {
+  label: string; value: string | null; delta: number | null; goodUp: boolean; values: number[]; compact?: boolean;
 }) {
   return (
-    <div style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.07)", borderRadius: 12, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04)", padding: "13px 15px", display: "flex", flexDirection: "column", gap: 7, minWidth: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)" }}>{label}</span>
-        <DeltaPill delta={delta} goodUp={goodUp} />
+    <div style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.07)", borderRadius: 12, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04)", padding: compact ? "11px 10px" : "13px 15px", display: "flex", flexDirection: "column", gap: 7, minWidth: 0 }}>
+      <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)" }}>{label}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: compact ? 5 : 8, flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: "var(--font-d)", fontSize: compact ? 20 : 25, fontWeight: 800, letterSpacing: "-0.025em", lineHeight: 1, color: value == null ? "var(--t4)" : INK, whiteSpace: "nowrap", flexShrink: 0 }}>{value ?? "—"}</div>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: compact ? 3 : 6, minWidth: 0 }}>
+          <MiniSpark values={values} compact={compact} />
+          <Trend delta={delta} goodUp={goodUp} compact={compact} />
+        </div>
       </div>
-      <div style={{ fontFamily: "var(--font-d)", fontSize: 27, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1, color: value == null ? "var(--t4)" : accent }}>{value ?? "—"}</div>
-      {extra ?? <MiniSpark values={sparkValues} color={sparkColor} />}
     </div>
   );
 }
 
-function EggSizeHistogram({ sizes }: { sizes: { label: string; value: number }[] }) {
-  const max = Math.max(1, ...sizes.map((s) => s.value));
+const compact = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : `${n}`);
+
+function EggSizeBars({ bars }: { bars: { label: string; last: number; prior: number }[] }) {
+  const rows = bars.map((bar) => {
+    const total = Math.max(bar.last, bar.prior);
+    const delta = bar.last - bar.prior;
+    const pct = bar.prior === 0 ? null : (delta / bar.prior) * 100;
+    return { label: bar.label, last: bar.last, total, delta, pct };
+  });
+  const max = Math.max(1, ...rows.map((row) => row.total));
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 58 }}>
-      <div style={{ flex: 1, display: "flex", alignItems: "flex-end", gap: 7 }}>
-        {sizes.map((s, i) => (
-          <div key={s.label} title={`${s.label}: ${s.value.toLocaleString()}`} style={{ flex: 1, height: `${(s.value / max) * 100}%`, minHeight: 3, background: SIZE_RAMP[i], borderRadius: "3px 3px 0 0" }} />
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 60 }}>
+      <div style={{ display: "flex", gap: 4 }}>
+        {rows.map((row) => (
+          <div key={row.label} style={{ flex: 1, textAlign: "center", fontSize: 9, fontWeight: 800, color: INK, fontVariantNumeric: "tabular-nums" }}>
+            {compact(row.last)}
+          </div>
         ))}
       </div>
-      <div style={{ display: "flex", gap: 7, marginTop: 5 }}>
-        {sizes.map((s) => <div key={s.label} style={{ flex: 1, textAlign: "center", fontSize: 9.5, fontWeight: 800, color: "var(--t2)" }}>{s.label}</div>)}
+      <div style={{ flex: 1, display: "flex", alignItems: "flex-end", gap: 4, minHeight: 32 }}>
+        {rows.map((row) => {
+          const capPct = row.total > 0 ? (Math.abs(row.delta) / row.total) * 100 : 0;
+          const showCap = Math.abs(row.delta) > 0 && capPct >= 1;
+          return (
+            <div
+              key={row.label}
+              title={`${row.label}: ${row.last.toLocaleString()} eggs (last 7 days)${row.pct != null ? ` · ${row.pct > 0 ? "+" : ""}${row.pct.toFixed(0)}% vs prev week` : ""}`}
+              style={{ flex: 1, display: "flex", alignItems: "flex-end", justifyContent: "center", height: "100%" }}
+            >
+              <div style={{ width: "82%", maxWidth: 22, height: `${Math.max(8, (row.total / max) * 100)}%`, display: "flex", flexDirection: "column", borderRadius: "4px 4px 0 0", overflow: "hidden" }}>
+                {showCap && <div style={{ height: `${capPct}%`, background: row.delta > 0 ? GREEN : RED }} />}
+                <div style={{ flex: 1, background: NAVY }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 4, marginTop: 5 }}>
+        {rows.map((row) => <div key={row.label} style={{ flex: 1, textAlign: "center", fontSize: 9.5, fontWeight: 800, color: "var(--t2)" }}>{row.label}</div>)}
       </div>
     </div>
   );
@@ -112,13 +154,13 @@ export function DashKpiGrid({ production, narrow }: { production: ProductionData
 
   const liveHens = col("liveHens"), hdep = col("hdep"), eggs = col("eggs"), weight = col("avgWeight"), damaged = col("damaged"), rev = col("revenue");
   const weeklyRev = rev.slice(-7).reduce((a, b) => a + b, 0);
-  const e = production?.eggs;
-  const sizes = e ? [
-    { label: "S", value: e.small }, { label: "M", value: e.medium }, { label: "L", value: e.large },
-    { label: "XL", value: e.xl }, { label: "J", value: e.jumbo },
-  ] : [];
-
-  const span2: React.CSSProperties = { gridColumn: "span 2" };
+  const weeklyRevSeries = rev.map((_, index) => sum(rev.slice(Math.max(0, index - 6), index + 1)));
+  const sizeBars = ([
+    ["S", "small"], ["M", "medium"], ["L", "large"], ["XL", "xl"], ["J", "jumbo"],
+  ] as [string, keyof DailyEntry][]).map(([label, key]) => {
+    const series = col(key);
+    return { label, last: sum(series.slice(-7)), prior: sum(series.slice(-14, -7)) };
+  });
 
   return (
     <div>
@@ -132,21 +174,21 @@ export function DashKpiGrid({ production, narrow }: { production: ProductionData
         </span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: narrow ? "repeat(2, minmax(0,1fr))" : "repeat(4, minmax(0,1fr))", gap: 10, alignItems: "stretch" }}>
-        <KpiTile label="Live hens" value={lastOf(liveHens)?.toLocaleString() ?? null} accent={INK} delta={stockChange(liveHens)} goodUp sparkValues={liveHens} sparkColor={TEAL} />
-        <KpiTile label="Hen-day %" value={lastOf(hdep) != null ? `${lastOf(hdep)!.toFixed(1)}%` : null} accent={INK} delta={flowChange(hdep)} goodUp sparkValues={hdep} sparkColor={TEAL} />
-        <KpiTile label="Egg count" value={lastOf(eggs)?.toLocaleString() ?? null} accent={INK} delta={flowChange(eggs)} goodUp sparkValues={eggs} sparkColor={TEAL} />
-        <KpiTile label="Egg weight" value={lastOf(weight) != null ? `${lastOf(weight)!.toFixed(1)} g` : null} accent={TEAL} delta={flowChange(weight)} goodUp sparkValues={weight} sparkColor={TEAL} />
+        <KpiTile label="Live hens" value={lastOf(liveHens)?.toLocaleString() ?? null} delta={stockChange(liveHens)} goodUp values={liveHens} compact={narrow} />
+        <KpiTile label="Hen-day %" value={lastOf(hdep) != null ? `${lastOf(hdep)!.toFixed(1)}%` : null} delta={flowChange(hdep)} goodUp values={hdep} compact={narrow} />
+        <KpiTile label="Egg count" value={lastOf(eggs)?.toLocaleString() ?? null} delta={flowChange(eggs)} goodUp values={eggs} compact={narrow} />
+        <KpiTile label="Egg weight" value={lastOf(weight) != null ? `${lastOf(weight)!.toFixed(1)} g` : null} delta={flowChange(weight)} goodUp values={weight} compact={narrow} />
 
-        <div style={span2}>
-          <div style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.07)", borderRadius: 12, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04)", padding: "13px 15px", height: "100%", display: "flex", flexDirection: "column", gap: 7, minWidth: 0 }}>
-            <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)" }}>Egg sizes {production ? `· ${fmtDate(production.date)}` : ""}</span>
-            <EggSizeHistogram sizes={sizes} />
-          </div>
+        <div style={cardStyle}>
+          <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)" }}>
+            Egg sizes <span style={{ color: "var(--t4)" }}>· 7d</span>
+          </span>
+          <EggSizeBars bars={sizeBars} />
         </div>
 
-        <KpiTile label="Broken eggs" value={lastOf(damaged)?.toLocaleString() ?? null} accent={RED} delta={flowChange(damaged)} goodUp={false} sparkValues={damaged} sparkColor={RED} />
-        <KpiTile label="Daily revenue" value={lastOf(rev) != null ? fmtR(lastOf(rev)!) : null} accent={GOLD} delta={flowChange(rev)} goodUp sparkValues={rev} sparkColor={GOLD} />
-        <KpiTile label="Weekly revenue" value={rev.length ? fmtR(weeklyRev) : null} accent={GOLD} delta={sumChange(rev)} goodUp sparkValues={rev} sparkColor={GOLD} />
+        <KpiTile label="Broken eggs" value={lastOf(damaged)?.toLocaleString() ?? null} delta={flowChange(damaged)} goodUp={false} values={damaged} compact={narrow} />
+        <KpiTile label="Daily revenue" value={lastOf(rev) != null ? fmtR(lastOf(rev)!) : null} delta={flowChange(rev)} goodUp values={rev} compact={narrow} />
+        <KpiTile label="Weekly revenue" value={rev.length ? fmtR(weeklyRev) : null} delta={sumChange(rev)} goodUp values={weeklyRevSeries} compact={narrow} />
       </div>
       {production && (
         <div style={{ fontSize: 10.5, color: "var(--t3)", marginTop: 8, textAlign: "right" }}>
