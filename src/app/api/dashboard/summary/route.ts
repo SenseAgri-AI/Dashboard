@@ -86,6 +86,24 @@ function rebaseCumulative(points: { time: string; value: number; cumulative: num
   });
 }
 
+function dailyMeterTotals(points: { time: string; value: number }[], timezoneOffset: number): { date: string; value: number }[] {
+  const offsetMs = timezoneOffset * 3_600_000;
+  const today = new Date(Date.now() + offsetMs).toISOString().slice(0, 10);
+  const totals = new Map<string, number>();
+  for (const point of points) {
+    const timestamp = new Date(point.time).getTime();
+    if (!Number.isFinite(timestamp)) continue;
+    const date = new Date(timestamp + offsetMs).toISOString().slice(0, 10);
+    totals.set(date, (totals.get(date) ?? 0) + point.value);
+  }
+  // Seven completed farm days; today remains available in the intraday series.
+  return [...totals.entries()]
+    .filter(([date]) => date < today)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-7)
+    .map(([date, value]) => ({ date, value: Math.round(value * 10) / 10 }));
+}
+
 function isNightSast(): boolean {
   const hour = new Date(Date.now() + SAST_OFFSET_MS).getUTCHours();
   return hour >= 20 || hour < 6;
@@ -198,7 +216,7 @@ export async function GET() {
         FROM sensors
         WHERE farm_id = '${farm.farmId}'
           AND device_id = '${farm.waterDeviceId}'
-          AND time > now() - INTERVAL '25 hours'
+          AND time > now() - INTERVAL '9 days'
         GROUP BY bucket
         ORDER BY bucket ASC
       `),
@@ -209,7 +227,7 @@ export async function GET() {
         FROM sensors
         WHERE farm_id = '${farm.farmId}'
           AND device_id = '${farm.feedDeviceId}'
-          AND time > now() - INTERVAL '25 hours'
+          AND time > now() - INTERVAL '9 days'
         GROUP BY bucket
         ORDER BY bucket ASC
       `),
@@ -283,9 +301,10 @@ export async function GET() {
     );
     const waterVals = waterSpark.map((pt) => pt.value);
     const waterCurrent = waterSpark.length > 0 ? waterLast3h : null;
-    const feedSpark = rebaseCumulative(
-      cumulativeMeterPoints(feedSparkRows).filter((pt) => new Date(pt.time).getTime() >= cutoff24h)
-    );
+    const allFeedPoints = cumulativeMeterPoints(feedSparkRows);
+    const feedSpark = rebaseCumulative(allFeedPoints.filter((pt) => new Date(pt.time).getTime() >= cutoff24h));
+    const waterDaily = dailyMeterTotals(allWaterPoints, farm.timezoneOffset);
+    const feedDaily = dailyMeterTotals(allFeedPoints, farm.timezoneOffset);
 
     const tvocStats = stats(tvocVals);
     const waterStats = stats(waterVals);
@@ -361,8 +380,12 @@ export async function GET() {
         },
       ],
       operational: {
+        water: {
+          daily: waterDaily,
+        },
         feed: {
           sparkline: feedSpark,
+          daily: feedDaily,
         },
       },
       updatedAt: new Date().toISOString(),

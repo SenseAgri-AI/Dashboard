@@ -1,6 +1,7 @@
 "use client";
 
 import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip } from "recharts";
+import { thi, thiZone } from "@/lib/thi";
 
 // Environment sensor tiles (2 per row): a compact trend chart with the NORMAL band shaded (so
 // too-low / too-high is obvious), a threshold line where relevant, time on the x-axis and the
@@ -137,15 +138,28 @@ export default function DashEnvCol({ env, narrow }: { env: EnvData | null; narro
   const tvocMean = env?.tvoc.mean ?? 0, tvocStd = env?.tvoc.std ?? 0;
   const tvocScale = autoScale([...tvocVals, Math.max(0, tvocMean - 2 * tvocStd), tvocMean + 2 * tvocStd], 1);
   const lightScale = autoScale((env?.light?.sparkline ?? []).map((p) => p.value));
+  const tempScale = autoScale((env?.temperature.sparkline ?? []).map((point) => point.value), 1);
+  const humidityScale = autoScale((env?.humidity.sparkline ?? []).map((point) => point.value));
+  const co2Scale = autoScale((env?.co2.sparkline ?? []).map((point) => point.value));
+  const humidityAt = new Map((env?.humidity.sparkline ?? []).map((point) => [point.time, point.value]));
+  const thiSpark = (env?.temperature.sparkline ?? []).flatMap((point) => {
+    const rh = humidityAt.get(point.time);
+    return rh == null ? [] : [{ time: point.time, value: thi(point.value, rh) }];
+  });
+  const currentThi = env?.temperature.current != null && env?.humidity.current != null ? thi(env.temperature.current, env.humidity.current) : null;
+  const currentThiZone = currentThi == null ? undefined : thiZone(currentThi);
+  const thiStatus = currentThiZone === "extreme" || currentThiZone === "severe" ? "danger" : currentThiZone === "moderate" ? "warning" : currentThiZone ? "good" : undefined;
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "repeat(2, minmax(0,1fr))", gap: 12 }}>
-      <EnvTile name="Temperature" value={r1(env?.temperature.current)} unit="°C" status={env?.temperature.status} normal="18–26°C"
-        chart={<EnvChart data={env?.temperature.sparkline ?? []} domain={[8, 36]} ticks={[10, 20, 30]} band={[18, 26]} tipUnit="°C" height={H} />} />
-      <EnvTile name="Humidity" value={r0(env?.humidity.current)} unit="% RH" status={env?.humidity.status} normal="50–70%"
-        chart={<EnvChart data={env?.humidity.sparkline ?? []} domain={[20, 105]} ticks={[30, 60, 90]} band={[50, 70]} tipUnit="%" height={H} />} />
-      <EnvTile name="CO₂ / Ventilation" value={r0(env?.co2.current)} unit="ppm" status={env?.co2.status} normal="max 1,400"
-        chart={<EnvChart data={env?.co2.sparkline ?? []} domain={[300, 2200]} ticks={[500, 1200, 1900]} threshold={1400} tipUnit="ppm" height={H} />} />
+      <EnvTile name="Temperature–humidity index" value={r1(currentThi)} unit="°C effective" status={thiStatus} normal="comfort <27.8"
+        chart={<EnvChart data={thiSpark} domain={[14, 34]} ticks={[16, 24, 32]} band={[18, 27.8]} threshold={27.8} tipUnit="°C-eff" height={H} />} />
+      <EnvTile name="Temperature" value={r1(env?.temperature.current)} unit="°C" normal="24h trend"
+        chart={<EnvChart data={env?.temperature.sparkline ?? []} domain={tempScale.domain} ticks={tempScale.ticks} tipUnit="°C" height={H} />} />
+      <EnvTile name="Humidity" value={r0(env?.humidity.current)} unit="% RH" normal="24h trend"
+        chart={<EnvChart data={env?.humidity.sparkline ?? []} domain={humidityScale.domain} ticks={humidityScale.ticks} tipUnit="%" height={H} />} />
+      <EnvTile name="CO₂ / Ventilation" value={r0(env?.co2.current)} unit="ppm" normal="24h trend"
+        chart={<EnvChart data={env?.co2.sparkline ?? []} domain={co2Scale.domain} ticks={co2Scale.ticks} tipUnit="ppm" height={H} />} />
       <EnvTile name="Air quality" value={env?.tvoc.current != null ? `${Math.round(env.tvoc.current * 100) / 100}` : null} unit="TVOC" normal="±2σ baseline"
         chart={<EnvChart data={env?.tvoc.sparkline ?? []} domain={tvocScale.domain} ticks={tvocScale.ticks} band={tvocStd > 0 ? [Math.max(0, Math.round((tvocMean - 2 * tvocStd) * 10) / 10), Math.round((tvocMean + 2 * tvocStd) * 10) / 10] : undefined} tipUnit="idx" height={H} />} />
 

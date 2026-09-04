@@ -15,7 +15,7 @@ export interface ProductionData {
 }
 
 // Consistent palette: near-black values, navy bars, green/red only for direction.
-const INK = "#002E35", NAVY = "#2B3F66", GREEN = "#16A34A", RED = "#DC2626", NEUTRAL = "#6B7C80";
+const INK = "#002E35", TEAL = "#2A8E9A", NAVY = "#2B3F66", GREEN = "#16A34A", RED = "#DC2626", NEUTRAL = "#6B7C80";
 
 const cardStyle: React.CSSProperties = {
   background: "#fff", border: "1px solid rgba(0,0,0,0.07)", borderRadius: 12,
@@ -53,30 +53,53 @@ function sumChange(vals: number[]): number | null {
 
 // 7-day trend: an arrow + %, coloured by whether the move is good (green) or bad (red). Neutral grey
 // when flat or unknown. The "7d" tag says what the % is measured over.
-function Trend({ delta, goodUp }: { delta: number | null; goodUp: boolean }) {
+function Trend({ delta, goodUp, compact = false }: { delta: number | null; goodUp: boolean; compact?: boolean }) {
   if (delta == null || !Number.isFinite(delta)) {
-    return <span style={{ fontSize: 12, color: "var(--t4)", fontWeight: 700 }}>— <span style={{ fontSize: 9, letterSpacing: "0.05em" }}>7D</span></span>;
+    return <span style={{ fontSize: compact ? 9 : 11, color: "var(--t4)", fontWeight: 700, whiteSpace: "nowrap" }}>— {!compact && <span style={{ fontSize: 8, letterSpacing: "0.05em" }}>7D</span>}</span>;
   }
   const up = delta > 0, flat = Math.abs(delta) < 0.05;
   const good = flat ? null : up === goodUp;
   const color = good == null ? NEUTRAL : good ? GREEN : RED;
   return (
-    <span style={{ display: "inline-flex", alignItems: "baseline", gap: 5, whiteSpace: "nowrap" }}>
-      <span style={{ fontSize: 12.5, fontWeight: 800, color }}>{flat ? "±" : up ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}%</span>
-      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.06em", color: "var(--t4)" }}>7D</span>
+    <span style={{ display: "inline-flex", alignItems: "baseline", gap: compact ? 2 : 4, whiteSpace: "nowrap" }}>
+      <span style={{ fontSize: compact ? 9 : 11, fontWeight: 800, color }}>{flat ? "±" : up ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}%</span>
+      {!compact && <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.05em", color: "var(--t4)" }}>7D</span>}
     </span>
   );
 }
 
-// KPI tile: label, a big near-black value, and the 7-day % change. No sparkline — the trend is the number.
-function KpiTile({ label, value, delta, goodUp }: {
-  label: string; value: string | null; delta: number | null; goodUp: boolean;
+function MiniSpark({ values, compact = false }: { values: number[]; compact?: boolean }) {
+  const points = values.filter(Number.isFinite).slice(-14);
+  const width = compact ? 30 : 54, height = 23, pad = 2;
+  if (points.length < 2) return <span style={{ width, height, display: "block" }} />;
+  const low = Math.min(...points), high = Math.max(...points), span = Math.max(0.001, high - low);
+  const x = (index: number) => pad + (index / (points.length - 1)) * (width - pad * 2);
+  const y = (value: number) => pad + (1 - (value - low) / span) * (height - pad * 2);
+  const path = points.map((point, index) => `${index ? "L" : "M"}${x(index).toFixed(1)} ${y(point).toFixed(1)}`).join(" ");
+  const area = `${path} L${x(points.length - 1).toFixed(1)} ${height - pad} L${x(0).toFixed(1)} ${height - pad} Z`;
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden style={{ display: "block", flexShrink: 1, minWidth: compact ? 20 : 40 }}>
+      <path d={area} fill={NAVY} opacity="0.08" />
+      <path d={path} fill="none" stroke={NAVY} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={x(points.length - 1)} cy={y(points[points.length - 1])} r="2" fill={TEAL} />
+    </svg>
+  );
+}
+
+// KPI tile: label, value, miniature history and 7-day direction in one compact row.
+function KpiTile({ label, value, delta, goodUp, values, compact = false }: {
+  label: string; value: string | null; delta: number | null; goodUp: boolean; values: number[]; compact?: boolean;
 }) {
   return (
-    <div style={cardStyle}>
+    <div style={{ ...cardStyle, padding: compact ? "11px 10px" : cardStyle.padding }}>
       <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)" }}>{label}</span>
-      <div style={{ fontFamily: "var(--font-d)", fontSize: 27, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1, color: value == null ? "var(--t4)" : INK }}>{value ?? "—"}</div>
-      <Trend delta={delta} goodUp={goodUp} />
+      <div style={{ display: "flex", alignItems: "center", gap: compact ? 5 : 8, flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: "var(--font-d)", fontSize: compact ? 20 : 25, fontWeight: 800, letterSpacing: "-0.025em", lineHeight: 1, color: value == null ? "var(--t4)" : INK, whiteSpace: "nowrap", flexShrink: 0 }}>{value ?? "—"}</div>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: compact ? 3 : 6, minWidth: 0 }}>
+          <MiniSpark values={values} compact={compact} />
+          <Trend delta={delta} goodUp={goodUp} compact={compact} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -131,6 +154,7 @@ export function DashKpiGrid({ production, narrow }: { production: ProductionData
 
   const liveHens = col("liveHens"), hdep = col("hdep"), eggs = col("eggs"), weight = col("avgWeight"), damaged = col("damaged"), rev = col("revenue");
   const weeklyRev = sum(rev.slice(-7));
+  const weeklyRevSeries = rev.map((_, index) => sum(rev.slice(Math.max(0, index - 6), index + 1)));
 
   // Per-size: last-7-day total vs the prior 7 days (drives the stacked green/red change segment).
   const sizeBars = ([["S", "small"], ["M", "medium"], ["L", "large"], ["XL", "xl"], ["J", "jumbo"]] as [string, keyof DailyEntry][])
@@ -151,19 +175,19 @@ export function DashKpiGrid({ production, narrow }: { production: ProductionData
         </span>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: narrow ? "repeat(2, minmax(0,1fr))" : "repeat(4, minmax(0,1fr))", gap: 10, alignItems: "stretch" }}>
-        <KpiTile label="Live hens" value={lastOf(liveHens)?.toLocaleString() ?? null} delta={stockChange(liveHens)} goodUp />
-        <KpiTile label="Hen-day %" value={lastOf(hdep) != null ? `${lastOf(hdep)!.toFixed(1)}%` : null} delta={flowChange(hdep)} goodUp />
-        <KpiTile label="Egg count" value={lastOf(eggs)?.toLocaleString() ?? null} delta={flowChange(eggs)} goodUp />
-        <KpiTile label="Egg weight" value={lastOf(weight) != null ? `${lastOf(weight)!.toFixed(1)} g` : null} delta={flowChange(weight)} goodUp />
+        <KpiTile label="Live hens" value={lastOf(liveHens)?.toLocaleString() ?? null} delta={stockChange(liveHens)} goodUp values={liveHens} compact={narrow} />
+        <KpiTile label="Hen-day %" value={lastOf(hdep) != null ? `${lastOf(hdep)!.toFixed(1)}%` : null} delta={flowChange(hdep)} goodUp values={hdep} compact={narrow} />
+        <KpiTile label="Egg count" value={lastOf(eggs)?.toLocaleString() ?? null} delta={flowChange(eggs)} goodUp values={eggs} compact={narrow} />
+        <KpiTile label="Egg weight" value={lastOf(weight) != null ? `${lastOf(weight)!.toFixed(1)} g` : null} delta={flowChange(weight)} goodUp values={weight} compact={narrow} />
 
         <div style={cardStyle}>
           <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)" }}>Egg sizes <span style={{ color: "var(--t4)" }}>· 7d</span></span>
           <EggSizeBars bars={sizeBars} />
         </div>
 
-        <KpiTile label="Broken eggs" value={lastOf(damaged)?.toLocaleString() ?? null} delta={flowChange(damaged)} goodUp={false} />
-        <KpiTile label="Daily revenue" value={lastOf(rev) != null ? fmtR(lastOf(rev)!) : null} delta={flowChange(rev)} goodUp />
-        <KpiTile label="Weekly revenue" value={rev.length ? fmtR(weeklyRev) : null} delta={sumChange(rev)} goodUp />
+        <KpiTile label="Broken eggs" value={lastOf(damaged)?.toLocaleString() ?? null} delta={flowChange(damaged)} goodUp={false} values={damaged} compact={narrow} />
+        <KpiTile label="Daily revenue" value={lastOf(rev) != null ? fmtR(lastOf(rev)!) : null} delta={flowChange(rev)} goodUp values={rev} compact={narrow} />
+        <KpiTile label="Weekly revenue" value={rev.length ? fmtR(weeklyRev) : null} delta={sumChange(rev)} goodUp values={weeklyRevSeries} compact={narrow} />
       </div>
       {production && (
         <div style={{ fontSize: 10.5, color: "var(--t3)", marginTop: 8, textAlign: "right" }}>

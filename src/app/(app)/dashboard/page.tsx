@@ -3,18 +3,28 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { type AlertItem } from "@/components/DashAlertRow";
-import DashAlertChat from "@/components/DashAlertChat";
 import type { Alert, AlertSeverity } from "@/lib/alerts";
 import DashAcousticCard from "@/components/DashAcousticCard";
 import DashSleepScore from "@/components/DashSleepScore";
-import DashEnvCol, { type EnvData } from "@/components/DashEnvCol";
+import DashEnvCol, { type EnvData, type SparklinePoint } from "@/components/DashEnvCol";
 import { DashKpiGrid, type ProductionData } from "@/components/DashMetricCol";
 import DashResourceHealthMockup from "@/components/DashResourceHealthMockup";
+import DashSiloLevels, { type SiloLevelsData } from "@/components/DashSiloLevels";
+import DashFlags from "@/components/DashFlags";
+import DashDiseaseDetection from "@/components/DashDiseaseDetection";
+import DashViewNav, { type DashboardView } from "@/components/DashViewNav";
+import DashFarmStatus from "@/components/DashFarmStatus";
+import DashIntakeRates from "@/components/DashIntakeRates";
+import DashWeeklyIntake, { type DailyIntakePoint } from "@/components/DashWeeklyIntake";
 
 interface DashboardSummary {
   env: EnvData;
   metrics: { vapour_pressure: number | null };
   alerts: AlertItem[];
+  operational?: {
+    water: { daily: DailyIntakePoint[] };
+    feed: { sparkline: SparklinePoint[]; daily: DailyIntakePoint[] };
+  };
   updatedAt: string;
 }
 
@@ -38,18 +48,21 @@ export default function DashboardPage() {
   const router = useRouter();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [production, setProduction] = useState<ProductionData | null>(null);
+  const [siloLevels, setSiloLevels] = useState<SiloLevelsData | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [alertsAt, setAlertsAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<DashboardView>("overview");
   const isNarrow = useIsNarrow();
 
   const fetchAll = useCallback(async () => {
     try {
-      const [summaryRes, productionRes, alertsRes] = await Promise.all([
+      const [summaryRes, productionRes, alertsRes, siloLevelsRes] = await Promise.all([
         fetch("/api/dashboard/summary"),
         fetch("/api/production"),
         fetch("/api/alerts"),
+        fetch("/api/silo-levels"),
       ]);
       if (summaryRes.status === 401) { router.push("/sign-in"); return; }
       if (!summaryRes.ok) {
@@ -60,6 +73,7 @@ export default function DashboardPage() {
       setSummary(await summaryRes.json());
       setError(null);
       if (productionRes.ok) setProduction(await productionRes.json());
+      if (siloLevelsRes.ok) setSiloLevels(await siloLevelsRes.json());
       if (alertsRes.ok) {
         const d: { alerts: Alert[]; updatedAt: string } = await alertsRes.json();
         setAlerts((d.alerts ?? []).map((a) => ({
@@ -89,23 +103,30 @@ export default function DashboardPage() {
 
   return (
     <main className="sa-main" style={{ maxWidth: 1240, width: "100%", margin: "0 auto", gap: 14 }}>
-      {/* Production KPIs */}
-      <DashKpiGrid production={production} narrow={isNarrow} />
+      <DashViewNav active={activeView} onChange={setActiveView} narrow={isNarrow} />
 
-      {/* Concept mockup — feed, water, pH & gut-health signal (illustrative values until calibrated). */}
-      <DashResourceHealthMockup narrow={isNarrow} />
+      {activeView === "overview" && <>
+        <DashKpiGrid production={production} narrow={isNarrow} />
+        <DashFarmStatus alerts={alerts} alertsAt={alertsAt} env={summary?.env ?? null} narrow={isNarrow} onOpenLive={() => setActiveView("live")} onOpenHealth={() => setActiveView("health")} />
+      </>}
 
-      {/* Flock-noise welfare heat */}
-      <DashAcousticCard narrow={isNarrow} />
-
-      {/* Flock night-rest (sleep) score */}
-      <DashSleepScore />
-
-      {/* Environment + alerts */}
-      <div style={{ display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "minmax(0, 1fr) 340px", gap: 14, alignItems: "start" }}>
+      {activeView === "live" && <>
         <DashEnvCol env={summary?.env ?? null} narrow={isNarrow} />
-        <DashAlertChat alerts={alerts} updatedAt={alertsAt} />
-      </div>
+        <DashIntakeRates water={summary?.env.water.sparkline ?? []} feed={summary?.operational?.feed.sparkline ?? []} narrow={isNarrow} />
+        <DashAcousticCard narrow={isNarrow} />
+        <DashSleepScore />
+      </>}
+
+      {activeView === "health" && <>
+        <DashDiseaseDetection narrow={isNarrow} />
+        <DashFlags />
+      </>}
+
+      {activeView === "resources" && <>
+        <DashWeeklyIntake water={summary?.operational?.water.daily ?? []} feed={summary?.operational?.feed.daily ?? []} narrow={isNarrow} />
+        <DashResourceHealthMockup narrow={isNarrow} />
+        <DashSiloLevels data={siloLevels} narrow={isNarrow} />
+      </>}
     </main>
   );
 }

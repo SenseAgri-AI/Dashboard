@@ -106,9 +106,8 @@ export default function DashResourceHealthMockup({ narrow = false }: { narrow?: 
         <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.08em", color: AMBER, background: "#FFFBEB", border: "1px solid #FDE68A", padding: "3px 8px", borderRadius: 20 }}>CONCEPT · SAMPLE DATA</span>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: narrow ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: 10 }}>
         <MetricCard label="Feed conversion" value="2.08" unit="kg/kg egg" status="ON TARGET" detail="Feed used per kilogram of egg mass; lower is more efficient." values={[2.15, 2.12, 2.11, 2.14, 2.09, 2.1, 2.08]} color={GREEN} />
-        <MetricCard label="Water consumption" value="218" unit="mL/hen/day" status="STABLE" detail="Daily drinking water normalised by the live flock count." values={[211, 215, 214, 220, 217, 219, 218]} />
         <MetricCard label="Water : feed" value="1.86" unit="L/kg" status="BALANCED" detail="Useful change signal when water rises or falls faster than feed." values={[1.82, 1.85, 1.83, 1.89, 1.87, 1.86, 1.86]} />
         <MetricCard label="Water pH" value="6.4" unit="pH" status="IN RANGE" detail="Latest line reading; persistent movement matters more than one sample." values={[6.5, 6.4, 6.5, 6.3, 6.4, 6.4, 6.4]} color={GREEN} />
       </div>
