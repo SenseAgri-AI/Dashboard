@@ -9,6 +9,7 @@ import DashAcousticCard from "@/components/DashAcousticCard";
 import DashSleepScore from "@/components/DashSleepScore";
 import DashEnvCol, { type EnvData } from "@/components/DashEnvCol";
 import { DashKpiGrid, type ProductionData } from "@/components/DashMetricCol";
+import DashResourceHealthMockup from "@/components/DashResourceHealthMockup";
 
 interface DashboardSummary {
   env: EnvData;
@@ -90,6 +91,9 @@ export default function DashboardPage() {
     <main className="sa-main" style={{ maxWidth: 1240, width: "100%", margin: "0 auto", gap: 14 }}>
       {/* Production KPIs */}
       <DashKpiGrid production={production} narrow={isNarrow} />
+
+      {/* Concept mockup — feed, water, pH & gut-health signal (illustrative values until calibrated). */}
+      <DashResourceHealthMockup narrow={isNarrow} />
 
       {/* Flock-noise welfare heat */}
       <DashAcousticCard narrow={isNarrow} />
