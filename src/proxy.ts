@@ -6,6 +6,7 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/webhooks(.*)",
+  "/manifest.webmanifest", // PWA manifest must be readable without auth
 ]);
 
 // Next.js 16 middleware convention: this file is `src/proxy.ts` and the handler
