@@ -106,7 +106,6 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
   { key: "breakage_rate", label: "Breakage rate", unit: "%", env: false },
   { key: "hdep", label: "Hen-day %", unit: "%", env: false },
   { key: "water", label: "Drinking rate", unit: "L", env: false },
-  { key: "water_daily", label: "Water / day", unit: "L", env: false },
 ];
 const META: Record<string, { key: string; label: string; unit: string }> = Object.fromEntries(CATALOG.map((c) => [c.key, c]));
 const ENV_OPTIONS = CATALOG.filter((c) => c.env);

@@ -11,7 +11,6 @@ const HDEP = "hdep";
 const CUM_MORT = "cum_mortality"; // cumulative deaths since day 1 / starting flock × 100
 const BREAKAGE = "breakage_rate"; // damaged eggs / total eggs × 100 (per day)
 const NOISE = "noise"; // acoustic sound level (dBFS), from InfluxDB audio_noise — not a silver column
-const WATER_DAILY = "water_daily"; // total litres consumed per day, from the InfluxDB water meter
 const COMPUTED = [HDEP, CUM_MORT, BREAKAGE];
 const round = (v: number | null, dp = 2) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 10 ** dp) / 10 ** dp);
 
@@ -42,10 +41,10 @@ export async function GET(req: NextRequest) {
 
   if (!metrics.length) return NextResponse.json({ error: "metrics required" }, { status: 400 });
   if (!from || !to) return NextResponse.json({ error: "from and to are required" }, { status: 400 });
-  const bad = metrics.find((m) => !COMPUTED.includes(m) && m !== NOISE && m !== WATER_DAILY && !isSilverMetric(m));
+  const bad = metrics.find((m) => !COMPUTED.includes(m) && m !== NOISE && !isSilverMetric(m));
   if (bad) return NextResponse.json({ error: `Unknown metric: ${bad}` }, { status: 400 });
 
-  const rawCols = metrics.filter((m) => !COMPUTED.includes(m) && m !== NOISE && m !== WATER_DAILY);
+  const rawCols = metrics.filter((m) => !COMPUTED.includes(m) && m !== NOISE);
   const wantHdep = metrics.includes(HDEP);
   const wantCumMort = metrics.includes(CUM_MORT);
   const wantBreakage = metrics.includes(BREAKAGE);
@@ -115,35 +114,6 @@ export async function GET(req: NextRequest) {
         }
       } catch (e) {
         console.error("Silver noise merge failed:", e); // other metrics still render
-      }
-    }
-
-    // Daily water: the meter is a cumulative pulse counter — a day's litres = the rise in pulse_total
-    // × litres/pulse. Lives in InfluxDB (not silver), so fetch daily buckets and merge by day.
-    if (metrics.includes(WATER_DAILY) && farm.waterDeviceId) {
-      try {
-        const hours = Math.max(1, Math.ceil((Date.now() - Date.parse(from)) / 3_600_000));
-        const rows = await queryInflux<Record<string, unknown>>(`
-          SELECT date_bin(INTERVAL '1 day', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket, max(pulse_total) AS cumulative
-          FROM sensors
-          WHERE farm_id = '${farm.farmId}' AND device_id = '${farm.waterDeviceId}' AND time > now() - interval '${hours} hours'
-          GROUP BY bucket ORDER BY bucket ASC`);
-        const fromDay = from.slice(0, 10), toDay = to.slice(0, 10);
-        const perPulse = farm.waterLitresPerPulse ?? 1;
-        let prev: number | null = null;
-        for (const r of rows) {
-          const cum = Number(r.cumulative);
-          const day = bucketToDay(r.bucket);
-          if (!Number.isFinite(cum) || !day) continue;
-          if (prev != null && day >= fromDay && day <= toDay) {
-            const point = byDay.get(day) ?? { time: `${day}T00:00:00.000Z` };
-            point[WATER_DAILY] = round(Math.max(0, cum - prev) * perPulse, 0);
-            byDay.set(day, point);
-          }
-          prev = cum;
-        }
-      } catch (e) {
-        console.error("Silver water merge failed:", e); // other metrics still render
       }
     }
 
