@@ -26,9 +26,10 @@ export async function GET(req: NextRequest) {
   const requested = (searchParams.get("metrics") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const metrics = requested.filter((m) => ENV.has(m)).slice(0, 2);
   const wantNoise = requested.includes("noise"); // acoustic sound level, from audio_noise
+  const wantWater = requested.includes("water"); // drinking rate — per-bucket litres from the meter
   const rangeIv = RANGE[searchParams.get("range") ?? "7d"] ?? "7 days";
   const resIv = RES[searchParams.get("resolution") ?? "1h"] ?? "1 hour";
-  if (!metrics.length && !wantNoise) return NextResponse.json({ error: "metrics required" }, { status: 400 });
+  if (!metrics.length && !wantNoise && !wantWater) return NextResponse.json({ error: "metrics required" }, { status: 400 });
 
   const bin = `date_bin(INTERVAL '${resIv}', time, TIMESTAMP '1970-01-01 00:00:00')`;
 
@@ -81,6 +82,30 @@ export async function GET(req: NextRequest) {
         for (const r of rows) point(toIso(r.time)).noise = round(r.noise);
       } catch (e) {
         console.error("High-res noise query failed:", e); // env metrics still render
+      }
+    }
+
+    // Drinking rate: the water meter is a cumulative pulse counter, so per-bucket litres = the rise
+    // in pulse_total × litres/pulse (mirrors the dashboard summary's meter handling).
+    if (wantWater && farm.waterDeviceId) {
+      try {
+        const rows = await queryInflux<Record<string, unknown>>(`
+          SELECT ${bin} as time, max(pulse_total) as cumulative
+          FROM sensors
+          WHERE farm_id = '${farm.farmId}' AND device_id = '${farm.waterDeviceId}' AND time > now() - interval '${rangeIv}'
+          GROUP BY ${bin}
+          ORDER BY time ASC
+        `);
+        const perPulse = farm.waterLitresPerPulse ?? 1;
+        let prev: number | null = null;
+        for (const r of rows) {
+          const cum = Number(r.cumulative);
+          if (!Number.isFinite(cum)) continue;
+          if (prev != null) point(toIso(r.time)).water = round(Math.max(0, cum - prev) * perPulse);
+          prev = cum;
+        }
+      } catch (e) {
+        console.error("High-res water query failed:", e); // other metrics still render
       }
     }
 

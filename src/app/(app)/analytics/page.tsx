@@ -105,11 +105,15 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
   { key: "cum_mortality", label: "Cumulative mortality", unit: "%", env: false },
   { key: "breakage_rate", label: "Breakage rate", unit: "%", env: false },
   { key: "hdep", label: "Hen-day %", unit: "%", env: false },
+  { key: "water", label: "Drinking rate", unit: "L", env: false },
+  { key: "water_daily", label: "Water / day", unit: "L", env: false },
 ];
 const META: Record<string, { key: string; label: string; unit: string }> = Object.fromEntries(CATALOG.map((c) => [c.key, c]));
 const ENV_OPTIONS = CATALOG.filter((c) => c.env);
-// High-res chart draws from InfluxDB: env sensors + the acoustic sound level (audio_noise).
-const HR_OPTIONS = CATALOG.filter((c) => c.env || c.key === "noise");
+// High-res chart draws from InfluxDB: env sensors + acoustic sound level + drinking rate (water meter).
+const HR_OPTIONS = CATALOG.filter((c) => c.env || c.key === "noise" || c.key === "water");
+// Daily history: everything except the high-res-only drinking rate (its daily form is "water_daily").
+const SILVER_OPTIONS = CATALOG.filter((c) => c.key !== "water");
 // Only sensor metrics vary within a day → only they get a min–max band. Sheet-derived daily
 // values (eggs, sizes, breakages, weight, mortality) are broadcast across the 24 hours, so their
 // min = max = the day's value (a flat, meaningless band).
@@ -434,8 +438,8 @@ function SilverExplorer() {
       <div className="sa-panel-hd sa-panel-hd--production">History (daily)</div>
       <div style={TOOLBAR}>
         <div style={GROUP}>
-          <MetricSelect label="Left" value={left} onChange={setLeft} accent={TEAL} />
-          <MetricSelect label="Right" value={right} onChange={setRight} accent={GOLD} allowNone />
+          <MetricSelect label="Left" value={left} onChange={setLeft} accent={TEAL} options={SILVER_OPTIONS} />
+          <MetricSelect label="Right" value={right} onChange={setRight} accent={GOLD} allowNone options={SILVER_OPTIONS} />
         </div>
         <div style={GROUP_END}>
           <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
