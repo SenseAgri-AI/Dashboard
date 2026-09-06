@@ -112,7 +112,16 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchAll();
     const id = setInterval(fetchAll, 30 * 60 * 1000);
-    return () => clearInterval(id);
+    // Refresh when the tab is re-focused / becomes visible again, so a returning
+    // user sees the latest silo/production data without waiting for the interval.
+    const onVisible = () => { if (document.visibilityState === "visible") fetchAll(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", fetchAll);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", fetchAll);
+    };
   }, [fetchAll]);
 
   if (loading) {

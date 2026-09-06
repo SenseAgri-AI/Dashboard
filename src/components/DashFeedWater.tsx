@@ -89,10 +89,10 @@ function SiloHistoryCard({ data, height }: { data: SiloLevelsData | null; height
         <div style={{ height, display: "grid", placeItems: "center", color: "var(--t3)", fontSize: 11 }}>Waiting for radar history.</div>
       ) : (
         <ResponsiveContainer width="100%" height={height}>
-          <LineChart data={timeline} margin={{ top: 16, right: 12, bottom: 0, left: -8 }}>
+          <LineChart data={timeline} margin={{ top: 16, right: 12, bottom: 0, left: 4 }}>
             <CartesianGrid stroke="#E6EBEB" vertical={false} strokeDasharray="3 3" />
             <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={dateTimeLabel} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} minTickGap={54} />
-            <YAxis domain={distanceDomain} reversed tickFormatter={(value) => `${Math.round(value).toLocaleString("en-ZA")}`} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} width={48} unit=" mm" />
+            <YAxis domain={distanceDomain} reversed tickFormatter={(value) => `${Math.round(value).toLocaleString("en-ZA")}`} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} width={56} label={{ value: "mm", angle: -90, position: "insideLeft", offset: 14, style: { fontSize: 8.5, fill: "#5A6A6C", fontWeight: 700 } }} />
             <Tooltip content={<SiloTooltip />} cursor={{ stroke: TEAL, strokeOpacity: 0.35 }} />
             {refillTimes.map((refill, index) => refill && <ReferenceLine key={`${refill.time}-${index}`} x={new Date(refill.time).getTime()} stroke={SILO_COLORS[index]} strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: `S${index + 1} fill`, position: "insideTopRight", fontSize: 8, fill: SILO_COLORS[index] }} />)}
             {silos.map((silo, index) => <Line key={silo.deviceId} type="monotone" dataKey={`silo${index}`} name={`Silo ${index + 1}`} stroke={SILO_COLORS[index]} strokeWidth={2.2} dot={{ r: 4, fill: SILO_COLORS[index], stroke: "#fff", strokeWidth: 1.5 }} activeDot={{ r: 5 }} connectNulls isAnimationActive={false} />)}

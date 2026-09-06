@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 // physical head space above the feed.
 const FULL_DISTANCE_MM = 1500;
 const EMPTY_DISTANCE_MM = 3800;
-const HISTORY_HOURS = 48;
+const HISTORY_HOURS = 168; // 7 days — the radar reports sparsely, so a short window shows too few points
 const NON_PHYSICAL_DEVICE = /(test|demo|mock|simulator|virtual)/i;
 
 interface SiloRow {

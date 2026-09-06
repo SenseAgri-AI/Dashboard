@@ -188,12 +188,20 @@ Raw sensor JSON has **no farm/house** — only `devEui`. Supply a mapping (exten
 config `/senseagri/farms/<slug>/config` with a `devices` map, so **pipeline and app share one source of truth**):
 ```jsonc
 { "24e124136f451854": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "water_meter" },
-  "24e124136f452271": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "feed_meter" },
+  "24e124136f456303": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "water_meter" },  // 2nd water meter — confirmed Sep 2026 by hour-of-day profile
+  "24e124136f458449": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "feed_meter" },   // auger-rotation counter #1 — live, feed-time bursts
+  "24e124136f452271": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "feed_meter" },   // auger-rotation counter #2 — ⚠️ frozen at 864,891, stopped counting (hardware check needed)
+  // "24e124136f455672": likely PHANTOM — appeared 3 Sep 2026, single burst, no known install; the 4 physical sensors are accounted for. Verify at device console before mapping.
   "24e124707e424191": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "env" } }
 ```
 `role` (function) complements `device_type` (hardware, from the path): `device_type` says AM308 vs
-EM300; `role` disambiguates the two same-type EM300s (water vs feed) and maps every device to its
-farm + house. You need both.
+EM300; `role` disambiguates the **multiple** same-type EM300s (2 water meters + augers) and maps every
+device to its farm + house. You need both.
+
+> **Two water meters, not one.** `water_litres` for a house must **sum both** `water_meter`
+> devices' per-bucket consumption (`24e124136f451854` + `24e124136f456303`), each as
+> `MAX(pulse_total)` per bucket diffed and × 10 L/pulse. The dashboard historically read only
+> `…451854`, which under-counts drinking by ~half — the silver aggregate should not repeat that.
 
 ---
 

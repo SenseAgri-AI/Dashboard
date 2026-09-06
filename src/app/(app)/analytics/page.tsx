@@ -9,6 +9,7 @@ import { standardHdepForWeek } from "@/lib/henStandard";
 // ── palette ──
 const PRIMARY = "#002E35", TEAL = "#2A8E9A", GOLD = "#D4AF37", STD = "#7A5C00";
 const DANGER = "#B91C1C", GREEN = "#166534", AXIS = "#3a4d4f", GRID = "rgba(42,142,154,0.12)";
+const WM2 = "#8FBEC4"; // second water meter — a lighter teal so both meters read as "water"
 const SAST_OFFSET_H = 2; // schedule times are farm-local (SAST = UTC+2); axis is UTC
 
 // Schedule colours — matches the Schedule tab so a schedule reads the same everywhere.
@@ -105,11 +106,20 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
   { key: "cum_mortality", label: "Cumulative mortality", unit: "%", env: false },
   { key: "breakage_rate", label: "Breakage rate", unit: "%", env: false },
   { key: "hdep", label: "Hen-day %", unit: "%", env: false },
+  { key: "water", label: "Drinking rate", unit: "L", env: false },
+  // Feed & water from the silver meters table (daily). Groups plot both members together.
+  { key: "water_day", label: "Water / day", unit: "L", env: false },
+  { key: "water_meters", label: "Water by meter", unit: "L", env: false },
+  { key: "feed_augers", label: "Feed pulses (augers)", unit: "", env: false },
+  { key: "feed_a1", label: "Feed — auger 1", unit: "", env: false },
+  { key: "feed_a2", label: "Feed — auger 2", unit: "", env: false },
 ];
 const META: Record<string, { key: string; label: string; unit: string }> = Object.fromEntries(CATALOG.map((c) => [c.key, c]));
 const ENV_OPTIONS = CATALOG.filter((c) => c.env);
-// High-res chart draws from InfluxDB: env sensors + the acoustic sound level (audio_noise).
-const HR_OPTIONS = CATALOG.filter((c) => c.env || c.key === "noise");
+// High-res chart draws from InfluxDB: env sensors + acoustic sound level + drinking rate (water meter).
+const HR_OPTIONS = CATALOG.filter((c) => c.env || c.key === "noise" || c.key === "water");
+// Daily history: everything except the high-res-only drinking rate (its daily form is "water_daily").
+const SILVER_OPTIONS = CATALOG.filter((c) => c.key !== "water");
 // Only sensor metrics vary within a day → only they get a min–max band. Sheet-derived daily
 // values (eggs, sizes, breakages, weight, mortality) are broadcast across the 24 hours, so their
 // min = max = the day's value (a flat, meaningless band).
@@ -122,13 +132,34 @@ const SIZE_MEMBERS = [
   { key: "eggs_large", label: "Large" }, { key: "eggs_xl", label: "XL" }, { key: "eggs_jumbo", label: "Jumbo" },
 ];
 const SIZE_COLORS = ["#9BC7CE", "#2A8E9A", "#D4AF37", "#B8860B", "#7A5C00"]; // small → jumbo
-const expandKeys = (key: string) => (key === EGG_SIZES ? SIZE_MEMBERS.map((m) => m.key) : key ? [key] : []);
+
+// Meter groups: one dropdown pick that plots both members as separate lines on one axis.
+const WATER_METERS = "water_meters", FEED_AUGERS = "feed_augers";
+const WATER_MEMBERS = [{ key: "water_m1", label: "Meter 1" }, { key: "water_m2", label: "Meter 2" }];
+const FEED_MEMBERS = [{ key: "feed_a1", label: "Auger 1" }, { key: "feed_a2", label: "Auger 2" }];
+// A grouped metric draws 2 lines on ONE axis, so line 2 takes a shade of that axis's own colour —
+// the axis/dropdown accent (left teal, right gold) stays the dominant hue.
+const SECOND_SHADE: Record<string, string> = { [TEAL]: WM2, [GOLD]: STD };
+
+const expandKeys = (key: string): string[] =>
+  key === EGG_SIZES ? SIZE_MEMBERS.map((m) => m.key)
+    : key === WATER_METERS ? WATER_MEMBERS.map((m) => m.key)
+    : key === FEED_AUGERS ? FEED_MEMBERS.map((m) => m.key)
+    : key ? [key] : [];
 
 // Resolve a dropdown key into an axis spec: a single metric, or the egg-size group (5 lines).
 function buildSpec(key: string, baseColor: string, showRange: boolean): AxisSpec | null {
   if (!key) return null;
   if (key === EGG_SIZES) {
     return { unit: "", band: false, axisColor: AXIS, series: SIZE_MEMBERS.map((m, i) => ({ key: m.key, label: m.label, color: SIZE_COLORS[i] })) };
+  }
+  if (key === WATER_METERS || key === FEED_AUGERS) {
+    const members = key === WATER_METERS ? WATER_MEMBERS : FEED_MEMBERS;
+    const second = SECOND_SHADE[baseColor] ?? baseColor;
+    return {
+      unit: key === WATER_METERS ? "L" : "", band: false, axisColor: baseColor,
+      series: members.map((mem, i) => ({ ...mem, color: i === 0 ? baseColor : second })),
+    };
   }
   const m = META[key];
   return { unit: m?.unit ?? "", band: showRange && BANDED.has(key), axisColor: baseColor, series: [{ key, label: m?.label ?? key, color: baseColor }] };
@@ -434,8 +465,8 @@ function SilverExplorer() {
       <div className="sa-panel-hd sa-panel-hd--production">History (daily)</div>
       <div style={TOOLBAR}>
         <div style={GROUP}>
-          <MetricSelect label="Left" value={left} onChange={setLeft} accent={TEAL} />
-          <MetricSelect label="Right" value={right} onChange={setRight} accent={GOLD} allowNone />
+          <MetricSelect label="Left" value={left} onChange={setLeft} accent={TEAL} options={SILVER_OPTIONS} />
+          <MetricSelect label="Right" value={right} onChange={setRight} accent={GOLD} allowNone options={SILVER_OPTIONS} />
         </div>
         <div style={GROUP_END}>
           <div style={{ display: "flex", gap: 14, alignItems: "center" }}>

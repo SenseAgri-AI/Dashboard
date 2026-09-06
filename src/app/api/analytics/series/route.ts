@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
-import { fetchSilverDaily, isSilverMetric, type DailyRow } from "@/lib/silverSource";
+import { fetchSilverDaily, isSilverMetric, fetchMetersDaily, type DailyRow, type MeterDay } from "@/lib/silverSource";
 import { queryInflux } from "@/lib/influxdb";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +12,12 @@ const CUM_MORT = "cum_mortality"; // cumulative deaths since day 1 / starting fl
 const BREAKAGE = "breakage_rate"; // damaged eggs / total eggs × 100 (per day)
 const NOISE = "noise"; // acoustic sound level (dBFS), from InfluxDB audio_noise — not a silver column
 const COMPUTED = [HDEP, CUM_MORT, BREAKAGE];
+// Feed & water live in a separate silver table (meters_hourly); map each metric key → its column.
+const METER_FIELD: Record<string, keyof MeterDay> = {
+  water_day: "water_l_total", water_m1: "water_l_wm1", water_m2: "water_l_wm2",
+  feed_a1: "feed_pulses_auger1", feed_a2: "feed_pulses_auger2",
+};
+const isMeterMetric = (m: string): boolean => m in METER_FIELD;
 const round = (v: number | null, dp = 2) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 10 ** dp) / 10 ** dp);
 
 // audio_noise `bucket` comes back as BigInt ns (only a column literally named `time` is auto-dated).
@@ -41,10 +47,10 @@ export async function GET(req: NextRequest) {
 
   if (!metrics.length) return NextResponse.json({ error: "metrics required" }, { status: 400 });
   if (!from || !to) return NextResponse.json({ error: "from and to are required" }, { status: 400 });
-  const bad = metrics.find((m) => !COMPUTED.includes(m) && m !== NOISE && !isSilverMetric(m));
+  const bad = metrics.find((m) => !COMPUTED.includes(m) && m !== NOISE && !isMeterMetric(m) && !isSilverMetric(m));
   if (bad) return NextResponse.json({ error: `Unknown metric: ${bad}` }, { status: 400 });
 
-  const rawCols = metrics.filter((m) => !COMPUTED.includes(m) && m !== NOISE);
+  const rawCols = metrics.filter((m) => !COMPUTED.includes(m) && m !== NOISE && !isMeterMetric(m));
   const wantHdep = metrics.includes(HDEP);
   const wantCumMort = metrics.includes(CUM_MORT);
   const wantBreakage = metrics.includes(BREAKAGE);
@@ -114,6 +120,24 @@ export async function GET(req: NextRequest) {
         }
       } catch (e) {
         console.error("Silver noise merge failed:", e); // other metrics still render
+      }
+    }
+
+    // Feed & water are in a separate silver table (meters_hourly) — fetch daily and merge by day
+    // so they share the same frame as everything else (each column SUMMED per day by the reader).
+    const meterMetrics = metrics.filter(isMeterMetric);
+    if (meterMetrics.length) {
+      try {
+        const fromDay = from.slice(0, 10), toDay = to.slice(0, 10);
+        for (const row of await fetchMetersDaily(farm.farmId, houseId, from, to)) {
+          const day = String(row.time).slice(0, 10);
+          if (day < fromDay || day > toDay) continue;
+          const point = byDay.get(day) ?? { time: row.time };
+          for (const mk of meterMetrics) point[mk] = round(row[METER_FIELD[mk]] as number | null);
+          byDay.set(day, point);
+        }
+      } catch (e) {
+        console.error("Silver meters merge failed:", e); // other metrics still render
       }
     }
 
