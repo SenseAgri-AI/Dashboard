@@ -106,12 +106,24 @@ Everything lives in one measurement/table: **`sensors`**.
   - `pulse_total` is a **cumulative counter** — to get consumption you take the
     **difference between consecutive readings** (see "Gotchas" below).
 
-**Known device IDs** (hard-coded in the API routes):
+**Known device IDs.** Five `EM300-1` device IDs report to InfluxDB, but the farm has
+only **four physical pulse sensors** (2 water meters + 2 feed meters) — so one ID is a
+phantom/dead registration. A **"feed meter" here is a pulse counter on a feed auger** —
+it counts auger rotations to meter feed, so "feed meter" and "auger" name the same
+device. Roles were read from each device's **pulse activity by hour of day** (water
+meters = a broad drinking curve across all waking hours; feed augers = sharp bursts at
+feed times). See `pulse-profiles.png`.
 
-| Device | `device_id` | Notes |
-|--------|-------------|-------|
-| Water meter | `24e124136f451854` | 1 pulse = **10 litres** (`WATER_LITRES_PER_PULSE`) |
-| Feed meter | `24e124136f452271` | pulses → kg of feed (conversion TBD) |
+| Device | `device_id` | Role | Status | Notes |
+|--------|-------------|------|--------|-------|
+| Water meter 1 | `24e124136f451854` | `water_meter` | ✅ confirmed | 1 pulse = **10 litres** (`WATER_LITRES_PER_PULSE`). Broad daytime drinking curve. **The dashboard reads only this meter today.** |
+| Water meter 2 | `24e124136f456303` | `water_meter` | ✅ confirmed | Identical drinking-curve profile to WM1 — a genuine 2nd water meter. **Not yet summed** by the app, so drinking is under-counted by ~half. |
+| Feed meter 1 (auger) | `24e124136f458449` | `feed_meter` | ✅ confirmed | Live. Counts auger rotations; two sharp bursts (~8am & ~2pm) = the auger running at feed times, ~8× the pulse volume of the water meters. |
+| Feed meter 2 (auger) | `24e124136f452271` | `feed_meter` | ⚠️ dead / frozen | The originally-documented feed meter (the other auger's rotation counter). `pulse_total` frozen at 864,891 with zero movement (6 Aug–5 Sep 2026) — it has **stopped counting** (faulty/detached pickup). Role is from the repo docs; can't be re-confirmed from behaviour while it's frozen. Needs a hardware check. |
+| Phantom | `24e124136f455672` | — | ❓ likely phantom | Appeared **3 Sep 2026**, single ~5pm burst, no known install. With the four physical sensors accounted for above, this is the leftover 5th ID — probably a stray/duplicate registration. Worth a quick check at the device console. |
+
+> **Retention caveat:** InfluxDB keeps only ~1 month, so the hour-of-day profiles above
+> cover ~30 days (6 Aug–5 Sep 2026), not "many months".
 
 To discover everything that's actually reporting:
 

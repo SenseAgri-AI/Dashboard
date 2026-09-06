@@ -10,6 +10,7 @@ import {
 
 const DATABASE = "senseagri_silver";
 const TABLE = "aligned_hourly";
+const METERS_TABLE = "meters_hourly"; // per-hour pulse-meter readings (water litres + feed pulses)
 const WORKGROUP = "senseagri"; // enforces its own result-output location
 
 // Numeric columns that may be selected — guards the string-built SQL against injection.
@@ -124,5 +125,55 @@ export async function fetchSilverDaily(
       rec[`${c}__hi`] = toNum(cells[3 + i * 3]);
     });
     return rec;
+  });
+}
+
+// A daily meter row: litres drank that day (both meters + combined) and feed pulses per auger.
+export type MeterDay = {
+  time: string;
+  water_l_total: number | null;
+  water_l_wm1: number | null;
+  water_l_wm2: number | null;
+  feed_pulses_auger1: number | null;
+  feed_pulses_auger2: number | null;
+};
+
+/** Daily feed & water from `meters_hourly` over [from, to): each column SUMMED per day
+ *  (litres consumed / pulses that day), one row per day. Fixed column set → no injection
+ *  surface; farm/house/date are validated. */
+export async function fetchMetersDaily(
+  farmId: string, houseId: string, from: string, to: string,
+): Promise<MeterDay[]> {
+  if (!ID_RE.test(farmId) || !ID_RE.test(houseId)) throw new Error("Invalid farm/house id");
+  if (!ISO_RE.test(from) || !ISO_RE.test(to)) throw new Error("Invalid date range");
+  const fromYear = new Date(from).getUTCFullYear();
+  const toYear = new Date(to).getUTCFullYear();
+
+  // Deliberately NOT selecting the table's own `water_l_total` — that column is broken for the
+  // early months (Feb–May 2026: null/understated vs the per-meter columns). We derive the daily
+  // total from the two meters instead, so it always agrees with the Meter 1 / Meter 2 lines.
+  const sql = `SELECT date_trunc('day', bucket_start) AS t,
+      sum(water_l_wm1) AS water_l_wm1, sum(water_l_wm2) AS water_l_wm2,
+      sum(feed_pulses_auger1) AS feed_pulses_auger1, sum(feed_pulses_auger2) AS feed_pulses_auger2
+    FROM ${DATABASE}.${METERS_TABLE}
+    WHERE farm_id = '${farmId}' AND house_id = '${houseId}' AND year BETWEEN ${fromYear} AND ${toYear}
+      AND bucket_start >= timestamp '${toAthenaTs(from)}' AND bucket_start < timestamp '${toAthenaTs(to)}'
+    GROUP BY 1 ORDER BY 1`;
+
+  const rows = await runAthenaRaw(sql);
+  return rows.map((c) => {
+    const wm1 = toNum(c[1]);
+    const wm2 = toNum(c[2]);
+    // Total = the two meters summed; null only when BOTH are null (a genuine gap), so a day
+    // where only one meter reported still shows that meter's litres rather than a broken zero.
+    const total = wm1 == null && wm2 == null ? null : (wm1 ?? 0) + (wm2 ?? 0);
+    return {
+      time: athenaTsToIso(c[0] ?? ""),
+      water_l_total: total,
+      water_l_wm1: wm1,
+      water_l_wm2: wm2,
+      feed_pulses_auger1: toNum(c[3]),
+      feed_pulses_auger2: toNum(c[4]),
+    };
   });
 }
