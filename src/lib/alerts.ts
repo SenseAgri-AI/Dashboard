@@ -1,3 +1,5 @@
+import { thiZone } from "./thi";
+
 // Alert rules — the new alert set (see alerts-spec.md). Each rule is a pure function that turns
 // already-fetched farm state into an Alert (or null). Data fetching lives in the API route; keeping
 // the rules pure makes them easy to reason about and to hand over to the platform later.
@@ -76,6 +78,30 @@ export function powerOutageAlert(input: {
     };
   }
   return null;
+}
+
+// ── Climate: heat stress (felt temperature / THI) ─────────────────────────────
+// Temperature + humidity fold into a felt temperature (src/lib/thi.ts): humidity blocks the birds'
+// evaporative (panting) cooling, so a "mild" thermometer reading can still be severe. Fires on the
+// current felt temp — warning in the severe zone, danger in the extreme zone. Plain temp/humidity keep
+// their own tile thresholds (incl. the cold side); this is the combined heat-stress signal.
+export function heatStressAlert(input: { thiValue: number | null; atMs: number | null }): Alert | null {
+  const v = input.thiValue;
+  if (v == null || !Number.isFinite(v)) return null;
+  const zone = thiZone(v);
+  if (zone !== "severe" && zone !== "extreme") return null;
+  const felt = Math.round(v * 10) / 10;
+  const extreme = zone === "extreme";
+  return {
+    id: "heat_stress",
+    category: "climate",
+    severity: extreme ? "danger" : "warning",
+    title: extreme ? "Extreme heat stress" : "Heat stress",
+    message: extreme
+      ? `Felt temperature is ${felt} °C — extreme for layers. Birds will be panting and off-feed; egg output and shell quality drop fast. Maximise ventilation/cooling and get cool water to them now.`
+      : `Felt temperature is ${felt} °C — severe heat-stress zone for layers. Humidity is blocking the birds' cooling; step up ventilation and check water before it climbs further.`,
+    since: iso(input.atMs),
+  };
 }
 
 // ── Reminders ─────────────────────────────────────────────────────────────────

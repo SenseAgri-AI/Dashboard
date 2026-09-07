@@ -1,6 +1,7 @@
 "use client";
 
 import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip } from "recharts";
+import { thi, thiZone, THI_COMFORT, THI_EXTREME } from "@/lib/thi";
 
 // Environment sensor tiles (2 per row): a compact trend chart with the NORMAL band shaded (so
 // too-low / too-high is obvious), a threshold line where relevant, time on the x-axis and the
@@ -138,12 +139,27 @@ export default function DashEnvCol({ env, narrow }: { env: EnvData | null; narro
   const tvocScale = autoScale([...tvocVals, Math.max(0, tvocMean - 2 * tvocStd), tvocMean + 2 * tvocStd], 1);
   const lightScale = autoScale((env?.light?.sparkline ?? []).map((p) => p.value));
 
+  // Felt temperature (THI) — derived per point from temp + humidity (same time buckets). Zone drives
+  // the tile's status colour; comfort < 27.8 °C reads green, severe/extreme trips the alert colour.
+  const tSpk = env?.temperature.sparkline ?? [], hSpk = env?.humidity.sparkline ?? [];
+  const thiSpark: SparklinePoint[] = tSpk.map((tp, i) => {
+    const t = tp.value, h = hSpk[i]?.value;
+    return { time: tp.time, value: Number.isFinite(t) && Number.isFinite(h) ? Math.round(thi(t, h as number) * 10) / 10 : NaN };
+  });
+  let thiCurrent: number | null = null;
+  for (let i = thiSpark.length - 1; i >= 0; i--) { if (Number.isFinite(thiSpark[i].value)) { thiCurrent = thiSpark[i].value; break; } }
+  const thiZoneVal = thiCurrent != null ? thiZone(thiCurrent) : null;
+  const thiStatus = thiZoneVal === "extreme" || thiZoneVal === "severe" ? "danger"
+    : thiZoneVal === "moderate" ? "warning" : thiCurrent != null ? "good" : undefined;
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "repeat(2, minmax(0,1fr))", gap: 12 }}>
       <EnvTile name="Temperature" value={r1(env?.temperature.current)} unit="°C" status={env?.temperature.status} normal="18–26°C"
         chart={<EnvChart data={env?.temperature.sparkline ?? []} domain={[8, 36]} ticks={[10, 20, 30]} band={[18, 26]} tipUnit="°C" height={H} />} />
       <EnvTile name="Humidity" value={r0(env?.humidity.current)} unit="% RH" status={env?.humidity.status} normal="50–70%"
         chart={<EnvChart data={env?.humidity.sparkline ?? []} domain={[20, 105]} ticks={[30, 60, 90]} band={[50, 70]} tipUnit="%" height={H} />} />
+      <EnvTile name="Felt temp · THI" value={r1(thiCurrent)} unit="°C" status={thiStatus} normal={`<${THI_COMFORT}° comfort`}
+        chart={<EnvChart data={thiSpark} domain={[10, 34]} ticks={[14, 22, 30]} band={[10, THI_COMFORT]} threshold={THI_EXTREME} tipUnit="°C" height={H} />} />
       <EnvTile name="CO₂ / Ventilation" value={r0(env?.co2.current)} unit="ppm" status={env?.co2.status} normal="max 1,400"
         chart={<EnvChart data={env?.co2.sparkline ?? []} domain={[300, 2200]} ticks={[500, 1200, 1900]} threshold={1400} tipUnit="ppm" height={H} />} />
       <EnvTile name="Air quality" value={env?.tvoc.current != null ? `${Math.round(env.tvoc.current * 100) / 100}` : null} unit="TVOC" normal="±2σ baseline"

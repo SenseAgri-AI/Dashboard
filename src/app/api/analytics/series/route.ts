@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
 import { fetchSilverDaily, isSilverMetric, fetchMetersDaily, type DailyRow, type MeterDay } from "@/lib/silverSource";
 import { queryInflux } from "@/lib/influxdb";
+import { nightScores, type NoiseSample, type ClimateSample } from "@/lib/sleepScore";
+import { thi, plausibleClimate } from "@/lib/thi";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -11,6 +13,8 @@ const HDEP = "hdep";
 const CUM_MORT = "cum_mortality"; // cumulative deaths since day 1 / starting flock × 100
 const BREAKAGE = "breakage_rate"; // damaged eggs / total eggs × 100 (per day)
 const NOISE = "noise"; // acoustic sound level (dBFS), from InfluxDB audio_noise — not a silver column
+const NIGHT = "night_rest"; // Flock Night-Rest score per night, from InfluxDB noise + AM308 climate
+const THI = "thi"; // felt-temperature (°C), derived from the day's mean temperature + humidity
 const COMPUTED = [HDEP, CUM_MORT, BREAKAGE];
 // Feed & water live in a separate silver table (meters_hourly); map each metric key → its column.
 const METER_FIELD: Record<string, keyof MeterDay> = {
@@ -25,6 +29,13 @@ const bucketToDay = (v: unknown): string => {
   const ms = typeof v === "bigint" ? Number(v) / 1e6 : typeof v === "number" ? v : Date.parse(String(v));
   return Number.isFinite(ms) ? new Date(ms).toISOString().slice(0, 10) : "";
 };
+
+// InfluxDB `time` → ms epoch (BigInt ns, number, or ISO string) — for the night-rest scorer.
+const toMs = (t: unknown): number =>
+  t instanceof Date ? t.getTime()
+    : typeof t === "bigint" ? Number(t) / 1e6
+    : typeof t === "number" ? (t > 1e14 ? t / 1e6 : t)
+    : Number.isFinite(Date.parse(String(t))) ? Date.parse(String(t)) : NaN;
 
 // Deep-history analytics from the silver layer (Athena), daily-aggregated. Farm-scoped:
 // the caller's Clerk org resolves to a farm_id server-side. Returns a merged daily frame
@@ -47,10 +58,10 @@ export async function GET(req: NextRequest) {
 
   if (!metrics.length) return NextResponse.json({ error: "metrics required" }, { status: 400 });
   if (!from || !to) return NextResponse.json({ error: "from and to are required" }, { status: 400 });
-  const bad = metrics.find((m) => !COMPUTED.includes(m) && m !== NOISE && !isMeterMetric(m) && !isSilverMetric(m));
+  const bad = metrics.find((m) => !COMPUTED.includes(m) && m !== NOISE && m !== NIGHT && m !== THI && !isMeterMetric(m) && !isSilverMetric(m));
   if (bad) return NextResponse.json({ error: `Unknown metric: ${bad}` }, { status: 400 });
 
-  const rawCols = metrics.filter((m) => !COMPUTED.includes(m) && m !== NOISE && !isMeterMetric(m));
+  const rawCols = metrics.filter((m) => !COMPUTED.includes(m) && m !== NOISE && m !== NIGHT && m !== THI && !isMeterMetric(m));
   const wantHdep = metrics.includes(HDEP);
   const wantCumMort = metrics.includes(CUM_MORT);
   const wantBreakage = metrics.includes(BREAKAGE);
@@ -120,6 +131,57 @@ export async function GET(req: NextRequest) {
         }
       } catch (e) {
         console.error("Silver noise merge failed:", e); // other metrics still render
+      }
+    }
+
+    // Flock Night-Rest score: computed per night from InfluxDB (audio_noise + AM308 climate) — the
+    // same ~1-month-retention source as `noise`, so it populates only recent nights on the daily plot.
+    if (metrics.includes(NIGHT)) {
+      try {
+        const hours = Math.min(35 * 24, Math.max(24, Math.ceil((Date.now() - Date.parse(from)) / 3_600_000)));
+        const [noiseRows, climateRows] = await Promise.all([
+          queryInflux<Record<string, unknown>>(`
+            SELECT time, noise_db_mean FROM audio_noise
+            WHERE farm_id = '${farm.farmId}' AND time > now() - interval '${hours} hours' ORDER BY time ASC`),
+          queryInflux<Record<string, unknown>>(`
+            SELECT time, temperature, humidity, light_level FROM sensors
+            WHERE farm_id = '${farm.farmId}' AND device_type = 'AM308-1' AND time > now() - interval '${hours} hours' ORDER BY time ASC`),
+        ]);
+        const samples: NoiseSample[] = noiseRows.map((r) => {
+          const n = Number(r.noise_db_mean);
+          return { t: toMs(r.time), mean: Number.isFinite(n) ? n : null };
+        });
+        const climate: ClimateSample[] = climateRows.map((r) => {
+          const temp = Number(r.temperature), rh = Number(r.humidity), light = Number(r.light_level);
+          return { t: toMs(r.time), temp: Number.isFinite(temp) ? temp : null, rh: Number.isFinite(rh) ? rh : null, light: Number.isFinite(light) ? light : null };
+        });
+        const fromDay = from.slice(0, 10), toDay = to.slice(0, 10);
+        for (const night of nightScores(samples, climate)) {
+          if (night.date < fromDay || night.date > toDay) continue;
+          const point = byDay.get(night.date) ?? { time: `${night.date}T00:00:00.000Z` };
+          point[NIGHT] = night.score;
+          byDay.set(night.date, point);
+        }
+      } catch (e) {
+        console.error("Night-rest merge failed:", e); // other metrics still render
+      }
+    }
+
+    // Felt temperature (THI): from the day's mean temperature + humidity (silver). Approximate — a
+    // true daily peak needs hourly data — but fine for the trend, and clearly labelled in the UI.
+    if (metrics.includes(THI)) {
+      try {
+        const fromDay = from.slice(0, 10), toDay = to.slice(0, 10);
+        for (const row of await fetchSilverDaily(farm.farmId, houseId, ["temperature", "humidity"], from, to)) {
+          const day = String(row.time).slice(0, 10);
+          if (day < fromDay || day > toDay) continue;
+          const t = row.temperature as number | null, h = row.humidity as number | null;
+          const point = byDay.get(day) ?? { time: row.time };
+          point[THI] = t != null && h != null && plausibleClimate(t, h) ? round(thi(t, h), 1) : null;
+          byDay.set(day, point);
+        }
+      } catch (e) {
+        console.error("Silver THI merge failed:", e); // other metrics still render
       }
     }
 
