@@ -5,6 +5,16 @@ import {
   Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine, ReferenceArea, ComposedChart, Scatter,
 } from "recharts";
 import { standardHdepForWeek } from "@/lib/henStandard";
+import { THI_COMFORT, THI_SEVERE, THI_EXTREME } from "@/lib/thi";
+
+// Heat-stress reference bands for the felt-temperature (THI) axis — comfort (< 27.8 °C) stays clear;
+// the stress zones are shaded and only appear once the axis reaches them (ifOverflow="hidden").
+type ZoneBands = { axis: "left" | "right"; zones: { y1: number; y2: number; color: string; opacity: number }[] };
+const THI_ZONES = [
+  { y1: THI_COMFORT, y2: THI_SEVERE, color: "#D97706", opacity: 0.10 }, // moderate 27.8–28.9
+  { y1: THI_SEVERE, y2: THI_EXTREME, color: "#EA580C", opacity: 0.12 }, // severe 28.9–30
+  { y1: THI_EXTREME, y2: 60, color: "#B91C1C", opacity: 0.12 },         // extreme ≥ 30
+];
 
 // ── palette ──
 const PRIMARY = "#002E35", TEAL = "#2A8E9A", GOLD = "#D4AF37", STD = "#7A5C00";
@@ -98,6 +108,7 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
   { key: "pressure", label: "Pressure", unit: "hPa", env: true },
   { key: "light_level", label: "Light", unit: "lux", env: true },
   { key: "battery", label: "Battery", unit: "%", env: true },
+  { key: "thi", label: "Felt temp (THI)", unit: "°C", env: false }, // derived from temp + humidity
   { key: "noise", label: "Sound level", unit: "dB", env: false },
   { key: "eggs_total", label: "Eggs / day", unit: "", env: false },
   { key: "egg_sizes", label: "Egg sizes (all)", unit: "", env: false },
@@ -106,6 +117,7 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
   { key: "cum_mortality", label: "Cumulative mortality", unit: "%", env: false },
   { key: "breakage_rate", label: "Breakage rate", unit: "%", env: false },
   { key: "hdep", label: "Hen-day %", unit: "%", env: false },
+  { key: "night_rest", label: "Night-rest score", unit: "", env: false },
   { key: "water", label: "Drinking rate", unit: "L", env: false },
   // Feed & water from the silver meters table (daily). Groups plot both members together.
   { key: "water_day", label: "Water / day", unit: "L", env: false },
@@ -117,7 +129,7 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
 const META: Record<string, { key: string; label: string; unit: string }> = Object.fromEntries(CATALOG.map((c) => [c.key, c]));
 const ENV_OPTIONS = CATALOG.filter((c) => c.env);
 // High-res chart draws from InfluxDB: env sensors + acoustic sound level + drinking rate (water meter).
-const HR_OPTIONS = CATALOG.filter((c) => c.env || c.key === "noise" || c.key === "water");
+const HR_OPTIONS = CATALOG.filter((c) => c.env || c.key === "noise" || c.key === "water" || c.key === "thi");
 // Daily history: everything except the high-res-only drinking rate (its daily form is "water_daily").
 const SILVER_OPTIONS = CATALOG.filter((c) => c.key !== "water");
 // Only sensor metrics vary within a day → only they get a min–max band. Sheet-derived daily
@@ -190,9 +202,9 @@ export default function AnalyticsPage() {
 }
 
 // ── Shared plot: dual-axis, min–max bands, overlays, drag-to-zoom ──
-function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, tickFormat, labelFormat }: {
+function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, zoneBands, tickFormat, labelFormat }: {
   data: Frame[]; domainMs: [number, number]; left: AxisSpec; right: AxisSpec | null;
-  standardAxis: "left" | "right" | null; annos: Anno[]; bands: Band[];
+  standardAxis: "left" | "right" | null; annos: Anno[]; bands: Band[]; zoneBands?: ZoneBands | null;
   tickFormat: (ms: number) => string; labelFormat: (ms: number) => string;
 }) {
   const [zoom, setZoom] = useState<[number, number] | null>(null);
@@ -238,6 +250,10 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
           onMouseDown={down} onMouseMove={move} onMouseUp={up}
           onTouchStart={down} onTouchMove={move} onTouchEnd={up}>
           <CartesianGrid strokeDasharray="2 4" stroke={GRID} vertical={false} />
+          {/* THI heat-stress zones — shaded on the felt-temp axis; comfort (< 27.8 °C) stays clear */}
+          {zoneBands && zoneBands.zones.map((z, i) => (
+            <ReferenceArea key={`z${i}`} yAxisId={zoneBands.axis} y1={z.y1} y2={z.y2} stroke="none" fill={z.color} fillOpacity={z.opacity} ifOverflow="hidden" />
+          ))}
           <XAxis dataKey="t" type="number" scale="time" domain={domain} allowDataOverflow
             tickFormatter={tickFormat} tick={{ fontSize: 10, fill: AXIS, fontFamily: "Inter" }} axisLine={{ stroke: "#d1dada" }} tickLine={false} minTickGap={44} />
           <YAxis yAxisId="left" tick={{ fontSize: 11, fill: left.axisColor, fontFamily: "Inter" }} axisLine={false} tickLine={false} unit={left.unit} width={52} />
@@ -332,6 +348,7 @@ function HighResExplorer() {
 
   const leftSpec = buildSpec(left, TEAL, showRange)!;
   const rightSpec = buildSpec(right, GOLD, showRange);
+  const zoneBands: ZoneBands | null = left === "thi" ? { axis: "left", zones: THI_ZONES } : right === "thi" ? { axis: "right", zones: THI_ZONES } : null;
   const hasData = data.some((d) => leftSpec.series.some((s) => d[s.key] != null) || (rightSpec != null && rightSpec.series.some((s) => d[s.key] != null)));
 
   return (
@@ -359,7 +376,7 @@ function HighResExplorer() {
           : <MetricChart data={data} domainMs={[range.fromMs, range.toMs]}
               left={leftSpec}
               right={rightSpec}
-              standardAxis={null} annos={marks} bands={bands}
+              standardAxis={null} annos={marks} bands={bands} zoneBands={zoneBands}
               tickFormat={(ms) => new Date(ms).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: rangeKey === "24h" ? "2-digit" : undefined, minute: rangeKey === "24h" ? "2-digit" : undefined })}
               labelFormat={(ms) => new Date(ms).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} />}
         {showWindows && schedLegend.length > 0 && (
@@ -419,7 +436,11 @@ function SilverExplorer() {
     const r = SILVER_RANGES.find((x) => x.key === rangeKey) ?? SILVER_RANGES[1];
     const fromIso = r.days ? new Date(now - r.days * DAY_MS).toISOString() : "2025-01-01T00:00:00Z";
     const toIso = new Date(now).toISOString();
-    setRange({ fromMs: Date.parse(fromIso), toMs: now });
+    // Daily aggregates for the current (UTC) day are always incomplete — on summed metrics (water,
+    // feed) they read as a false crash to ~0 — so end the axis at the start of today; the current
+    // day's point is dropped from `data` below.
+    const startOfTodayMs = Date.parse(`${toIso.slice(0, 10)}T00:00:00Z`);
+    setRange({ fromMs: Date.parse(fromIso), toMs: startOfTodayMs });
     const metrics = [...new Set([...expandKeys(left), ...expandKeys(right)])];
     const q = new URLSearchParams({ metrics: metrics.join(","), from: fromIso, to: toIso });
     const res = await fetch(`/api/analytics/series?${q}`);
@@ -432,18 +453,21 @@ function SilverExplorer() {
   const hdepAxis: "left" | "right" | null = left === "hdep" ? "left" : right === "hdep" ? "right" : null;
   const stdOn = showStd && !!hdepAxis && !!house;
 
-  const data = useMemo(() => raw.map((row) => {
-    const iso = String(row.time);
-    const out: Frame = { ...row, t: new Date(iso).getTime() };
-    if (stdOn && house) {
-      const s = standardHdepForWeek((house.startAgeDays + daysBetween(house.startDate, iso.slice(0, 10))) / 7);
-      const st = s == null ? null : Math.round(s * 10) / 10;
-      out.standard = st;
-      const hd = typeof out.hdep === "number" ? out.hdep : null;
-      if (hd != null && st != null) { out.aboveBand = [st, Math.max(hd, st)]; out.belowBand = [Math.min(hd, st), st]; }
-    }
-    return out;
-  }), [raw, stdOn, house]);
+  const data = useMemo(() => {
+    const todayUTC = new Date().toISOString().slice(0, 10); // drop the incomplete current UTC day
+    return raw.filter((row) => String(row.time).slice(0, 10) < todayUTC).map((row) => {
+      const iso = String(row.time);
+      const out: Frame = { ...row, t: new Date(iso).getTime() };
+      if (stdOn && house) {
+        const s = standardHdepForWeek((house.startAgeDays + daysBetween(house.startDate, iso.slice(0, 10))) / 7);
+        const st = s == null ? null : Math.round(s * 10) / 10;
+        out.standard = st;
+        const hd = typeof out.hdep === "number" ? out.hdep : null;
+        if (hd != null && st != null) { out.aboveBand = [st, Math.max(hd, st)]; out.belowBand = [Math.min(hd, st), st]; }
+      }
+      return out;
+    });
+  }, [raw, stdOn, house]);
 
   const annos = useMemo<Anno[]>(() => {
     if (!overlays) return [];
@@ -458,6 +482,7 @@ function SilverExplorer() {
 
   const leftSpec = buildSpec(left, TEAL, showRange)!;
   const rightSpec = buildSpec(right, GOLD, showRange);
+  const zoneBands: ZoneBands | null = left === "thi" ? { axis: "left", zones: THI_ZONES } : right === "thi" ? { axis: "right", zones: THI_ZONES } : null;
   const hasData = data.some((d) => leftSpec.series.some((s) => d[s.key] != null) || (rightSpec != null && rightSpec.series.some((s) => d[s.key] != null)));
 
   return (
@@ -485,7 +510,7 @@ function SilverExplorer() {
           : <MetricChart data={data} domainMs={[range.fromMs, range.toMs]}
               left={leftSpec}
               right={rightSpec}
-              standardAxis={stdOn ? hdepAxis : null} annos={annos} bands={[]}
+              standardAxis={stdOn ? hdepAxis : null} annos={annos} bands={[]} zoneBands={zoneBands}
               tickFormat={(ms) => new Date(ms).toLocaleDateString("en-ZA", { day: "numeric", month: "short" })}
               labelFormat={(ms) => new Date(ms).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "2-digit" })} />}
       </div>

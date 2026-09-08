@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
 import { queryInflux } from "@/lib/influxdb";
+import { thi, plausibleClimate } from "@/lib/thi";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,9 +28,10 @@ export async function GET(req: NextRequest) {
   const metrics = requested.filter((m) => ENV.has(m)).slice(0, 2);
   const wantNoise = requested.includes("noise"); // acoustic sound level, from audio_noise
   const wantWater = requested.includes("water"); // drinking rate — per-bucket litres from the meter
+  const wantThi = requested.includes("thi");     // felt temperature — derived from temp + humidity
   const rangeIv = RANGE[searchParams.get("range") ?? "7d"] ?? "7 days";
   const resIv = RES[searchParams.get("resolution") ?? "1h"] ?? "1 hour";
-  if (!metrics.length && !wantNoise && !wantWater) return NextResponse.json({ error: "metrics required" }, { status: 400 });
+  if (!metrics.length && !wantNoise && !wantWater && !wantThi) return NextResponse.json({ error: "metrics required" }, { status: 400 });
 
   const bin = `date_bin(INTERVAL '${resIv}', time, TIMESTAMP '1970-01-01 00:00:00')`;
 
@@ -106,6 +108,25 @@ export async function GET(req: NextRequest) {
         }
       } catch (e) {
         console.error("High-res water query failed:", e); // other metrics still render
+      }
+    }
+
+    // Felt temperature (THI): exact per bucket from the bucket's mean temp + humidity (AM308 only).
+    if (wantThi) {
+      try {
+        const rows = await queryInflux<Record<string, unknown>>(`
+          SELECT ${bin} as time, avg(temperature) as t, avg(humidity) as h
+          FROM sensors
+          WHERE farm_id = '${farm.farmId}' AND device_type = 'AM308-1' AND time > now() - interval '${rangeIv}'
+          GROUP BY ${bin}
+          ORDER BY time ASC
+        `);
+        for (const r of rows) {
+          const t = Number(r.t), h = Number(r.h);
+          if (plausibleClimate(t, h)) point(toIso(r.time)).thi = round(thi(t, h));
+        }
+      } catch (e) {
+        console.error("High-res THI query failed:", e); // other metrics still render
       }
     }
 

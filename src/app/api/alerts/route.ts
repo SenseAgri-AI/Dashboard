@@ -4,7 +4,8 @@ import { queryInflux } from "@/lib/influxdb";
 import { listEntries } from "@/lib/logService";
 import { fetchAnomalies } from "@/lib/acousticSource";
 import { nightScores, type ClimateSample } from "@/lib/sleepScore";
-import { powerOutageAlert, logsOverdueAlert, nightDisturbanceAlert, sleepDeclineAlert, type Alert, type NoisePoint } from "@/lib/alerts";
+import { powerOutageAlert, logsOverdueAlert, nightDisturbanceAlert, sleepDeclineAlert, heatStressAlert, type Alert, type NoisePoint } from "@/lib/alerts";
+import { thi, plausibleClimate } from "@/lib/thi";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -88,6 +89,15 @@ async function nightClimate(farmId: string): Promise<ClimateSample[]> {
   });
 }
 
+// Current felt temperature (THI): mean over the most recent ~1 h of valid climate readings, for the
+// heat-stress alert. Reuses the same 8-day climate pull as the sleep score.
+function currentThi(climate: ClimateSample[], now: number): { value: number | null; atMs: number | null } {
+  const recent = climate.filter((c) => c.temp != null && c.rh != null && plausibleClimate(c.temp, c.rh) && now - c.t < 3_600_000);
+  if (!recent.length) return { value: null, atMs: null };
+  const mean = recent.reduce((s, c) => s + thi(c.temp as number, c.rh as number), 0) / recent.length;
+  return { value: mean, atMs: Math.max(...recent.map((c) => c.t)) };
+}
+
 export async function GET() {
   let farm;
   try {
@@ -123,6 +133,15 @@ export async function GET() {
     if (logs) alerts.push(logs);
   } else {
     console.error("alerts: last-log read failed — skipping log rule", logR.reason);
+  }
+
+  // Heat stress (climate) — current felt temperature (THI) from the most recent climate readings.
+  if (nightClimateR.status === "fulfilled") {
+    const ct = currentThi(nightClimateR.value, now);
+    const heat = heatStressAlert({ thiValue: ct.value, atMs: ct.atMs });
+    if (heat) alerts.push(heat);
+  } else {
+    console.error("alerts: climate query failed — skipping heat-stress rule", nightClimateR.reason);
   }
 
   // Night disturbance (welfare) — sustained rise in the mean flock-noise level overnight.
