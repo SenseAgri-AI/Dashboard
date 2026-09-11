@@ -2,7 +2,7 @@
 // Immutable build assets are served cache-first; auth'd pages and API/live-data always hit the network
 // (Clerk sessions + live sensor data must never be served stale); navigations fall back to an offline
 // page only when the network is unreachable. No offline data caching.
-const VERSION = "senseagri-v1";
+const VERSION = "senseagri-v2";
 const STATIC_CACHE = `${VERSION}-static`;
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icon-192.png", "/icon-512.png", "/apple-icon.png"];
@@ -69,7 +69,21 @@ self.addEventListener("push", (event) => {
     tag: data.tag || undefined,       // same tag replaces an earlier one instead of stacking
     data: { url: typeof data.url === "string" && data.url.startsWith("/") && !data.url.startsWith("//") ? data.url : "/dashboard" },
   };
-  event.waitUntil(self.registration.showNotification(data.title || "SenseAgri", options));
+  event.waitUntil((async () => {
+    let status = "displayed";
+    try {
+      await self.registration.showNotification(data.title || "SenseAgri", options);
+    } catch (error) {
+      status = "display-failed";
+      if (!data.testId) throw error;
+    }
+    // Local receipt only: no backend writes or broadcasts to other devices.
+    // showNotification resolving is not proof that the OS showed a banner.
+    if (typeof data.testId === "string") {
+      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of clients) client.postMessage({ type: "senseagri-push-test", testId: data.testId, status });
+    }
+  })());
 });
 
 self.addEventListener("notificationclick", (event) => {
