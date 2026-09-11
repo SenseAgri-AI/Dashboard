@@ -10,6 +10,7 @@ import DashSleepScore from "@/components/DashSleepScore";
 import DashEnvCol, { type EnvData } from "@/components/DashEnvCol";
 import { DashKpiGrid, type ProductionData } from "@/components/DashMetricCol";
 import DashFeedWater from "@/components/DashFeedWater";
+import PushNotifications from "@/components/PushNotifications";
 import type { SiloLevelsData } from "@/components/DashSiloLevels";
 
 interface DashboardSummary {
@@ -71,6 +72,7 @@ export default function DashboardPage() {
   const [production, setProduction] = useState<ProductionData | null>(null);
   const [siloLevels, setSiloLevels] = useState<SiloLevelsData | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
   const [alertsAt, setAlertsAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -96,11 +98,14 @@ export default function DashboardPage() {
       if (productionRes.ok) setProduction(await productionRes.json());
       if (siloLevelsRes.ok) setSiloLevels(await siloLevelsRes.json());
       if (alertsRes.ok) {
-        const d: { alerts: Alert[]; updatedAt: string } = await alertsRes.json();
+        const d: { alerts: Alert[]; updatedAt: string | null; stale?: boolean; partial?: boolean } = await alertsRes.json();
         setAlerts((d.alerts ?? []).map((a) => ({
           metric: a.title, status: sevStatus(a.severity), message: a.message, updatedAt: a.since, clipKey: a.clipKey,
         })));
         setAlertsAt(d.updatedAt ?? null);
+        setAlertsError(d.stale ? "Alert checks are delayed; displayed alerts may be out of date." : d.partial ? "Some alert checks could not complete. Showing the last known alerts." : null);
+      } else {
+        setAlertsError("Farm alerts are temporarily unavailable. Please check again later.");
       }
     } catch {
       setError("Connection error — check your network");
@@ -136,6 +141,9 @@ export default function DashboardPage() {
       <DashboardTabs active={activeView} onChange={setActiveView} narrow={isNarrow} />
 
       {activeView === "overview" ? <>
+        {/* Push notifications (test) — enable + send a test to this device */}
+        <PushNotifications />
+
         {/* Production KPIs */}
         <DashKpiGrid production={production} narrow={isNarrow} />
 
@@ -148,6 +156,7 @@ export default function DashboardPage() {
         {/* Environment + alerts */}
         <div style={{ display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "minmax(0, 1fr) 340px", gap: 14, alignItems: "start" }}>
           <DashEnvCol env={summary?.env ?? null} narrow={isNarrow} />
+          {alertsError && <p role="status" style={{ fontSize: 12, color: "#92400E" }}>{alertsError}</p>}
           <DashAlertChat alerts={alerts} updatedAt={alertsAt} />
         </div>
       </> : (

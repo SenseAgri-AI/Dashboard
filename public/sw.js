@@ -53,3 +53,33 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(fetch(req).catch(async () => (await caches.match(OFFLINE_URL)) || Response.error()));
   }
 });
+
+// ── Web Push ──────────────────────────────────────────────────────────────────
+// A push message wakes this worker even when the app is closed: show the notification, and on tap
+// focus an existing tab (or open the app) at the notification's URL. Payload is JSON: {title, body,
+// url, tag}.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; }
+  catch { data = { title: "SenseAgri", body: event.data ? event.data.text() : "" }; }
+  const options = {
+    body: data.body || "",
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    tag: data.tag || undefined,       // same tag replaces an earlier one instead of stacking
+    data: { url: typeof data.url === "string" && data.url.startsWith("/") && !data.url.startsWith("//") ? data.url : "/dashboard" },
+  };
+  event.waitUntil(self.registration.showNotification(data.title || "SenseAgri", options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL((event.notification.data && event.notification.data.url) || "/dashboard", self.location.origin);
+  const url = target.origin === self.location.origin ? target.href : new URL("/dashboard", self.location.origin).href;
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const c of clients) if (c.url.includes(url) && "focus" in c) return c.focus();
+    if (clients.length && "navigate" in clients[0]) { try { await clients[0].navigate(url); } catch {} return clients[0].focus(); }
+    if (self.clients.openWindow) return self.clients.openWindow(url);
+  })());
+});

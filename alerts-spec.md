@@ -1,10 +1,24 @@
 # Alerts — spec & logic
 
-Alerts the farmer gets on **WhatsApp** (the platform sends them via Twilio) and sees in-app. The
-platform evaluates the rules and sends; the dashboard reads and shows the same ones.
+Alerts the farmer gets on **WhatsApp** (via Twilio) and **push notifications** (the installed PWA), and
+sees in-app. There is **one source of truth**: the platform evaluates the rules on a schedule, writes
+each firing alert to a shared **`alerts` store** (the platform's `senseagri-dev-alerts` DynamoDB table,
+`farm_id`-partitioned), and sends it out; the dashboard **reads the same store**. Architecture: **[platform ADR-0003](../senseagri-platform/ADR/0003-alerts-shared-store-and-notifier.md)**.
 
-**How an alert works (v1 — kept simple):**
-- The platform checks each rule against the live data.
+**How an alert works:**
+1. A scheduled platform notifier (`pipeline/alerts.py`, **hourly** EventBridge) checks each rule against
+   the live data, per farm — each rule self-gates, so one schedule can host different cadences.
+2. On a **new** firing it writes an episode row (`state=firing`) to the `alerts` table and **sends push +
+   WhatsApp** to that farm's subscribers. While it stays firing it only bumps `last_seen` (no re-notify
+   = dedup); when it clears it's marked `resolved`.
+3. The dashboard's `/api/alerts` **reads** that farm's firing rows and shows them.
+
+> **Migration note (in progress):** the Python notifier now owns power, heat, night disturbance, poor sleep,
+> and daily-log rules. The platform notifier reads stored episodes once the farm has a notifier heartbeat.
+> Before deployment only, `legacyAlerts.ts` / `legacyAlertReader.ts` preserve the existing dashboard
+> checks; `ALERTS_REQUIRE_SHARED=true` disables this temporary fallback after rollout.
+> The board reports delayed or partial scheduled checks. See the platform
+> [rollout guide](../senseagri-platform/docs/alerts-rollout.md) for deployment and validation.
 
 **Data we can read (farm-scoped):** InfluxDB `sensors` (temp, humidity, CO₂, PM, light…), `audio_noise`
 (noise level + fan baseline), silver/Athena (daily eggs, mortality, HDEP), the sheet (log, schedules),
@@ -17,7 +31,9 @@ breed-standard curve.
 ### Heat stress
 - **Fires when:** experienced heat (temp + humidity) above comfort, sustained. Worse if it doesn't cool overnight.
 - **Says:** "Experienced heat high in {house} for {time}. Increase airflow/cooling, keep water cool, avoid handling the birds."
-- **Logic:** _TBD — THI/heat-index formula, comfort ceiling, dwell time._
+- **Logic (built):** mean felt temperature over the latest hour of valid AM308 readings.
+  Marai poultry THI; warning at 28.9 °C effective, danger at 30 °C. Missing recent climate
+  preserves the last episode. Evaluated hourly; no additional dwell time.
 
 ### Heat rising fast
 - **Fires when:** experienced heat climbing sharply toward the ceiling (rate of change).
@@ -58,7 +74,7 @@ data point roughly **once a minute**:
 - **Acoustics / mic** — the Jetson → InfluxDB **`audio_noise`**
 
 A live device keeps writing points; a dead one goes silent. So the rule just asks *"how long since the
-last point?"* for each feed. `/api/alerts` reads the newest timestamp from each measurement and
+last point?"* for each feed. The platform notifier reads the newest timestamp from each measurement and
 compares its age to a staleness window (**15 min**, `FEED_STALE_MIN` — tunable). Which feeds are
 silent tells us *what* is wrong:
 
@@ -74,9 +90,8 @@ of both (power/network). If only *one* dies, the other being alive proves the si
 it's that single device, not an outage. That's what lets us give the farmer the *right* action
 ("plug the Jetson back in" vs "check the shed").
 
-**Built here:** `src/lib/alerts.ts` (`powerOutageAlert`, a pure function over the two last-seen times)
-+ `src/app/api/alerts/route.ts` (queries the timestamps, farm-scoped). No dwell/cooldown yet — the
-platform adds those when it takes over sending.
+**Built here:** `pipeline/alert_rules.py` (platform) (`powerOutageAlert`, a pure function over the two last-seen times)
++ `pipeline/influx.py` (platform; queries the timestamps, farm-scoped). Firing episodes are deduplicated in DynamoDB; a cleared condition resolves the episode.
 
 ## 🐔 Welfare
 
@@ -87,13 +102,13 @@ platform adds those when it takes over sending.
   - Detect: night points where `noise_db_mean > −32`, grouped into consecutive runs; a run counts if it spans ≥ 2 min.
   - On a hit, attach the nearest saved anomaly **clip** (S3) so the farmer can listen.
   - Backtested on 18 nights: **2 alerts (~1/week)** — 09 Aug (mean −29.7, 8 min) and 10 Aug (mean −29.9, ~2–6 min); the loud-but-brief 08 Aug transient (mean only −33) is correctly ignored.
-  - Built in `src/lib/alerts.ts` (`nightDisturbanceAlert`) + `/api/alerts` (clip lookup via `acousticSource`).
+  - Built in `pipeline/alert_rules.py` (platform) (`nightDisturbanceAlert`) + `/api/alerts` (clip lookup via `acousticSource`).
   - _Note: baseline includes fan noise; an absolute mean threshold sidesteps the per-night fan-count variation (per-night baselines were too unstable to use)._
 
 ### Poor flock sleep  *(built — v1)*
 - **Fires when:** the nightly **Flock Night-Rest Score** is below **70** for **2 nights running**.
 - **Says:** "The flock's night-rest score has been low {N} nights running ({scores} /100). Persistent overnight disruption — {cause}." Where **{cause}** is _"overnight heat is the likely cause … improve night ventilation / cooling"_ when the poor nights ran hot (felt like ≥28.9 °C, the severe/extreme zone), else _"look for a recurring cause: predator, light leak, red mite, or equipment"_. _(🟠 warning)_
-- **Logic:** A single bad night is a one-off; a *run* of them is a recurring problem. `/api/alerts` scores every night in the recent window (`noise_db_mean` + `sensors` temp/humidity) and fires when the last `SLEEP_BAD_RUN` (**2**) nights are all below `SLEEP_POOR_SCORE` (**70**). The message names **heat** when those nights sat in the severe/extreme heat zone (felt like ≥28.9 °C) (research puts heat as the #1 sleep disruptor). Built in `src/lib/alerts.ts` (`sleepDeclineAlert`) over `src/lib/sleepScore.ts` + `src/lib/thi.ts`.
+- **Logic:** A single bad night is a one-off; a *run* of them is a recurring problem. The platform notifier scores every night in the recent window (`noise_db_mean` + `sensors` temp/humidity) and fires when the last `SLEEP_BAD_RUN` (**2**) nights are all below `SLEEP_POOR_SCORE` (**70**). The message names **heat** when those nights sat in the severe/extreme heat zone (felt like ≥28.9 °C) (research puts heat as the #1 sleep disruptor). Built in `pipeline/alert_rules.py` (platform) (`sleepDeclineAlert`) over `src/lib/sleepScore.ts` + `src/lib/thi.ts`.
 - **Full logic + the score itself:** see [docs/flock-night-rest-score.md](docs/flock-night-rest-score.md) — the dark-period window, the −32 dBFS disruption line, the **five-factor** formula (disrupt-minutes, bouts, severity, pre-dawn, **experienced heat / THI**), the score bands, and the dashboard tile.
 
 ### Distress spike
@@ -118,7 +133,7 @@ platform adds those when it takes over sending.
 ### Fill in the daily log  *(built — v1)*
 - **Fires when:** the last daily-log entry is **more than 5 days** old — or there are no entries at all.
 - **Says:** "The daily log hasn't been filled in for {N} days (last entry {date}). Log today's eggs and mortality so production and HDEP stay accurate." _(🟠 warning)_
-- **Logic:** `/api/alerts` reads the latest date from the sheet's `DailyLog` (normalising the date format), and compares its age to `LOG_OVERDUE_DAYS` (**5**). Fires if age > 5 days, or if there are no entries. Built in `src/lib/alerts.ts` (`logsOverdueAlert`).
+- **Logic:** The platform notifier reads the latest date from the sheet's `DailyLog` (normalising the date format), and compares its age to `LOG_OVERDUE_DAYS` (**5**). Fires if age > 5 days, or if there are no entries. Built in `pipeline/alert_rules.py` (platform) (`logsOverdueAlert`).
 
 ### Check schedules
 - **Fires when:** standing reminder.
