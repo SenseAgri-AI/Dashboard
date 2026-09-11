@@ -3,7 +3,7 @@
 // attribute. Alerts are farm-scoped, so the notifier queries a whole farm's devices at once; the
 // dashboard resolves a Clerk user → org → farmId (getFarmForRequest) before writing.
 // Independent of the dashboard UI — any server code (a route, or the platform alerts Lambda) can
-// call sendToFarm()/sendToUser() to make a notification appear on subscribed devices.
+// call sendToFarm()/sendToDevice() to make a notification appear on subscribed devices.
 
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, DeleteCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
@@ -33,7 +33,7 @@ function ensureVapid(): boolean {
 }
 
 export type StoredSub = { farmId: string; endpoint: string; userId: string; keys: { p256dh: string; auth: string }; createdAt: string };
-export type PushPayload = { title: string; body: string; url?: string; tag?: string };
+export type PushPayload = { title: string; body: string; url?: string; tag?: string; testId?: string };
 
 export async function saveSubscription(farmId: string, userId: string, sub: PushSubscription): Promise<void> {
   await doc().send(new PutCommand({
@@ -90,9 +90,24 @@ export async function sendToFarm(farmId: string, payload: PushPayload): Promise<
   return deliver(await getFarmSubscriptions(farmId), payload);
 }
 
-/** Notify only the given user's devices within a farm — used by the "send test" button so a test
- *  doesn't buzz everyone else on the farm. */
-export async function sendToUser(farmId: string, userId: string, payload: PushPayload): Promise<{ sent: number; removed: number }> {
-  const mine = (await getFarmSubscriptions(farmId)).filter((s) => s.userId === userId);
-  return deliver(mine, payload);
+/** A test targets one stored subscription belonging to this user and farm.
+ * Never fan out to the user's other devices. */
+export async function sendToDevice(farmId: string, userId: string, endpoint: string, payload: PushPayload): Promise<"accepted" | "not-found" | "expired"> {
+  const res = await doc().send(new QueryCommand({
+    TableName: TABLE, KeyConditionExpression: "farmId = :farm AND endpoint = :endpoint",
+    ExpressionAttributeValues: { ":farm": farmId, ":endpoint": endpoint }, ConsistentRead: true,
+  }));
+  const sub = res.Items?.[0];
+  if (!sub || sub.farmId !== farmId || sub.userId !== userId || sub.endpoint !== endpoint || !validSubscription(sub)) return "not-found";
+  if (!ensureVapid()) throw new Error("Push not configured");
+  try {
+    await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, JSON.stringify(payload), { timeout: 8000, TTL: 60 });
+    return "accepted";
+  } catch (error) {
+    const code = (error as { statusCode?: number }).statusCode;
+    if (code !== 404 && code !== 410) throw error;
+    try { await deleteSubscription(farmId, endpoint, userId); }
+    catch { console.error("push: expired test subscription cleanup failed"); }
+    return "expired";
+  }
 }
