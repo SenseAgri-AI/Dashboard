@@ -269,3 +269,19 @@ test('toggle registration is persisted per user, farm and device; off survives a
   assert.deepEqual(writes, [['farm', device.endpoint, 'user']]);
   assert.equal((await (await status()).json()).subscribed, false);
 });
+
+test('notification prompt appears once per browser and skips existing permission decisions', () => {
+  const values = new Map();
+  const storage = { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) };
+  const first = load('src/lib/pushPrompt.ts');
+  assert.equal(first.claimPushPrompt('granted', storage), false);
+  assert.equal(first.claimPushPrompt('denied', storage), false);
+  assert.equal(first.claimPushPrompt('default', storage), true);
+  assert.equal(first.claimPushPrompt('default', storage), false);
+  // Reloading has a new module but retains browser storage, including after Not now.
+  assert.equal(load('src/lib/pushPrompt.ts').claimPushPrompt('default', storage), false);
+  const blocked = { getItem() { throw Error('blocked'); }, setItem() { throw Error('blocked'); } };
+  const fallback = load('src/lib/pushPrompt.ts');
+  assert.equal(fallback.claimPushPrompt('default', blocked), true);
+  assert.equal(fallback.claimPushPrompt('default', blocked), false);
+});

@@ -21,7 +21,7 @@ function DeviceNotifications() {
   useEffect(() => {
     const request = new AbortController();
     controller.current = request;
-    void (async () => {
+    const refresh = async () => {
       const supported = !!VAPID_PUBLIC && window.isSecureContext && "Notification" in window && "PushManager" in window && "serviceWorker" in navigator;
       setAvailable(supported);
       try {
@@ -38,8 +38,10 @@ function DeviceNotifications() {
       } catch {
         if (!request.signal.aborted) setError("Couldn't connect notifications. Toggle on to retry.");
       } finally { if (!request.signal.aborted) setBusy(false); }
-    })();
-    return () => request.abort();
+    };
+    void refresh();
+    window.addEventListener("senseagri-push-changed", refresh);
+    return () => { request.abort(); window.removeEventListener("senseagri-push-changed", refresh); };
   }, []);
 
   const toggle = async () => {
