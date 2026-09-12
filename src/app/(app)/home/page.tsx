@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import PushNotifications from "@/components/PushNotifications";
 import DashStatusBar from "@/components/DashStatusBar";
 import HouseHdepChart from "@/components/HouseHdepChart";
 import { buildAttention, type AttentionAlert } from "@/lib/attention";
@@ -102,6 +103,7 @@ export default function HomePage() {
 
   return (
     <main className="sa-main" style={{ maxWidth: 1160, width: "100%", margin: "0 auto", gap: 12 }}>
+      <PushNotifications />
       {/* Status band — health dial · sensing · attention */}
       <section style={{ display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "200px minmax(0, 1fr) minmax(0, 1.2fr)", gap: 12, alignItems: "stretch" }}>
         <div style={{ display: "flex", ...(isNarrow ? { maxWidth: 260, width: "100%", margin: "0 auto" } : {}) }}>

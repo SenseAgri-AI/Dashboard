@@ -10,7 +10,6 @@ import DashSleepScore from "@/components/DashSleepScore";
 import DashEnvCol, { type EnvData } from "@/components/DashEnvCol";
 import { DashKpiGrid, type ProductionData } from "@/components/DashMetricCol";
 import DashFeedWater from "@/components/DashFeedWater";
-import PushNotifications from "@/components/PushNotifications";
 import type { SiloLevelsData } from "@/components/DashSiloLevels";
 
 interface DashboardSummary {
@@ -141,9 +140,6 @@ export default function DashboardPage() {
       <DashboardTabs active={activeView} onChange={setActiveView} narrow={isNarrow} />
 
       {activeView === "overview" ? <>
-        {/* Push notifications (test) — enable + send a test to this device */}
-        <PushNotifications />
-
         {/* Production KPIs */}
         <DashKpiGrid production={production} narrow={isNarrow} />
 

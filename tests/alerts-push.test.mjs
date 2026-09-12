@@ -4,14 +4,14 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 
-function load(file, mocks = {}) {
+function load(file, mocks = {}, globals = {}) {
   const source = fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const module = { exports: {} };
   vm.runInNewContext(js, { module, exports: module.exports, require: (name) => {
     if (!(name in mocks)) throw Error(`Unexpected import ${name}`);
     return mocks[name];
-  }, process, Buffer, URL, Date, setTimeout, clearTimeout, console: { error() {} } });
+  }, process, Buffer, URL, Date, setTimeout, clearTimeout, console: { error() {} }, ...globals });
   return module.exports;
 }
 const presentation = load('src/lib/alerts.ts');
@@ -207,4 +207,81 @@ test('service worker confirms receipt after display attempt and reports display 
   fail = false;
   push({ title: 'Regular farm alert' }); release(); await done;
   assert.equal(receipts.length, 2);
+});
+
+test('device registration respects permission, reuses subscriptions and surfaces save failures', async () => {
+  const calls = [];
+  let permission = 'denied', stored = true, saveOk = true;
+  const sub = { toJSON: () => ({ endpoint: device.endpoint, keys: device.keys }) };
+  const { registerPushDevice } = load('src/lib/pushRegistration.ts', {}, {
+    Notification: { get permission() { return permission; } }, atob,
+    navigator: { serviceWorker: {
+      register: async () => { calls.push('register'); },
+      ready: Promise.resolve({ pushManager: {
+        getSubscription: async () => stored ? sub : null,
+        subscribe: async () => { calls.push('subscribe'); return sub; },
+      } }),
+    } },
+    fetch: async (url, options) => { calls.push({ url, options }); return { ok: saveOk }; },
+  });
+  await registerPushDevice('AQ');
+  assert.equal(calls.length, 0);
+  permission = 'default';
+  await registerPushDevice('AQ');
+  assert.equal(calls.length, 0);
+  permission = 'granted';
+  await registerPushDevice('AQ');
+  assert.equal(calls.includes('subscribe'), false);
+  assert.equal(calls[1].url, '/api/push/subscribe');
+  assert.equal(JSON.parse(calls[1].options.body).subscription.endpoint, device.endpoint);
+  stored = false;
+  await registerPushDevice('AQ');
+  assert.equal(calls.includes('subscribe'), true);
+  const before = calls.length;
+  const controller = new AbortController(); controller.abort();
+  await registerPushDevice('AQ', controller.signal);
+  assert.equal(calls.length, before);
+  saveOk = false;
+  await assert.rejects(registerPushDevice('AQ'), /Couldn't enable/);
+});
+
+test('toggle registration is persisted per user, farm and device; off survives a reload', async () => {
+  let row;
+  const writes = [];
+  const api = load('src/app/api/push/subscribe/route.ts', {
+    'next/server': { NextResponse: Response },
+    '@clerk/nextjs/server': { auth: async () => ({ userId: 'user' }) },
+    '@/lib/farms': { FarmAccessError, getFarmForRequest: async () => ({ farmId: 'farm' }) },
+    '@/lib/pushValidation': validation,
+    '@/lib/push': {
+      saveSubscription: async (farmId, userId, sub) => { row = { farmId, userId, ...sub }; },
+      deleteSubscription: async (...args) => { writes.push(args); row = null; },
+      getFarmSubscriptions: async () => row ? [row] : [],
+    },
+  });
+  const req = body => ({ json: async () => body });
+  const status = () => api.GET({ nextUrl: new URL(`https://example.test/api/push/subscribe?endpoint=${encodeURIComponent(device.endpoint)}`) });
+  assert.equal((await (await status()).json()).subscribed, false);
+  assert.equal((await api.POST(req({ subscription: device, farmId: 'other', userId: 'other' }))).status, 200);
+  assert.equal(row.farmId, 'farm'); assert.equal(row.userId, 'user');
+  assert.equal((await (await status()).json()).subscribed, true);
+  assert.equal((await api.DELETE(req({ endpoint: device.endpoint }))).status, 200);
+  assert.deepEqual(writes, [['farm', device.endpoint, 'user']]);
+  assert.equal((await (await status()).json()).subscribed, false);
+});
+
+test('notification prompt appears once per browser and skips existing permission decisions', () => {
+  const values = new Map();
+  const storage = { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) };
+  const first = load('src/lib/pushPrompt.ts');
+  assert.equal(first.claimPushPrompt('granted', storage), false);
+  assert.equal(first.claimPushPrompt('denied', storage), false);
+  assert.equal(first.claimPushPrompt('default', storage), true);
+  assert.equal(first.claimPushPrompt('default', storage), false);
+  // Reloading has a new module but retains browser storage, including after Not now.
+  assert.equal(load('src/lib/pushPrompt.ts').claimPushPrompt('default', storage), false);
+  const blocked = { getItem() { throw Error('blocked'); }, setItem() { throw Error('blocked'); } };
+  const fallback = load('src/lib/pushPrompt.ts');
+  assert.equal(fallback.claimPushPrompt('default', blocked), true);
+  assert.equal(fallback.claimPushPrompt('default', blocked), false);
 });
