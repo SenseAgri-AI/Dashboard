@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine, ReferenceArea, ComposedChart, Scatter,
 } from "recharts";
+import { chartWindow } from "@/lib/chartWindow";
 import { standardHdepForWeek } from "@/lib/henStandard";
 import { THI_COMFORT, THI_SEVERE, THI_EXTREME } from "@/lib/thi";
 
@@ -213,6 +214,8 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
   useEffect(() => { setZoom(null); }, [domainMs[0], domainMs[1]]); // reset zoom when the window changes
 
   const domain = zoom ?? domainMs;
+  const [visibleFrom, visibleTo] = domain;
+  const visibleData = useMemo(() => chartWindow(data, visibleFrom, visibleTo), [data, visibleFrom, visibleTo]);
   // Track the drag start in a REF, not state — setting state on mousedown would re-render the
   // dots mid-press so their onClick (play clip) never fires. Selection engages only on drag.
   const down = (e: ChartMouse) => { startRef.current = e?.activeLabel != null ? Number(e.activeLabel) : null; };
@@ -246,7 +249,7 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
           style={{ position: "absolute", top: 0, right: 8, zIndex: 2, fontSize: 10, fontWeight: 700, padding: "3px 8px", border: "1px solid var(--divider)", background: "#fff", cursor: "pointer" }}>Reset zoom</button>
       )}
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 16, right: right ? 4 : 12, bottom: 4, left: -12 }}
+        <ComposedChart data={visibleData} margin={{ top: 16, right: right ? 4 : 12, bottom: 4, left: -12 }}
           onMouseDown={down} onMouseMove={move} onMouseUp={up}
           onTouchStart={down} onTouchMove={move} onTouchEnd={up}>
           <CartesianGrid strokeDasharray="2 4" stroke={GRID} vertical={false} />
@@ -678,6 +681,8 @@ function AcousticChart({ data, domainMs, selectedT, onPick, tickFormat, labelFor
   useEffect(() => { setZoom(null); }, [domainMs[0], domainMs[1]]); // reset when the window changes
 
   const domain = zoom ?? domainMs;
+  const [visibleFrom, visibleTo] = domain;
+  const visibleData = useMemo(() => chartWindow(data, visibleFrom, visibleTo), [data, visibleFrom, visibleTo]);
   // Track the drag start in a REF, not state — setting state on mousedown would re-render the
   // dots mid-press so their onClick (play clip) never fires. Selection engages only on drag.
   const down = (e: ChartMouse) => { startRef.current = e?.activeLabel != null ? Number(e.activeLabel) : null; };
@@ -699,7 +704,7 @@ function AcousticChart({ data, domainMs, selectedT, onPick, tickFormat, labelFor
           style={{ position: "absolute", top: 0, right: 8, zIndex: 2, fontSize: 10, fontWeight: 700, padding: "3px 8px", border: "1px solid var(--divider)", background: "#fff", cursor: "pointer" }}>Reset zoom</button>
       )}
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 16, right: 12, bottom: 4, left: -6 }}
+        <ComposedChart data={visibleData} margin={{ top: 16, right: 12, bottom: 4, left: -6 }}
           onMouseDown={down} onMouseMove={move} onMouseUp={up}
           onTouchStart={down} onTouchMove={move} onTouchEnd={up}>
           <CartesianGrid strokeDasharray="2 4" stroke={GRID} vertical={false} />
