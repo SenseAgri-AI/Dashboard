@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { standardHdepForWeek, HEN_STANDARD } from "@/lib/henStandard";
+import { withFlockAge } from "@/lib/flockAge";
 
 // Compact Hen-day % (HDEP) vs breed-standard projection for one house, to end of cycle.
 // Green fill above the standard, red below (like the Analytics section). Actual HDEP is bucketed to
@@ -28,7 +29,7 @@ function flockWeekAt(h: House, iso: string): number {
   return days / 7;
 }
 
-const fmtDate = (ms: number) => new Date(ms).toLocaleDateString("en-ZA", { month: "short", year: "2-digit" });
+const fmtDate = (ms: number, house: House) => withFlockAge(new Date(ms).toLocaleDateString("en-ZA", { month: "short", year: "2-digit" }), house, ms, true);
 
 export default function HouseHdepChart({ house, height = 150 }: { house: House; height?: number }) {
   const [raw, setRaw] = useState<Row[] | null>(null);
@@ -93,9 +94,9 @@ export default function HouseHdepChart({ house, height = 150 }: { house: House; 
             <ComposedChart data={pts} margin={{ top: 6, right: 10, bottom: 0, left: -20 }}>
               <CartesianGrid strokeDasharray="2 4" stroke={GRID} vertical={false} />
               <XAxis dataKey="t" type="number" scale="time" domain={[pts[0]?.t ?? 0, pts[pts.length - 1]?.t ?? 0]}
-                tickFormatter={fmtDate} tick={{ fontSize: 9, fill: AXIS, fontFamily: "Inter" }} axisLine={{ stroke: "#d1dada" }} tickLine={false} minTickGap={44} />
+                tickFormatter={(ms) => fmtDate(Number(ms), house)} tick={{ fontSize: 9, fill: AXIS, fontFamily: "Inter" }} axisLine={{ stroke: "#d1dada" }} tickLine={false} minTickGap={44} />
               <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tick={{ fontSize: 9, fill: AXIS, fontFamily: "Inter" }} axisLine={false} tickLine={false} width={30} unit="%" />
-              <Tooltip labelFormatter={(ms) => new Date(Number(ms)).toLocaleDateString("en-ZA", { month: "short", year: "numeric" })}
+              <Tooltip labelFormatter={(ms) => withFlockAge(new Date(Number(ms)).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" }), house, Number(ms))}
                 formatter={(value, name) => {
                   if (name !== "Actual" && name !== "Breed standard") return null;
                   return [value == null ? "—" : `${Math.round(Number(value))}%`, name];

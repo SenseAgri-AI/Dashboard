@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ComposedChart, Area, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { withFlockAge } from "@/lib/flockAge";
 
 // Flock-noise welfare card: 24 h noise over a red→green "heat" backdrop (loud/stressed up, calm down),
 // a Calm/Stressed badge from noise-vs-baseline, and spike anomalies surfaced on the plot (tap to hear).
@@ -84,7 +85,7 @@ function computeWelfare(series: NoiseRow[], anomalies: AnomalyRow[], now: number
 
 // Read the time directly from the hovered noise point. This keeps the label moving with the cursor
 // even though anomaly markers share the same chart.
-function NoiseTooltip(props: { active?: boolean; payload?: Array<{ name?: string; value?: number | string; payload?: { t?: number } }> }) {
+function NoiseTooltip(props: { active?: boolean; payload?: Array<{ name?: string; value?: number | string; payload?: { t?: number } }>; house?: { startDate: string; startAgeDays: number } | null }) {
   const { active, payload } = props;
   if (!active || !payload || !payload.length) return null;
   const noise = payload.find((item) => item.name === "Noise") ?? payload[0];
@@ -93,7 +94,7 @@ function NoiseTooltip(props: { active?: boolean; payload?: Array<{ name?: string
   return (
     <div style={{ background: "#002E35", border: `1px solid ${LINE}`, borderRadius: 6, padding: "6px 10px", fontSize: 12, color: "#fff" }}>
       <div style={{ color: "#8fd0d8", fontWeight: 700, marginBottom: 2 }}>
-        {new Date(time).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false })}
+        {withFlockAge(new Date(time).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }), props.house, time)}
       </div>
       <div style={{ fontWeight: 800 }}>Noise {dbFmt(Number(noise?.value))}</div>
     </div>
@@ -110,7 +111,7 @@ function AnomalyDot(props: { cx?: number; cy?: number }) {
   );
 }
 
-export default function DashAcousticCard({ narrow }: { narrow?: boolean }) {
+export default function DashAcousticCard({ narrow, house = null }: { narrow?: boolean; house?: { startDate: string; startAgeDays: number } | null }) {
   const [series, setSeries] = useState<NoiseRow[]>([]);
   const [anomalies, setAnomalies] = useState<AnomalyRow[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -226,7 +227,7 @@ export default function DashAcousticCard({ narrow }: { narrow?: boolean }) {
                 tickFormatter={(ms) => new Date(ms).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false })}
                 tick={{ fontSize: 9, fill: AXIS }} axisLine={false} tickLine={false} minTickGap={50} />
               <YAxis tick={{ fontSize: 9, fill: AXIS }} axisLine={false} tickLine={false} width={40} unit=" dB" domain={[yMin, yMax]} allowDataOverflow />
-              <Tooltip cursor={{ stroke: LINE, strokeWidth: 1.25, strokeDasharray: "4 3" }} content={<NoiseTooltip />} />
+              <Tooltip cursor={{ stroke: LINE, strokeWidth: 1.25, strokeDasharray: "4 3" }} content={<NoiseTooltip house={house} />} />
               <Area type="monotone" dataKey="mean" name="Noise" stroke={LINE} strokeWidth={2} fill="url(#sa-noise-heat)" fillOpacity={1} baseValue={yMin} dot={false} connectNulls isAnimationActive={false} />
               <Scatter name="Anomaly" dataKey="anom" isAnimationActive={false}
                 shape={(p) => <AnomalyDot {...(p as { cx?: number; cy?: number })} />}
