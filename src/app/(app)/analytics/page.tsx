@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine, ReferenceArea, ComposedChart, Scatter,
 } from "recharts";
+import { chartWindow } from "@/lib/chartWindow";
 import { standardHdepForWeek } from "@/lib/henStandard";
 import { THI_COMFORT, THI_SEVERE, THI_EXTREME } from "@/lib/thi";
+import { withFlockAge } from "@/lib/flockAge";
 
 // Heat-stress reference bands for the felt-temperature (THI) axis — comfort (< 27.8 °C) stays clear;
 // the stress zones are shaded and only appear once the axis reaches them (ifOverflow="hidden").
@@ -112,9 +114,9 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
   { key: "noise", label: "Sound level", unit: "dB", env: false },
   { key: "eggs_total", label: "Eggs / day", unit: "", env: false },
   { key: "egg_sizes", label: "Egg sizes (all)", unit: "", env: false },
-  { key: "eggs_damaged", label: "Breakages", unit: "", env: false },
   { key: "avg_egg_weight", label: "Egg weight", unit: "g", env: false },
   { key: "cum_mortality", label: "Cumulative mortality", unit: "%", env: false },
+  { key: "eggs_damaged", label: "Eggs broken / day", unit: "", env: false },
   { key: "breakage_rate", label: "Breakage rate", unit: "%", env: false },
   { key: "hdep", label: "Hen-day %", unit: "%", env: false },
   { key: "night_rest", label: "Night-rest score", unit: "", env: false },
@@ -202,10 +204,11 @@ export default function AnalyticsPage() {
 }
 
 // ── Shared plot: dual-axis, min–max bands, overlays, drag-to-zoom ──
-function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, zoneBands, tickFormat, labelFormat }: {
+function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, zoneBands, tickFormat, labelFormat, house }: {
   data: Frame[]; domainMs: [number, number]; left: AxisSpec; right: AxisSpec | null;
   standardAxis: "left" | "right" | null; annos: Anno[]; bands: Band[]; zoneBands?: ZoneBands | null;
   tickFormat: (ms: number) => string; labelFormat: (ms: number) => string;
+  house?: House | null;
 }) {
   const [zoom, setZoom] = useState<[number, number] | null>(null);
   const [sel, setSel] = useState<[number, number] | null>(null);
@@ -213,6 +216,8 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
   useEffect(() => { setZoom(null); }, [domainMs[0], domainMs[1]]); // reset zoom when the window changes
 
   const domain = zoom ?? domainMs;
+  const [visibleFrom, visibleTo] = domain;
+  const visibleData = useMemo(() => chartWindow(data, visibleFrom, visibleTo), [data, visibleFrom, visibleTo]);
   // Track the drag start in a REF, not state — setting state on mousedown would re-render the
   // dots mid-press so their onClick (play clip) never fires. Selection engages only on drag.
   const down = (e: ChartMouse) => { startRef.current = e?.activeLabel != null ? Number(e.activeLabel) : null; };
@@ -246,7 +251,7 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
           style={{ position: "absolute", top: 0, right: 8, zIndex: 2, fontSize: 10, fontWeight: 700, padding: "3px 8px", border: "1px solid var(--divider)", background: "#fff", cursor: "pointer" }}>Reset zoom</button>
       )}
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 16, right: right ? 4 : 12, bottom: 4, left: -12 }}
+        <ComposedChart data={visibleData} margin={{ top: 16, right: right ? 4 : 12, bottom: 4, left: -12 }}
           onMouseDown={down} onMouseMove={move} onMouseUp={up}
           onTouchStart={down} onTouchMove={move} onTouchEnd={up}>
           <CartesianGrid strokeDasharray="2 4" stroke={GRID} vertical={false} />
@@ -255,10 +260,10 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
             <ReferenceArea key={`z${i}`} yAxisId={zoneBands.axis} y1={z.y1} y2={z.y2} stroke="none" fill={z.color} fillOpacity={z.opacity} ifOverflow="hidden" />
           ))}
           <XAxis dataKey="t" type="number" scale="time" domain={domain} allowDataOverflow
-            tickFormatter={tickFormat} tick={{ fontSize: 10, fill: AXIS, fontFamily: "Inter" }} axisLine={{ stroke: "#d1dada" }} tickLine={false} minTickGap={44} />
+            tickFormatter={(ms) => withFlockAge(tickFormat(Number(ms)), house, Number(ms), true)} tick={{ fontSize: 10, fill: AXIS, fontFamily: "Inter" }} axisLine={{ stroke: "#d1dada" }} tickLine={false} minTickGap={44} />
           <YAxis yAxisId="left" tick={{ fontSize: 11, fill: left.axisColor, fontFamily: "Inter" }} axisLine={false} tickLine={false} unit={left.unit} width={52} />
           {right && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: right.axisColor, fontFamily: "Inter" }} axisLine={false} tickLine={false} unit={right.unit} width={52} />}
-          <Tooltip labelFormatter={(ms) => labelFormat(Number(ms))}
+          <Tooltip labelFormatter={(ms) => withFlockAge(labelFormat(Number(ms)), house, Number(ms))}
             formatter={(value, name) => { if (name === "Above standard" || name === "Below standard") return null; if (Array.isArray(value)) return `${value[0]} – ${value[1]}`; return value as number; }}
             contentStyle={{ background: PRIMARY, border: `1px solid ${TEAL}`, borderRadius: 0, fontSize: 12, color: "#fff" }} labelStyle={{ color: TEAL }} />
           <Legend wrapperStyle={{ fontSize: 12, fontWeight: 600 }} />
@@ -283,6 +288,7 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
 
 // ── High-res: recent InfluxDB, down to 15-min, with the actual daily schedule windows ──
 function HighResExplorer() {
+  const [house, setHouse] = useState<House | null>(null);
   const [left, setLeft] = useState("temperature");
   const [right, setRight] = useState("");
   const [rangeKey, setRangeKey] = useState("7d");
@@ -301,7 +307,8 @@ function HighResExplorer() {
 
   useEffect(() => {
     (async () => {
-      const [s, e, f] = await Promise.all([fetch("/api/schedule"), fetch("/api/events"), fetch("/api/feed")]);
+      const [h, s, e, f] = await Promise.all([fetch("/api/houses"), fetch("/api/schedule"), fetch("/api/events"), fetch("/api/feed")]);
+      if (h.ok) setHouse(((await h.json()).houses ?? [])[0] ?? null);
       if (s.ok) setSched((await s.json()).versions ?? []);
       if (e.ok) setEvents((await e.json()).events ?? []);
       if (f.ok) setFeed((await f.json()).deliveries ?? []);
@@ -378,7 +385,7 @@ function HighResExplorer() {
               right={rightSpec}
               standardAxis={null} annos={marks} bands={bands} zoneBands={zoneBands}
               tickFormat={(ms) => new Date(ms).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: rangeKey === "24h" ? "2-digit" : undefined, minute: rangeKey === "24h" ? "2-digit" : undefined })}
-              labelFormat={(ms) => new Date(ms).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} />}
+              labelFormat={(ms) => new Date(ms).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} house={house} />}
         {showWindows && schedLegend.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "8px 8px 0" }}>
             {schedLegend.map((s) => {
@@ -512,7 +519,7 @@ function SilverExplorer() {
               right={rightSpec}
               standardAxis={stdOn ? hdepAxis : null} annos={annos} bands={[]} zoneBands={zoneBands}
               tickFormat={(ms) => new Date(ms).toLocaleDateString("en-ZA", { day: "numeric", month: "short" })}
-              labelFormat={(ms) => new Date(ms).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "2-digit" })} />}
+              labelFormat={(ms) => new Date(ms).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "2-digit" })} house={house} />}
       </div>
       <div className="sa-chart-note" style={NOTE_PAD}>
         Daily, from the AWS silver layer. Drag across the plot to zoom.
@@ -541,6 +548,7 @@ const dbFmt = (v: number | null | undefined) => (v == null ? "—" : `${Math.rou
 const anomKey = (a: AnomalyRow) => a.clipKey ?? a.time;
 
 function AcousticExplorer() {
+  const [house, setHouse] = useState<House | null>(null);
   const [rangeKey, setRangeKey] = useState("24h");
   const [series, setSeries] = useState<NoiseRow[]>([]);
   const [anomalies, setAnomalies] = useState<AnomalyRow[]>([]);
@@ -550,6 +558,8 @@ function AcousticExplorer() {
   const [clip, setClip] = useState<ClipState>({ key: null, state: "idle" });
   const [win, setWin] = useState<{ fromMs: number; toMs: number }>({ fromMs: 0, toMs: 0 });
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => { fetch("/api/houses").then((r) => r.ok ? r.json() : null).then((d) => setHouse(d?.houses?.[0] ?? null)).catch(() => {}); }, []);
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null);
@@ -617,7 +627,7 @@ function AcousticExplorer() {
           : !hasNoise && !hasAnom ? <div style={{ height: 340 }}><Placeholder text="No acoustic data yet — the mic feed will show here once it's flowing." /></div>
           : <AcousticChart data={chartData} domainMs={[win.fromMs, win.toMs]} selectedT={selectedT} onPick={playClip}
               tickFormat={(ms) => new Date(ms).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: rangeKey === "24h" ? "2-digit" : undefined, minute: rangeKey === "24h" ? "2-digit" : undefined })}
-              labelFormat={(ms) => new Date(ms).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} />}
+              labelFormat={(ms) => new Date(ms).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} house={house} />}
       </div>
       <AnomalyInbox anomalies={anomalies} selected={selected} clip={clip} onPlay={playClip} />
       <audio ref={audioRef} onEnded={() => setClip((c) => ({ ...c, state: "idle" }))} onError={() => setClip((c) => ({ ...c, state: "error" }))} style={{ display: "none" }} />
@@ -667,9 +677,10 @@ function AcousticTip({ active, payload, labelFormat }: {
   );
 }
 
-function AcousticChart({ data, domainMs, selectedT, onPick, tickFormat, labelFormat }: {
+function AcousticChart({ data, domainMs, selectedT, onPick, tickFormat, labelFormat, house }: {
   data: NoiseDatum[]; domainMs: [number, number]; selectedT: number | null;
   onPick: (a: AnomalyRow) => void; tickFormat: (ms: number) => string; labelFormat: (ms: number) => string;
+  house?: House | null;
 }) {
   // Drag-to-zoom + reset, matching the other explorer charts.
   const [zoom, setZoom] = useState<[number, number] | null>(null);
@@ -678,6 +689,8 @@ function AcousticChart({ data, domainMs, selectedT, onPick, tickFormat, labelFor
   useEffect(() => { setZoom(null); }, [domainMs[0], domainMs[1]]); // reset when the window changes
 
   const domain = zoom ?? domainMs;
+  const [visibleFrom, visibleTo] = domain;
+  const visibleData = useMemo(() => chartWindow(data, visibleFrom, visibleTo), [data, visibleFrom, visibleTo]);
   // Track the drag start in a REF, not state — setting state on mousedown would re-render the
   // dots mid-press so their onClick (play clip) never fires. Selection engages only on drag.
   const down = (e: ChartMouse) => { startRef.current = e?.activeLabel != null ? Number(e.activeLabel) : null; };
@@ -699,15 +712,15 @@ function AcousticChart({ data, domainMs, selectedT, onPick, tickFormat, labelFor
           style={{ position: "absolute", top: 0, right: 8, zIndex: 2, fontSize: 10, fontWeight: 700, padding: "3px 8px", border: "1px solid var(--divider)", background: "#fff", cursor: "pointer" }}>Reset zoom</button>
       )}
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 16, right: 12, bottom: 4, left: -6 }}
+        <ComposedChart data={visibleData} margin={{ top: 16, right: 12, bottom: 4, left: -6 }}
           onMouseDown={down} onMouseMove={move} onMouseUp={up}
           onTouchStart={down} onTouchMove={move} onTouchEnd={up}>
           <CartesianGrid strokeDasharray="2 4" stroke={GRID} vertical={false} />
           <XAxis dataKey="t" type="number" scale="time" domain={domain} allowDataOverflow
-            tickFormatter={tickFormat} tick={{ fontSize: 10, fill: AXIS, fontFamily: "Inter" }} axisLine={{ stroke: "#d1dada" }} tickLine={false} minTickGap={44} />
+            tickFormatter={(ms) => withFlockAge(tickFormat(Number(ms)), house, Number(ms), true)} tick={{ fontSize: 10, fill: AXIS, fontFamily: "Inter" }} axisLine={{ stroke: "#d1dada" }} tickLine={false} minTickGap={44} />
           {/* dBFS is negative (0 = loudest); let recharts auto-scale — no 0-based assumption */}
           <YAxis tick={{ fontSize: 11, fill: TEAL, fontFamily: "Inter" }} axisLine={false} tickLine={false} unit=" dB" width={56} domain={["auto", "auto"]} />
-          <Tooltip content={<AcousticTip labelFormat={labelFormat} />} cursor={{ stroke: TEAL, strokeWidth: 1, strokeOpacity: 0.4 }} />
+          <Tooltip content={<AcousticTip labelFormat={(ms) => withFlockAge(labelFormat(ms), house, ms)} />} cursor={{ stroke: TEAL, strokeWidth: 1, strokeOpacity: 0.4 }} />
           <Legend wrapperStyle={{ fontSize: 12, fontWeight: 600 }} />
           <Area type="monotone" dataKey="band" name="Loudest (per bucket)" stroke="none" fill={TEAL} fillOpacity={0.16} legendType="none" isAnimationActive={false} connectNulls />
           <Line type="monotone" dataKey="baseline" name="Baseline" stroke={AXIS} strokeWidth={1} strokeDasharray="5 4" dot={false} connectNulls isAnimationActive={false} />

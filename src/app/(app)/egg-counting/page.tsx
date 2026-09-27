@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
+import { flockAgeWeeksAt, withFlockAge } from "@/lib/flockAge";
 
 // Egg Counting — live per-camera counts (InfluxDB egg_count) + annotated evidence clips (S3).
 // Two Bierman collectors, one camera per A-frame house. Reads the farm-scoped /api/egg-count.
@@ -18,6 +19,7 @@ const AXIS_LINE = { stroke: "#BEC8CA", strokeWidth: 1 };
 
 type Range = "24h" | "7d" | "30d";
 type Camera = { cameraId: string; houseId: string | null; label: string };
+type FlockHouse = { id: string; startDate: string; startAgeDays: number };
 type Clip = { key: string; capturedAt: string | null; url: string };
 type CameraClips = Camera & { date: string | null; isFallback: boolean; clips: Clip[] };
 type PerCamera = Camera & { eggsToday: number };
@@ -53,18 +55,19 @@ function useIsNarrow(px = 760) {
   return narrow;
 }
 
-function ChartTooltip({ active, payload, label, range }: {
-  active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string; range: Range;
+function ChartTooltip({ active, payload, label, range, houses, cameras }: {
+  active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string; range: Range; houses: FlockHouse[]; cameras: Camera[];
 }) {
   if (!active || !payload?.length) return null;
-  const when = range === "24h" ? sastTime(label) : sast(label, { day: "numeric", month: "short" });
+  const timestamp = label ? new Date(label).getTime() : NaN;
+  const when = withFlockAge(range === "24h" ? sastDateTime(label) : sast(label, { day: "numeric", month: "short" }), houses[0], timestamp);
   return (
     <div style={{ background: "#002E35", color: "#fff", fontSize: 11, padding: "6px 10px", fontFamily: "Inter,sans-serif", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" }}>
       <div style={{ opacity: 0.6, marginBottom: 3 }}>{when}</div>
       {payload.map((p, i) => (
         <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color, display: "inline-block" }} />
-          <span>{p.name}</span>
+          <span>{p.name}{(() => { const camera = cameras.find((item) => item.cameraId === p.name || item.label === p.name); const house = houses.find((item) => item.id === camera?.houseId); const age = flockAgeWeeksAt(house, timestamp); return age == null ? "" : ` · ${age} wks`; })()}</span>
           <strong style={{ marginLeft: "auto" }}>{nInt(Math.round(p.value))}</strong>
         </div>
       ))}
@@ -76,9 +79,12 @@ export default function EggCountingPage() {
   const narrow = useIsNarrow();
   const [range, setRange] = useState<Range>("24h");
   const [data, setData] = useState<Payload | null>(null);
+  const [houses, setHouses] = useState<FlockHouse[]>([]);
   const [players, setPlayers] = useState<Record<string, PlayerState>>({});
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { fetch("/api/houses").then((r) => r.ok ? r.json() : null).then((d) => setHouses(d?.houses ?? [])).catch(() => {}); }, []);
 
   // Full load: counts + totals + clips. Seeds the video players (only here — polls never touch them).
   // `isActive` guards against a stale fetch applying after the range changed / component unmounted.
@@ -203,10 +209,10 @@ export default function EggCountingPage() {
                   </defs>
                   <CartesianGrid stroke={GRID} vertical={false} strokeDasharray="3 3" />
                   <XAxis dataKey="time" tick={TICK} tickLine={false} axisLine={AXIS_LINE}
-                    tickFormatter={(t: string) => (range === "24h" ? sastTime(t) : sast(t, { day: "numeric", month: "short" }))}
+                    tickFormatter={(t: string) => withFlockAge(range === "24h" ? sastTime(t) : sast(t, { day: "numeric", month: "short" }), houses.find((h) => h.id === cameras[0]?.houseId), new Date(t).getTime(), true)}
                     minTickGap={narrow ? 40 : 60} />
                   <YAxis tick={TICK} tickLine={false} axisLine={AXIS_LINE} width={38} allowDecimals={false} />
-                  <Tooltip content={<ChartTooltip range={range} />} />
+                  <Tooltip content={<ChartTooltip range={range} houses={houses} cameras={cameras} />} />
                   <Legend wrapperStyle={{ fontSize: 12, fontWeight: 600 }} iconType="plainline" />
                   {cameras.map((c, i) => (
                     <Area key={c.cameraId} type="monotone" dataKey={c.cameraId} name={c.label}

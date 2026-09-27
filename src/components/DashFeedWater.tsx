@@ -3,6 +3,7 @@
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import DashSiloLevels, { type SiloHistoryPoint, type SiloLevelsData } from "./DashSiloLevels";
 import type { SparklinePoint } from "./DashEnvCol";
+import { withFlockAge } from "@/lib/flockAge";
 
 const INK = "#002E35";
 const TEAL = "#2A8E9A";
@@ -24,8 +25,8 @@ function timeLabel(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString("en-ZA", { timeZone: "Africa/Johannesburg", hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
-function dateTimeLabel(timestamp: number): string {
-  return new Date(timestamp).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+function dateTimeLabel(timestamp: number, house?: { startDate: string; startAgeDays: number } | null): string {
+  return withFlockAge(new Date(timestamp).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }), house, timestamp, true);
 }
 
 function todaySast(points: SparklinePoint[]): SparklinePoint[] {
@@ -45,20 +46,20 @@ function latestRefill(history: SiloHistoryPoint[]): SiloHistoryPoint | null {
   return refill;
 }
 
-function SiloTooltip(props: { active?: boolean; label?: number; payload?: Array<{ name?: string; value?: number; color?: string }> }) {
+function SiloTooltip(props: { active?: boolean; label?: number; payload?: Array<{ name?: string; value?: number; color?: string }>; house?: { startDate: string; startAgeDays: number } | null }) {
   if (!props.active || !props.payload?.length || props.label == null) return null;
   return (
     <div style={{ background: INK, color: "#fff", borderRadius: 6, padding: "7px 9px", fontSize: 10 }}>
-      <div style={{ color: "rgba(255,255,255,0.6)", marginBottom: 3 }}>{dateTimeLabel(props.label)}</div>
+      <div style={{ color: "rgba(255,255,255,0.6)", marginBottom: 3 }}>{dateTimeLabel(props.label, props.house)}</div>
       {props.payload.filter((item) => item.value != null).map((item) => <div key={item.name} style={{ color: item.color }}><strong>{item.name}: {Math.round(item.value!).toLocaleString("en-ZA")} mm</strong></div>)}
     </div>
   );
 }
 
-function WaterTooltip(props: { active?: boolean; label?: number; payload?: Array<{ value?: number }> }) {
+function WaterTooltip(props: { active?: boolean; label?: number; payload?: Array<{ value?: number }>; house?: { startDate: string; startAgeDays: number } | null }) {
   const value = props.payload?.[0]?.value;
   if (!props.active || props.label == null || value == null) return null;
-  return <div style={{ background: INK, color: "#fff", borderRadius: 6, padding: "7px 9px", fontSize: 10 }}><div style={{ color: "rgba(255,255,255,0.6)", marginBottom: 3 }}>{timeLabel(props.label)}</div><strong>{Math.round(value * 10) / 10} L / 30 min</strong></div>;
+  return <div style={{ background: INK, color: "#fff", borderRadius: 6, padding: "7px 9px", fontSize: 10 }}><div style={{ color: "rgba(255,255,255,0.6)", marginBottom: 3 }}>{dateTimeLabel(props.label, props.house)}</div><strong>{Math.round(value * 10) / 10} L / 30 min</strong></div>;
 }
 
 function buildSiloTimeline(data: SiloLevelsData | null) {
@@ -68,7 +69,7 @@ function buildSiloTimeline(data: SiloLevelsData | null) {
     .sort((a, b) => a.t - b.t);
 }
 
-function SiloHistoryCard({ data, height }: { data: SiloLevelsData | null; height: number }) {
+function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null; height: number; house?: { startDate: string; startAgeDays: number } | null }) {
   const silos = data?.silos ?? [];
   const timeline = buildSiloTimeline(data);
   const refillTimes = silos.map((silo) => latestRefill(silo.history));
@@ -91,9 +92,9 @@ function SiloHistoryCard({ data, height }: { data: SiloLevelsData | null; height
         <ResponsiveContainer width="100%" height={height}>
           <LineChart data={timeline} margin={{ top: 16, right: 12, bottom: 0, left: 4 }}>
             <CartesianGrid stroke="#E6EBEB" vertical={false} strokeDasharray="3 3" />
-            <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={dateTimeLabel} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} minTickGap={54} />
+            <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={(t) => dateTimeLabel(Number(t), house)} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} minTickGap={54} />
             <YAxis domain={distanceDomain} reversed tickFormatter={(value) => `${Math.round(value).toLocaleString("en-ZA")}`} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} width={56} label={{ value: "mm", angle: -90, position: "insideLeft", offset: 14, style: { fontSize: 8.5, fill: "#5A6A6C", fontWeight: 700 } }} />
-            <Tooltip content={<SiloTooltip />} cursor={{ stroke: TEAL, strokeOpacity: 0.35 }} />
+            <Tooltip content={<SiloTooltip house={house} />} cursor={{ stroke: TEAL, strokeOpacity: 0.35 }} />
             {refillTimes.map((refill, index) => refill && <ReferenceLine key={`${refill.time}-${index}`} x={new Date(refill.time).getTime()} stroke={SILO_COLORS[index]} strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: `S${index + 1} fill`, position: "insideTopRight", fontSize: 8, fill: SILO_COLORS[index] }} />)}
             {silos.map((silo, index) => <Line key={silo.deviceId} type="monotone" dataKey={`silo${index}`} name={`Silo ${index + 1}`} stroke={SILO_COLORS[index]} strokeWidth={2.2} dot={{ r: 4, fill: SILO_COLORS[index], stroke: "#fff", strokeWidth: 1.5 }} activeDot={{ r: 5 }} connectNulls isAnimationActive={false} />)}
           </LineChart>
@@ -111,7 +112,7 @@ function SiloHistoryCard({ data, height }: { data: SiloLevelsData | null; height
   );
 }
 
-function WaterRateCard({ points, height }: { points: SparklinePoint[]; height: number }) {
+function WaterRateCard({ points, height, house }: { points: SparklinePoint[]; height: number; house?: { startDate: string; startAgeDays: number } | null }) {
   const today = todaySast(points).map((point) => ({ t: new Date(point.time).getTime(), value: point.value })).filter((point) => Number.isFinite(point.t));
   const total = today.reduce((sum, point) => sum + point.value, 0);
   const latest = today.at(-1)?.value ?? null;
@@ -135,7 +136,7 @@ function WaterRateCard({ points, height }: { points: SparklinePoint[]; height: n
             <CartesianGrid stroke="#E6EBEB" vertical={false} strokeDasharray="3 3" />
             <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={timeLabel} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} minTickGap={38} />
             <YAxis tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} width={42} tickFormatter={(value) => `${Math.round(value)}`} />
-            <Tooltip content={<WaterTooltip />} cursor={{ stroke: TEAL, strokeOpacity: 0.35 }} />
+            <Tooltip content={<WaterTooltip house={house} />} cursor={{ stroke: TEAL, strokeOpacity: 0.35 }} />
             <Area type="monotone" dataKey="value" stroke={TEAL} strokeWidth={2.2} fill="url(#water-rate-fill)" dot={false} isAnimationActive={false} />
           </AreaChart>
         </ResponsiveContainer>
@@ -144,15 +145,15 @@ function WaterRateCard({ points, height }: { points: SparklinePoint[]; height: n
   );
 }
 
-export default function DashFeedWater({ silos, water, narrow = false }: { silos: SiloLevelsData | null; water: SparklinePoint[]; narrow?: boolean }) {
+export default function DashFeedWater({ silos, water, narrow = false, house = null }: { silos: SiloLevelsData | null; water: SparklinePoint[]; narrow?: boolean; house?: { startDate: string; startAgeDays: number } | null }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <DashSiloLevels data={silos} narrow={narrow} />
       <section aria-label="Feed and water history">
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10, flexWrap: "wrap" }}><span style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 15, color: "var(--primary)" }}>Consumption history</span><span style={{ fontSize: 10, color: "var(--t3)" }}>Confirm stock is falling at the expected rate</span></div>
         <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-          <SiloHistoryCard data={silos} height={narrow ? 160 : 190} />
-          <WaterRateCard points={water} height={narrow ? 160 : 190} />
+          <SiloHistoryCard data={silos} height={narrow ? 160 : 190} house={house} />
+          <WaterRateCard points={water} height={narrow ? 160 : 190} house={house} />
         </div>
       </section>
     </div>

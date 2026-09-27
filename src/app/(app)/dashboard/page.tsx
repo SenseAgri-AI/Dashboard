@@ -23,6 +23,7 @@ const sevStatus = (s: AlertSeverity): AlertItem["status"] =>
   s === "danger" ? "danger" : s === "warning" ? "warning" : "neutral";
 
 type DashboardView = "overview" | "feed-water";
+type HouseCycle = { id: string; startDate: string; startAgeDays: number };
 
 function DashboardTabs({ active, onChange, narrow }: { active: DashboardView; onChange: (view: DashboardView) => void; narrow: boolean }) {
   const tabs: { id: DashboardView; label: string; detail: string; icon: React.ReactNode }[] = [
@@ -70,6 +71,7 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [production, setProduction] = useState<ProductionData | null>(null);
   const [siloLevels, setSiloLevels] = useState<SiloLevelsData | null>(null);
+  const [house, setHouse] = useState<HouseCycle | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [alertsError, setAlertsError] = useState<string | null>(null);
   const [alertsAt, setAlertsAt] = useState<string | null>(null);
@@ -86,6 +88,8 @@ export default function DashboardPage() {
         fetch("/api/alerts"),
         fetch("/api/silo-levels"),
       ]);
+      const housesRes = await fetch("/api/houses");
+      if (housesRes.ok) setHouse(((await housesRes.json()).houses ?? [])[0] ?? null);
       if (summaryRes.status === 401) { router.push("/sign-in"); return; }
       if (!summaryRes.ok) {
         const data = await summaryRes.json();
@@ -144,19 +148,19 @@ export default function DashboardPage() {
         <DashKpiGrid production={production} narrow={isNarrow} />
 
         {/* Flock-noise welfare heat */}
-        <DashAcousticCard narrow={isNarrow} />
+        <DashAcousticCard narrow={isNarrow} house={house} />
 
         {/* Flock night-rest (sleep) score */}
         <DashSleepScore />
 
         {/* Environment + alerts */}
         <div style={{ display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "minmax(0, 1fr) 340px", gap: 14, alignItems: "start" }}>
-          <DashEnvCol env={summary?.env ?? null} narrow={isNarrow} />
+          <DashEnvCol env={summary?.env ?? null} narrow={isNarrow} house={house} />
           {alertsError && <p role="status" style={{ fontSize: 12, color: "#92400E" }}>{alertsError}</p>}
           <DashAlertChat alerts={alerts} updatedAt={alertsAt} />
         </div>
       </> : (
-        <DashFeedWater silos={siloLevels} water={summary?.env.water.sparkline ?? []} narrow={isNarrow} />
+        <DashFeedWater silos={siloLevels} water={summary?.env.water.sparkline ?? []} narrow={isNarrow} house={house} />
       )}
     </main>
   );

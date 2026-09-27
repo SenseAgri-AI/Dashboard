@@ -2,6 +2,7 @@
 
 import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip } from "recharts";
 import { thi, thiZone, THI_COMFORT, THI_EXTREME } from "@/lib/thi";
+import { withFlockAge } from "@/lib/flockAge";
 
 // Environment sensor tiles (2 per row): a compact trend chart with the NORMAL band shaded (so
 // too-low / too-high is obvious), a threshold line where relevant, time on the x-axis and the
@@ -31,11 +32,11 @@ function statusInfo(status?: string): { color: string; word: string } {
 const fmtTime = (ts: string) => new Date(ts).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false });
 const yFmt = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v * 10) / 10}`);
 
-function ChartTip({ active, payload, label, unit }: { active?: boolean; payload?: { value: number; name?: string; color?: string }[]; label?: string; unit?: string }) {
+function ChartTip({ active, payload, label, unit, house }: { active?: boolean; payload?: { value: number; name?: string; color?: string; payload?: { timestamp?: string } }[]; label?: string; unit?: string; house?: { startDate: string; startAgeDays: number } | null }) {
   if (!active || !payload?.length) return null;
   return (
     <div style={{ background: "#002E35", color: "#fff", fontSize: 10, padding: "4px 8px", fontFamily: "Inter,sans-serif" }}>
-      <div style={{ opacity: 0.6, marginBottom: 1 }}>{label}</div>
+      <div style={{ opacity: 0.6, marginBottom: 1 }}>{payload[0]?.payload?.timestamp ? withFlockAge(new Date(payload[0].payload.timestamp).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }), house, new Date(payload[0].payload.timestamp).getTime()) : label}</div>
       {payload.map((p, i) => (
         <div key={i}><span style={{ color: p.color ?? "#fff" }}>{p.name ? `${p.name}: ` : ""}</span><strong>{Math.round(p.value * 100) / 100}{unit ? ` ${unit}` : ""}</strong></div>
       ))}
@@ -53,10 +54,10 @@ function autoScale(vals: number[], dp = 0): { domain: [number, number]; ticks: n
   return { domain: [rnd(lo), rnd(hi)], ticks: [rnd(lo), rnd((lo + hi) / 2), rnd(hi)] };
 }
 
-function EnvChart({ data, domain, ticks, band, threshold, tipUnit, height }: {
-  data: SparklinePoint[]; domain: [number, number]; ticks: number[]; band?: [number, number]; threshold?: number; tipUnit: string; height: number;
+function EnvChart({ data, domain, ticks, band, threshold, tipUnit, height, house }: {
+  data: SparklinePoint[]; domain: [number, number]; ticks: number[]; band?: [number, number]; threshold?: number; tipUnit: string; height: number; house?: { startDate: string; startAgeDays: number } | null;
 }) {
-  const pts = data.filter((d) => Number.isFinite(d.value)).map((d) => ({ t: fmtTime(d.time), v: d.value }));
+  const pts = data.filter((d) => Number.isFinite(d.value)).map((d) => ({ t: fmtTime(d.time), v: d.value, timestamp: d.time }));
   if (pts.length < 2) return <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--t4)", fontSize: 11 }}>No recent data</div>;
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -74,7 +75,7 @@ function EnvChart({ data, domain, ticks, band, threshold, tipUnit, height }: {
         {band && [band[0], band[1]].map((y) => <ReferenceLine key={y} y={y} stroke={GREEN} strokeOpacity={0.4} strokeDasharray="2 2" />)}
         {threshold != null && <ReferenceLine y={threshold} stroke={RED} strokeDasharray="4 3" strokeOpacity={0.7}
           label={{ value: threshold.toLocaleString(), position: "insideTopRight", fontSize: 8, fill: RED }} />}
-        <Tooltip content={<ChartTip unit={tipUnit} />} cursor={{ stroke: TEAL, strokeOpacity: 0.4 }} />
+        <Tooltip content={<ChartTip unit={tipUnit} house={house} />} cursor={{ stroke: TEAL, strokeOpacity: 0.4 }} />
         <Area type="monotone" dataKey="v" stroke={TEAL} strokeWidth={1.8} fill={`url(#env-${tipUnit})`} dot={false} isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
@@ -82,8 +83,8 @@ function EnvChart({ data, domain, ticks, band, threshold, tipUnit, height }: {
 }
 
 // Fine + coarse dust on one plot (two lines, shared axis).
-function ParticulatesChart({ pm25, pm10, height }: { pm25: SparklinePoint[]; pm10: SparklinePoint[]; height: number }) {
-  const merged = pm25.map((p, i) => ({ t: fmtTime(p.time), pm25: p.value, pm10: pm10[i]?.value ?? null }));
+function ParticulatesChart({ pm25, pm10, height, house }: { pm25: SparklinePoint[]; pm10: SparklinePoint[]; height: number; house?: { startDate: string; startAgeDays: number } | null }) {
+  const merged = pm25.map((p, i) => ({ t: fmtTime(p.time), pm25: p.value, pm10: pm10[i]?.value ?? null, timestamp: p.time }));
   const { domain, ticks } = autoScale([...pm25.map((p) => p.value), ...pm10.map((p) => p.value)]);
   if (merged.length < 2) return <div style={{ height, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--t4)", fontSize: 11 }}>No recent data</div>;
   return (
@@ -92,7 +93,7 @@ function ParticulatesChart({ pm25, pm10, height }: { pm25: SparklinePoint[]; pm1
         <CartesianGrid stroke="#E6EBEB" vertical={false} strokeDasharray="3 3" />
         <XAxis dataKey="t" tick={{ fontSize: 8.5, fill: AXIS }} tickLine={false} axisLine={{ stroke: "#DCE2E2" }} interval={Math.max(1, Math.floor(merged.length / 4))} minTickGap={28} />
         <YAxis domain={domain} ticks={ticks} tick={{ fontSize: 9, fill: AXIS }} tickLine={false} axisLine={false} width={40} tickFormatter={yFmt} />
-        <Tooltip content={<ChartTip unit="µg/m³" />} cursor={{ stroke: TEAL, strokeOpacity: 0.4 }} />
+        <Tooltip content={<ChartTip unit="µg/m³" house={house} />} cursor={{ stroke: TEAL, strokeOpacity: 0.4 }} />
         <Line type="monotone" dataKey="pm25" name="PM2.5" stroke={TEAL} strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
         <Line type="monotone" dataKey="pm10" name="PM10" stroke={GOLD} strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
       </ComposedChart>
@@ -132,7 +133,7 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 const r1 = (v: number | null | undefined) => (v == null ? null : `${Math.round(v * 10) / 10}`);
 const r0 = (v: number | null | undefined) => (v == null ? null : `${Math.round(v).toLocaleString()}`);
 
-export default function DashEnvCol({ env, narrow }: { env: EnvData | null; narrow?: boolean }) {
+export default function DashEnvCol({ env, narrow, house = null }: { env: EnvData | null; narrow?: boolean; house?: { startDate: string; startAgeDays: number } | null }) {
   const H = narrow ? 108 : 120;
   const tvocVals = (env?.tvoc.sparkline ?? []).map((p) => p.value);
   const tvocMean = env?.tvoc.mean ?? 0, tvocStd = env?.tvoc.std ?? 0;
@@ -155,15 +156,15 @@ export default function DashEnvCol({ env, narrow }: { env: EnvData | null; narro
   return (
     <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "repeat(2, minmax(0,1fr))", gap: 12 }}>
       <EnvTile name="Temperature" value={r1(env?.temperature.current)} unit="°C" status={env?.temperature.status} normal="18–26°C"
-        chart={<EnvChart data={env?.temperature.sparkline ?? []} domain={[8, 36]} ticks={[10, 20, 30]} band={[18, 26]} tipUnit="°C" height={H} />} />
+        chart={<EnvChart data={env?.temperature.sparkline ?? []} domain={[8, 36]} ticks={[10, 20, 30]} band={[18, 26]} tipUnit="°C" height={H} house={house} />} />
       <EnvTile name="Humidity" value={r0(env?.humidity.current)} unit="% RH" status={env?.humidity.status} normal="50–70%"
-        chart={<EnvChart data={env?.humidity.sparkline ?? []} domain={[20, 105]} ticks={[30, 60, 90]} band={[50, 70]} tipUnit="%" height={H} />} />
+        chart={<EnvChart data={env?.humidity.sparkline ?? []} domain={[20, 105]} ticks={[30, 60, 90]} band={[50, 70]} tipUnit="%" height={H} house={house} />} />
       <EnvTile name="Felt temp · THI" value={r1(thiCurrent)} unit="°C" status={thiStatus} normal={`<${THI_COMFORT}° comfort`}
-        chart={<EnvChart data={thiSpark} domain={[10, 34]} ticks={[14, 22, 30]} band={[10, THI_COMFORT]} threshold={THI_EXTREME} tipUnit="°C" height={H} />} />
+        chart={<EnvChart data={thiSpark} domain={[10, 34]} ticks={[14, 22, 30]} band={[10, THI_COMFORT]} threshold={THI_EXTREME} tipUnit="°C" height={H} house={house} />} />
       <EnvTile name="CO₂ / Ventilation" value={r0(env?.co2.current)} unit="ppm" status={env?.co2.status} normal="max 1,400"
-        chart={<EnvChart data={env?.co2.sparkline ?? []} domain={[300, 2200]} ticks={[500, 1200, 1900]} threshold={1400} tipUnit="ppm" height={H} />} />
+        chart={<EnvChart data={env?.co2.sparkline ?? []} domain={[300, 2200]} ticks={[500, 1200, 1900]} threshold={1400} tipUnit="ppm" height={H} house={house} />} />
       <EnvTile name="Air quality" value={env?.tvoc.current != null ? `${Math.round(env.tvoc.current * 100) / 100}` : null} unit="TVOC" normal="±2σ baseline"
-        chart={<EnvChart data={env?.tvoc.sparkline ?? []} domain={tvocScale.domain} ticks={tvocScale.ticks} band={tvocStd > 0 ? [Math.max(0, Math.round((tvocMean - 2 * tvocStd) * 10) / 10), Math.round((tvocMean + 2 * tvocStd) * 10) / 10] : undefined} tipUnit="idx" height={H} />} />
+        chart={<EnvChart data={env?.tvoc.sparkline ?? []} domain={tvocScale.domain} ticks={tvocScale.ticks} band={tvocStd > 0 ? [Math.max(0, Math.round((tvocMean - 2 * tvocStd) * 10) / 10), Math.round((tvocMean + 2 * tvocStd) * 10) / 10] : undefined} tipUnit="idx" height={H} house={house} />} />
 
       {/* Particulates — fine + coarse dust on one plot */}
       <TileShell>
@@ -177,11 +178,11 @@ export default function DashEnvCol({ env, narrow }: { env: EnvData | null; narro
           <span style={{ fontSize: 11, color: "var(--t3)", fontWeight: 600 }}>µg/m³</span>
           <span style={{ marginLeft: "auto", fontSize: 9.5, color: "var(--t4)" }}>15-min avg</span>
         </div>
-        <ParticulatesChart pm25={env?.pm2_5?.sparkline ?? []} pm10={env?.pm10?.sparkline ?? []} height={H} />
+        <ParticulatesChart pm25={env?.pm2_5?.sparkline ?? []} pm10={env?.pm10?.sparkline ?? []} height={H} house={house} />
       </TileShell>
 
       <EnvTile name="Light" value={r0(env?.light?.current)} unit="lux" normal="photoperiod"
-        chart={<EnvChart data={env?.light?.sparkline ?? []} domain={lightScale.domain} ticks={lightScale.ticks} tipUnit="lux" height={H} />} />
+        chart={<EnvChart data={env?.light?.sparkline ?? []} domain={lightScale.domain} ticks={lightScale.ticks} tipUnit="lux" height={H} house={house} />} />
     </div>
   );
 }
