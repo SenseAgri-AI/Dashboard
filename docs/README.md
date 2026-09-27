@@ -4,6 +4,27 @@ Reference documentation for the SenseAgri dashboard's welfare/alerting features 
 each one, not just a handover. Each doc is the source of truth for how a feature decides what it decides;
 the code links back to it.
 
+## Start here
+
+- **[Project state](PROJECT_STATE.md)** — current architecture, working areas, approved research, and known conflicts.
+- **[Product invariants](PRODUCT_INVARIANTS.md)** — behavior and data meanings that must survive feature work.
+- **[Data sources](DATA_SOURCES.md)** — where each dataset lives, which repository owns it, and how to choose a source.
+- **[Handover template](HANDOVER_TEMPLATE.md)** — required context when work moves to a fresh agent or session.
+
+Repository agents must also follow [`AGENTS.md`](../AGENTS.md).
+
+## Devices and calculations
+
+- **[Water meters](devices/water-meters.md)** — physical topology, pulse conversion, low-flow limitations, and missing-data semantics.
+- **[Silo radar](devices/silo-radar.md)** — distance meaning, physical estimates, and calibration limits.
+- **[Water deviation alerts](calculations/water-deviation-alerts.md)** — approved 3-hour, 6-hour, and daily alert design.
+- **[Silo-derived FCR](calculations/feed-conversion-ratio.md)** — provisional formula and inputs still required.
+
+## Investigation notes
+
+- **[September 2026 water-meter backtest](findings/2026-09-water-meter-backtest.md)**
+- **[September 2026 silo readings](findings/2026-09-silo-readings.md)**
+
 ## Alerts
 
 - **[alerts-spec.md](../alerts-spec.md)** — the full alert catalogue. Each alert's fire condition, the
