@@ -10,7 +10,8 @@ export const runtime = "nodejs";
 // physical head space above the feed.
 const FULL_DISTANCE_MM = 1500;
 const EMPTY_DISTANCE_MM = 3800;
-const HISTORY_HOURS = 168; // 7 days — the radar reports sparsely, so a short window shows too few points
+const HISTORY_DAYS = 30;
+const HISTORY_HOURS = HISTORY_DAYS * 24;
 const NON_PHYSICAL_DEVICE = /(test|demo|mock|simulator|virtual)/i;
 
 interface SiloRow {
@@ -79,7 +80,7 @@ export async function GET() {
       WHERE farm_id = '${farm.farmId}'
         AND device_type = 'EM411-RDL'
         AND distance IS NOT NULL
-        AND time > now() - INTERVAL '30 days'
+        AND time > now() - INTERVAL '${HISTORY_DAYS} days'
       ORDER BY time DESC
       LIMIT 10000
     `);
