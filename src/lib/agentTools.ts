@@ -6,6 +6,7 @@ import { listEvents } from "@/lib/eventService";
 import { listVersions, type ScheduleVersion } from "@/lib/scheduleService";
 import { standardHdepForWeek, standardCumulativeMortalityForWeek } from "@/lib/henStandard";
 import type { FarmConfig } from "@/lib/farms";
+import { getWarningSigns, getHpedForecast, type SignGroup, type SignStatus, type HourDetail, type HpedForecast } from "@/lib/aiDemo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Farm-agent tool registry.
@@ -141,6 +142,46 @@ export interface BreedComparisonResult {
   note: string;
 }
 
+export interface WarningSignsResult {
+  as_of: string;
+  date: string;
+  baseline: string;
+  day: {
+    house_litres: number;
+    a_frame_1_litres: number;
+    a_frame_2_litres: number;
+    lights_on: string | null;
+    lights_off: string | null;
+    meter_fault_day: boolean;
+  };
+  signs: {
+    key: string; label: string; group: SignGroup; status: SignStatus; value: number | null; unit: string;
+    normal_low: number | null; normal_high: number | null; message: string; research: string;
+  }[];
+  recent_flagged_days: { date: string; status: string; headline: string; signs: string[] }[];
+  notes: string[];
+}
+
+export interface WaterDetailResult {
+  date: string;
+  lights_on: string | null;
+  lights_off: string | null;
+  totals: { a_frame_1_litres: number; a_frame_2_litres: number };
+  hours: HourDetail[];
+  note: string;
+}
+
+export interface ForecastResult {
+  as_of: string;
+  model: HpedForecast["model"];
+  backtest: HpedForecast["backtest"];
+  recent_actual: { date: string; hped: number | null; standard: number | null; model_fit: number | null }[];
+  forecast: HpedForecast["forecast"];
+  drivers_now: HpedForecast["drivers"];
+  recent_drops: HpedForecast["recent_drops"];
+  notes: string[];
+}
+
 // ── The seam ─────────────────────────────────────────────────────────────────
 export interface FarmDataSource {
   getFlockSnapshot(): Promise<FlockSnapshot>;
@@ -149,6 +190,9 @@ export interface FarmDataSource {
   getEvents(args: { from?: string; to?: string }): Promise<EventsResult>;
   getSchedule(): Promise<ScheduleResult>;
   compareToBreedStandard(args: { from: string; to: string; houseId?: string }): Promise<BreedComparisonResult>;
+  getWarningSigns(args: { date?: string }): Promise<WarningSignsResult>;
+  getWaterDetail(args: { date: string }): Promise<WaterDetailResult>;
+  getHpedForecast(): Promise<ForecastResult>;
 }
 
 // ── v1 implementation: local readers, farm-scoped ────────────────────────────
@@ -432,6 +476,85 @@ export class LocalFarmDataSource implements FarmDataSource {
           : "No placement date on file for this house, so flock-week alignment may be approximate.",
     };
   }
+
+  private warningSnapshot() {
+    const snap = getWarningSigns(this.farm.farmId);
+    if (!snap) throw new ToolError("Warning signs are not available for this farm yet.");
+    return snap;
+  }
+
+  async getWarningSigns(args: { date?: string }): Promise<WarningSignsResult> {
+    const snap = this.warningSnapshot();
+    const date = args.date ? assertDate("date", args.date) : snap.as_of;
+    const day = snap.history.find((d) => d.date === date);
+    if (!day) {
+      const first = snap.history[0]?.date, last = snap.history[snap.history.length - 1]?.date;
+      throw new ToolError(`No warning signs for ${date}. Days available: ${first} to ${last}.`);
+    }
+    return {
+      as_of: snap.as_of,
+      date,
+      baseline: snap.baseline,
+      day: {
+        house_litres: day.house_litres,
+        a_frame_1_litres: day.wm1_litres,
+        a_frame_2_litres: day.wm2_litres,
+        lights_on: day.lights_on,
+        lights_off: day.lights_off,
+        meter_fault_day: day.meter_fault,
+      },
+      signs: day.signs.map((s) => {
+        const info = snap.sign_info[s.key];
+        return {
+          key: s.key, label: info?.label ?? s.key, group: info?.group ?? "flock", status: s.status,
+          value: s.value, unit: info?.unit ?? "", normal_low: s.normal_low, normal_high: s.normal_high,
+          message: s.message, research: info?.research ?? "",
+        };
+      }),
+      recent_flagged_days: snap.flagged_days.map((f) => ({
+        date: f.date, status: f.status, headline: f.headline, signs: f.reasons.map((r) => `${r.status}: ${r.label}`),
+      })),
+      notes: [snap.birds_note, ...snap.notes],
+    };
+  }
+
+  async getWaterDetail(args: { date: string }): Promise<WaterDetailResult> {
+    const snap = this.warningSnapshot();
+    const date = assertDate("date", args.date);
+    const hours = snap.hourly_detail[date];
+    if (!hours) {
+      const days = Object.keys(snap.hourly_detail).sort();
+      throw new ToolError(`No hourly detail for ${date}. Days available: ${days[0]} to ${days[days.length - 1]}.`);
+    }
+    const day = snap.history.find((d) => d.date === date);
+    const sum = (k: "wm1_l" | "wm2_l") => Math.round(hours.reduce((a, h) => a + (h[k] ?? 0), 0));
+    return {
+      date,
+      lights_on: day?.lights_on ?? null,
+      lights_off: day?.lights_off ?? null,
+      totals: { a_frame_1_litres: sum("wm1_l"), a_frame_2_litres: sum("wm2_l") },
+      hours,
+      note:
+        "Hour = local hour starting (SAST). wm1_l / wm2_l = litres through A-frame 1 / A-frame 2 meters (10 L per pulse, so small hours read 0 or 10). " +
+        "temp_c and thi (temperature-humidity index, comfort limit 27.8) from the house climate sensors; light_share = share of the hour the house was lit; " +
+        "noise_db = broadband house sound level in dB (includes fans; higher = louder).",
+    };
+  }
+
+  async getHpedForecast(): Promise<ForecastResult> {
+    const fc = getHpedForecast(this.farm.farmId);
+    if (!fc) throw new ToolError("The lay forecast is not available for this farm yet.");
+    return {
+      as_of: fc.as_of,
+      model: fc.model,
+      backtest: fc.backtest,
+      recent_actual: fc.history.slice(-21).map((h) => ({ date: h.date, hped: h.hped, standard: h.standard, model_fit: h.fitted })),
+      forecast: fc.forecast,
+      drivers_now: fc.drivers,
+      recent_drops: fc.recent_drops,
+      notes: fc.notes,
+    };
+  }
 }
 
 // ── Tool definitions (JSON schema sent to Claude) ────────────────────────────
@@ -490,6 +613,32 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {
+    name: "get_warning_signs",
+    description:
+      "The flock's daily warning signs for one day (default: the latest complete day), each compared with the flock's own previous 7 good days: daily water per bird, drinking start after lights-on, drinking around dusk, A-frame balance, night water, one A-frame dry while the other drinks, heat load (THI) and flock activity (noise). Each sign has a status (normal / watch / alert), its value, the normal range, a plain-language message, and the research behind it. Also lists the recent flagged days. Use this first when investigating a warning sign or a day.",
+    input_schema: {
+      type: "object",
+      properties: { date: { type: "string", description: "Optional day, YYYY-MM-DD. Defaults to the latest complete day." } },
+      required: [],
+    },
+  },
+  {
+    name: "get_water_detail",
+    description:
+      "Hour-by-hour detail for one day: litres through each A-frame's water meter (A-frame 1 = WM1, A-frame 2 = WM2), house temperature, THI, how lit the house was, and flock noise. Use it to see when a water change happened, whether both A-frames changed together (flock or supply-wide) or only one (that frame's line, valve or meter), and whether water flowed in the dark. For night water, also read the day before (22:00–24:00).",
+    input_schema: {
+      type: "object",
+      properties: { date: { type: "string", description: "Day, YYYY-MM-DD." } },
+      required: ["date"],
+    },
+  },
+  {
+    name: "get_hped_forecast",
+    description:
+      "The lay-rate (hen-day egg %, HPED) forecast: a model anchored to the breed standard (Prophet) with previous-day shed climate (THI), cracked-egg % and egg-size mix as drivers. Returns the date the egg data ends, the next 28 days' forecast with an 80% range, the breed standard, how accurate the model was in a backtest compared with simple baselines, how much each driver is currently adding or taking away (in HPED points), and the recent drops with their driver contributions. It is a forecast, not a measurement.",
+    input_schema: { type: "object", properties: {}, required: [] },
+  },
+  {
     name: "compare_to_breed_standard",
     description:
       "Compare the flock's actual hen-day egg % to a generic commercial-layer lay-rate standard, week by week over a date range, with per-week deltas and an average delta. Use to judge whether production is on target for the flock's age. Range capped to 400 days.",
@@ -540,6 +689,15 @@ export async function executeAgentTool(
           ok: true,
           data: await source.compareToBreedStandard({ from: String(input.from ?? ""), to: String(input.to ?? "") }),
         };
+      case "get_warning_signs":
+        return {
+          ok: true,
+          data: await source.getWarningSigns({ date: typeof input.date === "string" ? input.date : undefined }),
+        };
+      case "get_water_detail":
+        return { ok: true, data: await source.getWaterDetail({ date: String(input.date ?? "") }) };
+      case "get_hped_forecast":
+        return { ok: true, data: await source.getHpedForecast() };
       default:
         return { ok: false, error: `Unknown tool '${name}'.` };
     }

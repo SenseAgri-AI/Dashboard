@@ -1,11 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import FlockVetSigns from "@/components/FlockVetSigns";
+import FlockVetForecast from "@/components/FlockVetForecast";
+import type { WarningSnapshot, HpedForecast } from "@/lib/aiDemo";
 
 // Flock Vet — the in-app AI vet / husbandry advisor. Chat UI holds the conversation
 // client-side and POSTs the running history to /api/agent/chat, which runs the
 // farm-scoped Claude tool loop. Mobile-first: inline styles + a matchMedia hook, ≥44px
 // touch targets, no horizontal scroll.
+//
+// The Insights pane shows the farm's AI snapshots (warning signs, lay forecast) from
+// /api/ai/insights; any flag can be handed to the chat as an investigation. Wide screens
+// show insights and chat side by side; narrower screens switch between them with tabs.
 
 const PRIMARY = "#002E35";
 const TEAL = "#2A8E9A";
@@ -14,6 +21,8 @@ const GOLD = "#D4AF37";
 type Msg = { role: "user" | "assistant"; content: string; tools?: string[] };
 
 const STARTERS = [
+  "Investigate the latest warning signs",
+  "What does the lay forecast say for the next month?",
   "How is my flock doing?",
   "Why did egg production drop recently?",
   "Is my ventilation and air quality OK?",
@@ -27,7 +36,12 @@ const TOOL_LABEL: Record<string, string> = {
   get_events: "farm events",
   get_schedule: "schedules",
   compare_to_breed_standard: "breed-standard comparison",
+  get_warning_signs: "warning signs",
+  get_water_detail: "hourly water",
+  get_hped_forecast: "lay forecast",
 };
+
+type Insights = { warningSigns: WarningSnapshot | null; forecast: HpedForecast | null };
 
 function useIsNarrow(px = 760) {
   const [narrow, setNarrow] = useState(false);
@@ -96,6 +110,11 @@ function Markdown({ text }: { text: string }) {
 
 export default function AssistantPage() {
   const narrow = useIsNarrow();
+  const stacked = useIsNarrow(1199); // below this, insights and chat share the screen as tabs
+  const [tab, setTab] = useState<"insights" | "chat">("insights");
+  const [insights, setInsights] = useState<Insights | null>(null);
+  const [insightsError, setInsightsError] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -107,7 +126,24 @@ export default function AssistantPage() {
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, busy]);
+  }, [messages, busy, tab]);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/ai/insights")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d: Insights) => { if (alive) setInsights(d); })
+      .catch(() => { if (alive) setInsightsError(true); });
+    return () => { alive = false; };
+  }, []);
+
+  // Seconds spent on the current answer — investigations can take a little while.
+  useEffect(() => {
+    if (!busy) return;
+    const t0 = Date.now();
+    const id = window.setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 1000);
+    return () => { window.clearInterval(id); setElapsed(0); };
+  }, [busy]);
 
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
@@ -145,6 +181,11 @@ export default function AssistantPage() {
     }
   }, [busy, messages]);
 
+  const investigate = useCallback((prompt: string) => {
+    setTab("chat");
+    send(prompt);
+  }, [send]);
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -170,6 +211,30 @@ export default function AssistantPage() {
         </div>
       </div>
 
+      {stacked && (
+        <div role="tablist" aria-label="Flock Vet views" style={{ display: "flex", background: "#fff", borderBottom: "1px solid var(--divider)", padding: narrow ? "0 8px" : "0 20px", flexShrink: 0 }}>
+          <TabButton active={tab === "insights"} onClick={() => setTab("insights")}>Insights</TabButton>
+          <TabButton active={tab === "chat"} onClick={() => setTab("chat")}>
+            Ask Flock Vet{busy && tab !== "chat" ? " · working…" : ""}
+          </TabButton>
+        </div>
+      )}
+
+      <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+      {(!stacked || tab === "insights") && (
+        <aside aria-label="AI insights" style={{ width: stacked ? "100%" : "clamp(420px, 42%, 540px)", flexShrink: 0, overflowY: "auto", borderRight: stacked ? "none" : "1px solid var(--divider)", padding: narrow ? "12px" : "16px", display: "flex", flexDirection: "column", gap: 14, minHeight: 0 }}>
+          {insights === null && !insightsError && <InsightsNote text="Loading your farm's AI insights…" />}
+          {insightsError && <InsightsNote text="Couldn't load the AI insights. Please refresh the page." />}
+          {insights && !insights.warningSigns && !insights.forecast && (
+            <InsightsNote text="AI insights aren't set up for this farm yet. You can still ask Flock Vet anything about your flock." />
+          )}
+          {insights?.warningSigns && <FlockVetSigns data={insights.warningSigns} narrow={narrow} busy={busy} onInvestigate={investigate} />}
+          {insights?.forecast && <FlockVetForecast data={insights.forecast} busy={busy} onInvestigate={investigate} />}
+        </aside>
+      )}
+
+      {(!stacked || tab === "chat") && (
+      <section aria-label="Ask Flock Vet" style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
       {/* Messages */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: narrow ? "14px 12px" : "22px 24px", minHeight: 0 }}>
         <div style={{ maxWidth: 820, margin: "0 auto", display: "flex", flexDirection: "column", gap: 14 }}>
@@ -178,7 +243,7 @@ export default function AssistantPage() {
               <div style={{ background: "#fff", border: "1px solid var(--divider)", borderLeft: `3px solid ${TEAL}`, padding: "14px 16px", borderRadius: 8 }}>
                 <div style={{ fontWeight: 700, color: PRIMARY, marginBottom: 4 }}>Ask about your flock</div>
                 <div style={{ fontSize: 13.5, color: "var(--t2)", lineHeight: 1.5 }}>
-                  I can look at your production history, mortality, egg quality, barn environment, events and schedules to help you spot problems and decide what to do. I give husbandry and veterinary <strong>decision-support</strong> — for anything clinical or urgent, please still contact a licensed vet.
+                  I can look at your production history, mortality, egg quality, barn environment, events and schedules to help you spot problems and decide what to do. I can also investigate any warning sign or forecast drop — use the <strong>Investigate</strong> buttons in Insights. I give husbandry and veterinary <strong>decision-support</strong> — for anything clinical or urgent, please still contact a licensed vet.
                 </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "1fr 1fr", gap: 10 }}>
@@ -219,7 +284,7 @@ export default function AssistantPage() {
                 <span style={{ display: "inline-flex", gap: 3 }}>
                   <Dot delay={0} /><Dot delay={0.15} /><Dot delay={0.3} />
                 </span>
-                Checking your flock data…
+                Checking your flock data…{elapsed >= 3 ? ` ${elapsed}s` : ""}
               </div>
             </div>
           )}
@@ -257,10 +322,26 @@ export default function AssistantPage() {
           Decision-support only — not a substitute for a licensed veterinarian.
         </div>
       </div>
+      </section>
+      )}
+      </div>
 
       <style>{`@keyframes sa-bounce{0%,80%,100%{transform:translateY(0);opacity:.4}40%{transform:translateY(-4px);opacity:1}}`}</style>
     </div>
   );
+}
+
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" role="tab" aria-selected={active} onClick={onClick}
+      style={{ flex: 1, minHeight: 44, border: "none", background: "transparent", cursor: "pointer", fontFamily: "var(--font-s)", fontSize: 14, fontWeight: active ? 800 : 600, color: active ? PRIMARY : "var(--t3)", boxShadow: active ? `inset 0 -3px 0 ${TEAL}` : "none" }}>
+      {children}
+    </button>
+  );
+}
+
+function InsightsNote({ text }: { text: string }) {
+  return <div style={{ background: "#fff", border: "1px solid var(--divider)", borderRadius: 10, padding: "14px 16px", fontSize: 13, color: "var(--t2)" }}>{text}</div>;
 }
 
 function Dot({ delay }: { delay: number }) {
