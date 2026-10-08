@@ -1,1355 +1,1016 @@
 {
-  "generated_at": "2026-10-08T08:41:37+00:00",
-  "farm_id": "farm_anike_001",
-  "house_id": "house1",
-  "as_of": "2026-09-13",
-  "model": {
-    "name": "Prophet + breed-standard anchor",
-    "description": "Prophet forecasts how far daily lay sits from the generic breed standard, with a slowly changing trend, a weekday pattern and previous-day shed climate and egg-quality drivers. The anchor is then added back to give HPED.",
-    "target": "HPED divided by breed standard",
-    "regressors": [
-      {
-        "key": "thi_mean_lag1",
-        "label": "Shed climate (THI daily mean, previous day)",
-        "lag_days": 1
-      },
-      {
-        "key": "thi_max_lag1",
-        "label": "Shed climate (THI daily peak, previous day)",
-        "lag_days": 1
-      },
-      {
-        "key": "damaged_pct_lag1",
-        "label": "Cracked/damaged eggs % (previous day)",
-        "lag_days": 1
-      },
-      {
-        "key": "large_share_lag1",
-        "label": "Large+XL+Jumbo share of eggs % (previous day)",
-        "lag_days": 1
-      }
-    ]
+ "generated_at": "2026-10-08T10:49:12+00:00",
+ "farm_id": "farm_anike_001",
+ "house_id": "house1",
+ "as_of": "2026-09-13",
+ "model": {
+  "name": "Recent level along the flock's own lay curve",
+  "description": "Starts from the flock's average over its last 7 logged days and carries it along the flock's own lay curve (a Gompertz rise with a slow decline, fitted to this flock's DailyLog). It was the most accurate set-up we tested.",
+  "level_days": 7,
+  "curve_slope_pts_per_week": 0.02
+ },
+ "next_days": [
+  {
+   "date": "2026-09-14",
+   "hped": 92.18,
+   "lower": 88.58,
+   "upper": 95.82,
+   "standard": 82.5
   },
-  "backtest": {
-    "cutoff": "2026-08-16",
-    "horizon_days": 28,
-    "mae_pts": 3.07,
-    "mape_pct": 3.31,
-    "baselines": [
-      {
-        "name": "Breed standard × recent ratio",
-        "mae_pts": 4.61
-      },
-      {
-        "name": "Last 7-day mean",
-        "mae_pts": 1.48
-      }
-    ]
+  {
+   "date": "2026-09-15",
+   "hped": 92.18,
+   "lower": 88.63,
+   "upper": 96.08,
+   "standard": 82.5
   },
-  "history": [
-    {
-      "date": "2026-05-17",
-      "hped": 98.41,
-      "standard": 91.3,
-      "fitted": 93.03,
-      "week": 49,
-      "excluded": false
-    },
-    {
-      "date": "2026-05-18",
-      "hped": 93.59,
-      "standard": 90.9,
-      "fitted": 92.12,
-      "week": 50,
-      "excluded": false
-    },
-    {
-      "date": "2026-05-19",
-      "hped": 94.75,
-      "standard": 90.9,
-      "fitted": 92.49,
-      "week": 50,
-      "excluded": false
-    },
-    {
-      "date": "2026-05-20",
-      "hped": 94.81,
-      "standard": 90.9,
-      "fitted": 93.05,
-      "week": 50,
-      "excluded": false
-    },
-    {
-      "date": "2026-05-21",
-      "hped": 94.24,
-      "standard": 90.9,
-      "fitted": 91.44,
-      "week": 50,
-      "excluded": false
-    },
-    {
-      "date": "2026-05-22",
-      "hped": 92.56,
-      "standard": 90.9,
-      "fitted": 92.08,
-      "week": 50,
-      "excluded": false
-    },
-    {
-      "date": "2026-05-23",
-      "hped": 94.27,
-      "standard": 90.9,
-      "fitted": 93.5,
-      "week": 50,
-      "excluded": false
-    },
-    {
-      "date": "2026-05-24",
-      "hped": 90.69,
-      "standard": 90.9,
-      "fitted": 93.84,
-      "week": 50,
-      "excluded": false
-    },
-    {
-      "date": "2026-05-25",
-      "hped": 96.56,
-      "standard": 90.5,
-      "fitted": 92.95,
-      "week": 51,
-      "excluded": false
-    },
-    {
-      "date": "2026-05-26",
-      "hped": 89.6,
-      "standard": 90.5,
-      "fitted": 89.92,
-      "week": 51,
-      "excluded": false
-    },
-    {
-      "date": "2026-05-27",
-      "hped": 94.27,
-      "standard": 90.5,
-      "fitted": 91.5,
-      "week": 51,
-      "excluded": false
-    },
-    {
-      "date": "2026-05-28",
-      "hped": 89.51,
-      "standard": 90.5,
-      "fitted": 89.63,
-      "week": 51,
-      "excluded": false
-    },
-    {
-      "date": "2026-05-29",
-      "hped": 91.58,
-      "standard": 90.5,
-      "fitted": 92.85,
-      "week": 51,
-      "excluded": false
-    },
-    {
-      "date": "2026-05-30",
-      "hped": 89.12,
-      "standard": 90.5,
-      "fitted": 93.05,
-      "week": 51,
-      "excluded": false
-    },
-    {
-      "date": "2026-05-31",
-      "hped": 90.62,
-      "standard": 90.5,
-      "fitted": 93.86,
-      "week": 51,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-01",
-      "hped": 89.3,
-      "standard": 90.0,
-      "fitted": 91.34,
-      "week": 52,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-02",
-      "hped": 90.6,
-      "standard": 90.0,
-      "fitted": 90.86,
-      "week": 52,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-03",
-      "hped": 94.1,
-      "standard": 90.0,
-      "fitted": 92.26,
-      "week": 52,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-04",
-      "hped": 89.64,
-      "standard": 90.0,
-      "fitted": 90.27,
-      "week": 52,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-05",
-      "hped": 89.3,
-      "standard": 90.0,
-      "fitted": 93.36,
-      "week": 52,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-06",
-      "hped": 92.85,
-      "standard": 90.0,
-      "fitted": 91.36,
-      "week": 52,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-07",
-      "hped": 91.35,
-      "standard": 90.0,
-      "fitted": 91.59,
-      "week": 52,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-08",
-      "hped": 75.95,
-      "standard": 89.6,
-      "fitted": 90.06,
-      "week": 53,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-09",
-      "hped": 76.13,
-      "standard": 89.6,
-      "fitted": 90.22,
-      "week": 53,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-10",
-      "hped": 88.68,
-      "standard": 89.6,
-      "fitted": 91.35,
-      "week": 53,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-11",
-      "hped": 91.66,
-      "standard": 89.6,
-      "fitted": 89.89,
-      "week": 53,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-12",
-      "hped": 92.87,
-      "standard": 89.6,
-      "fitted": 91.93,
-      "week": 53,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-13",
-      "hped": 87.38,
-      "standard": 89.6,
-      "fitted": 91.47,
-      "week": 53,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-14",
-      "hped": 94.35,
-      "standard": 89.6,
-      "fitted": 93.11,
-      "week": 53,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-15",
-      "hped": 89.43,
-      "standard": 89.2,
-      "fitted": 91.69,
-      "week": 54,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-16",
-      "hped": 92.0,
-      "standard": 89.2,
-      "fitted": 90.9,
-      "week": 54,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-17",
-      "hped": 95.4,
-      "standard": 89.2,
-      "fitted": 91.72,
-      "week": 54,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-18",
-      "hped": 92.27,
-      "standard": 89.2,
-      "fitted": 91.0,
-      "week": 54,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-19",
-      "hped": 94.53,
-      "standard": 89.2,
-      "fitted": 93.35,
-      "week": 54,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-20",
-      "hped": 92.18,
-      "standard": 89.2,
-      "fitted": 91.96,
-      "week": 54,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-21",
-      "hped": 96.81,
-      "standard": 89.2,
-      "fitted": 94.56,
-      "week": 54,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-23",
-      "hped": 94.69,
-      "standard": 88.8,
-      "fitted": 92.49,
-      "week": 55,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-24",
-      "hped": 96.58,
-      "standard": 88.8,
-      "fitted": 92.9,
-      "week": 55,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-25",
-      "hped": 81.98,
-      "standard": 88.8,
-      "fitted": 92.66,
-      "week": 55,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-26",
-      "hped": 94.18,
-      "standard": 88.8,
-      "fitted": 94.64,
-      "week": 55,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-27",
-      "hped": 93.4,
-      "standard": 88.8,
-      "fitted": 92.36,
-      "week": 55,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-28",
-      "hped": 92.47,
-      "standard": 88.8,
-      "fitted": 93.31,
-      "week": 55,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-29",
-      "hped": 90.75,
-      "standard": 88.3,
-      "fitted": 91.49,
-      "week": 56,
-      "excluded": false
-    },
-    {
-      "date": "2026-06-30",
-      "hped": 69.13,
-      "standard": 88.3,
-      "fitted": 90.77,
-      "week": 56,
-      "excluded": true
-    },
-    {
-      "date": "2026-07-01",
-      "hped": 93.49,
-      "standard": 88.3,
-      "fitted": 91.46,
-      "week": 56,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-02",
-      "hped": 91.39,
-      "standard": 88.3,
-      "fitted": 90.24,
-      "week": 56,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-03",
-      "hped": 88.9,
-      "standard": 88.3,
-      "fitted": 93.26,
-      "week": 56,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-04",
-      "hped": 96.25,
-      "standard": 88.3,
-      "fitted": 90.87,
-      "week": 56,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-05",
-      "hped": 93.81,
-      "standard": 88.3,
-      "fitted": 91.41,
-      "week": 56,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-06",
-      "hped": 90.95,
-      "standard": 87.8,
-      "fitted": 90.78,
-      "week": 57,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-07",
-      "hped": 93.9,
-      "standard": 87.8,
-      "fitted": 90.7,
-      "week": 57,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-08",
-      "hped": 89.88,
-      "standard": 87.8,
-      "fitted": 90.64,
-      "week": 57,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-09",
-      "hped": 87.43,
-      "standard": 87.8,
-      "fitted": 89.61,
-      "week": 57,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-10",
-      "hped": 95.93,
-      "standard": 87.8,
-      "fitted": 92.0,
-      "week": 57,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-11",
-      "hped": 90.45,
-      "standard": 87.8,
-      "fitted": 91.17,
-      "week": 57,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-12",
-      "hped": 91.75,
-      "standard": 87.8,
-      "fitted": 91.64,
-      "week": 57,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-13",
-      "hped": 89.32,
-      "standard": 87.3,
-      "fitted": 91.04,
-      "week": 58,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-14",
-      "hped": 89.71,
-      "standard": 87.3,
-      "fitted": 89.81,
-      "week": 58,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-15",
-      "hped": 93.03,
-      "standard": 87.3,
-      "fitted": 91.54,
-      "week": 58,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-16",
-      "hped": 87.31,
-      "standard": 87.3,
-      "fitted": 89.14,
-      "week": 58,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-17",
-      "hped": 89.07,
-      "standard": 87.3,
-      "fitted": 91.22,
-      "week": 58,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-18",
-      "hped": 89.92,
-      "standard": 87.3,
-      "fitted": 90.35,
-      "week": 58,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-19",
-      "hped": 90.58,
-      "standard": 87.3,
-      "fitted": 91.42,
-      "week": 58,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-20",
-      "hped": 90.62,
-      "standard": 86.8,
-      "fitted": 89.46,
-      "week": 59,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-21",
-      "hped": 89.11,
-      "standard": 86.8,
-      "fitted": 88.83,
-      "week": 59,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-22",
-      "hped": 89.52,
-      "standard": 86.8,
-      "fitted": 89.36,
-      "week": 59,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-23",
-      "hped": 90.11,
-      "standard": 86.8,
-      "fitted": 90.33,
-      "week": 59,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-24",
-      "hped": 93.91,
-      "standard": 86.8,
-      "fitted": 92.37,
-      "week": 59,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-25",
-      "hped": 85.54,
-      "standard": 86.8,
-      "fitted": 92.41,
-      "week": 59,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-26",
-      "hped": 93.5,
-      "standard": 86.8,
-      "fitted": 92.26,
-      "week": 59,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-27",
-      "hped": 88.08,
-      "standard": 86.3,
-      "fitted": 90.68,
-      "week": 60,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-28",
-      "hped": 95.54,
-      "standard": 86.3,
-      "fitted": 90.26,
-      "week": 60,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-29",
-      "hped": 92.15,
-      "standard": 86.3,
-      "fitted": 90.94,
-      "week": 60,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-30",
-      "hped": 88.12,
-      "standard": 86.3,
-      "fitted": 90.18,
-      "week": 60,
-      "excluded": false
-    },
-    {
-      "date": "2026-07-31",
-      "hped": 94.71,
-      "standard": 86.3,
-      "fitted": 91.39,
-      "week": 60,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-01",
-      "hped": 88.35,
-      "standard": 86.3,
-      "fitted": 91.33,
-      "week": 60,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-02",
-      "hped": 89.21,
-      "standard": 86.3,
-      "fitted": 92.72,
-      "week": 60,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-03",
-      "hped": 89.97,
-      "standard": 85.7,
-      "fitted": 89.21,
-      "week": 61,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-04",
-      "hped": 89.21,
-      "standard": 85.7,
-      "fitted": 90.49,
-      "week": 61,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-05",
-      "hped": 78.03,
-      "standard": 85.7,
-      "fitted": 91.31,
-      "week": 61,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-06",
-      "hped": 88.02,
-      "standard": 85.7,
-      "fitted": 89.2,
-      "week": 61,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-07",
-      "hped": 84.56,
-      "standard": 85.7,
-      "fitted": 91.57,
-      "week": 61,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-08",
-      "hped": 90.06,
-      "standard": 85.7,
-      "fitted": 91.58,
-      "week": 61,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-09",
-      "hped": 88.41,
-      "standard": 85.7,
-      "fitted": 92.2,
-      "week": 61,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-10",
-      "hped": 90.38,
-      "standard": 85.2,
-      "fitted": 89.24,
-      "week": 62,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-11",
-      "hped": 91.78,
-      "standard": 85.2,
-      "fitted": 92.16,
-      "week": 62,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-12",
-      "hped": 90.29,
-      "standard": 85.2,
-      "fitted": 92.62,
-      "week": 62,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-13",
-      "hped": 91.73,
-      "standard": 85.2,
-      "fitted": 90.91,
-      "week": 62,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-14",
-      "hped": 92.14,
-      "standard": 85.2,
-      "fitted": 95.27,
-      "week": 62,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-15",
-      "hped": 92.02,
-      "standard": 85.2,
-      "fitted": 91.65,
-      "week": 62,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-16",
-      "hped": 91.36,
-      "standard": 85.2,
-      "fitted": 92.94,
-      "week": 62,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-17",
-      "hped": 91.61,
-      "standard": 84.6,
-      "fitted": 89.15,
-      "week": 63,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-18",
-      "hped": 91.17,
-      "standard": 84.6,
-      "fitted": 90.54,
-      "week": 63,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-19",
-      "hped": 92.66,
-      "standard": 84.6,
-      "fitted": 91.95,
-      "week": 63,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-20",
-      "hped": 91.95,
-      "standard": 84.6,
-      "fitted": 89.28,
-      "week": 63,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-21",
-      "hped": 92.92,
-      "standard": 84.6,
-      "fitted": 91.99,
-      "week": 63,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-22",
-      "hped": 92.85,
-      "standard": 84.6,
-      "fitted": 92.01,
-      "week": 63,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-23",
-      "hped": 92.94,
-      "standard": 84.6,
-      "fitted": 93.09,
-      "week": 63,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-24",
-      "hped": 92.53,
-      "standard": 84.1,
-      "fitted": 91.15,
-      "week": 64,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-25",
-      "hped": 90.65,
-      "standard": 84.1,
-      "fitted": 89.9,
-      "week": 64,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-26",
-      "hped": 91.24,
-      "standard": 84.1,
-      "fitted": 90.25,
-      "week": 64,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-27",
-      "hped": 94.64,
-      "standard": 84.1,
-      "fitted": 88.42,
-      "week": 64,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-28",
-      "hped": 92.8,
-      "standard": 84.1,
-      "fitted": 92.98,
-      "week": 64,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-29",
-      "hped": 92.57,
-      "standard": 84.1,
-      "fitted": 91.41,
-      "week": 64,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-30",
-      "hped": 92.46,
-      "standard": 84.1,
-      "fitted": 92.27,
-      "week": 64,
-      "excluded": false
-    },
-    {
-      "date": "2026-08-31",
-      "hped": 89.61,
-      "standard": 83.6,
-      "fitted": 89.73,
-      "week": 65,
-      "excluded": false
-    },
-    {
-      "date": "2026-09-01",
-      "hped": 94.27,
-      "standard": 83.6,
-      "fitted": 91.78,
-      "week": 65,
-      "excluded": false
-    },
-    {
-      "date": "2026-09-02",
-      "hped": 95.18,
-      "standard": 83.6,
-      "fitted": 91.56,
-      "week": 65,
-      "excluded": false
-    },
-    {
-      "date": "2026-09-03",
-      "hped": 92.45,
-      "standard": 83.6,
-      "fitted": 90.55,
-      "week": 65,
-      "excluded": false
-    },
-    {
-      "date": "2026-09-04",
-      "hped": 86.88,
-      "standard": 83.6,
-      "fitted": 92.06,
-      "week": 65,
-      "excluded": false
-    },
-    {
-      "date": "2026-09-05",
-      "hped": 91.83,
-      "standard": 83.6,
-      "fitted": 91.27,
-      "week": 65,
-      "excluded": false
-    },
-    {
-      "date": "2026-09-06",
-      "hped": 92.45,
-      "standard": 83.6,
-      "fitted": 92.64,
-      "week": 65,
-      "excluded": false
-    },
-    {
-      "date": "2026-09-07",
-      "hped": 90.91,
-      "standard": 83.0,
-      "fitted": 91.02,
-      "week": 66,
-      "excluded": false
-    },
-    {
-      "date": "2026-09-08",
-      "hped": 91.16,
-      "standard": 83.0,
-      "fitted": 90.77,
-      "week": 66,
-      "excluded": false
-    },
-    {
-      "date": "2026-09-09",
-      "hped": 93.85,
-      "standard": 83.0,
-      "fitted": 93.36,
-      "week": 66,
-      "excluded": false
-    },
-    {
-      "date": "2026-09-10",
-      "hped": 89.74,
-      "standard": 83.0,
-      "fitted": 90.21,
-      "week": 66,
-      "excluded": false
-    },
-    {
-      "date": "2026-09-11",
-      "hped": 93.14,
-      "standard": 83.0,
-      "fitted": 91.12,
-      "week": 66,
-      "excluded": false
-    },
-    {
-      "date": "2026-09-12",
-      "hped": 95.02,
-      "standard": 83.0,
-      "fitted": 91.06,
-      "week": 66,
-      "excluded": false
-    },
-    {
-      "date": "2026-09-13",
-      "hped": 91.39,
-      "standard": 83.0,
-      "fitted": 91.96,
-      "week": 66,
-      "excluded": false
-    }
-  ],
-  "forecast": [
-    {
-      "date": "2026-09-14",
-      "hped": 89.7,
-      "lower": 84.78,
-      "upper": 94.87,
-      "standard": 82.5,
-      "week": 67
-    },
-    {
-      "date": "2026-09-15",
-      "hped": 90.84,
-      "lower": 85.75,
-      "upper": 95.48,
-      "standard": 82.5,
-      "week": 67
-    },
-    {
-      "date": "2026-09-16",
-      "hped": 91.64,
-      "lower": 86.83,
-      "upper": 96.47,
-      "standard": 82.5,
-      "week": 67
-    },
-    {
-      "date": "2026-09-17",
-      "hped": 89.83,
-      "lower": 84.93,
-      "upper": 94.58,
-      "standard": 82.5,
-      "week": 67
-    },
-    {
-      "date": "2026-09-18",
-      "hped": 91.89,
-      "lower": 86.96,
-      "upper": 96.72,
-      "standard": 82.5,
-      "week": 67
-    },
-    {
-      "date": "2026-09-19",
-      "hped": 91.9,
-      "lower": 86.92,
-      "upper": 96.66,
-      "standard": 82.5,
-      "week": 67
-    },
-    {
-      "date": "2026-09-20",
-      "hped": 92.51,
-      "lower": 87.28,
-      "upper": 97.28,
-      "standard": 82.5,
-      "week": 67
-    },
-    {
-      "date": "2026-09-21",
-      "hped": 90.78,
-      "lower": 85.88,
-      "upper": 95.96,
-      "standard": 81.9,
-      "week": 68
-    },
-    {
-      "date": "2026-09-22",
-      "hped": 90.82,
-      "lower": 86.23,
-      "upper": 95.7,
-      "standard": 81.9,
-      "week": 68
-    },
-    {
-      "date": "2026-09-23",
-      "hped": 91.41,
-      "lower": 86.19,
-      "upper": 96.32,
-      "standard": 81.9,
-      "week": 68
-    },
-    {
-      "date": "2026-09-24",
-      "hped": 90.36,
-      "lower": 85.25,
-      "upper": 95.09,
-      "standard": 81.9,
-      "week": 68
-    },
-    {
-      "date": "2026-09-25",
-      "hped": 91.99,
-      "lower": 86.93,
-      "upper": 97.08,
-      "standard": 81.9,
-      "week": 68
-    },
-    {
-      "date": "2026-09-26",
-      "hped": 91.58,
-      "lower": 87.0,
-      "upper": 96.53,
-      "standard": 81.9,
-      "week": 68
-    },
-    {
-      "date": "2026-09-27",
-      "hped": 92.4,
-      "lower": 87.48,
-      "upper": 97.28,
-      "standard": 81.9,
-      "week": 68
-    },
-    {
-      "date": "2026-09-28",
-      "hped": 91.17,
-      "lower": 86.41,
-      "upper": 96.24,
-      "standard": 81.4,
-      "week": 69
-    },
-    {
-      "date": "2026-09-29",
-      "hped": 90.84,
-      "lower": 86.23,
-      "upper": 96.11,
-      "standard": 81.4,
-      "week": 69
-    },
-    {
-      "date": "2026-09-30",
-      "hped": 91.72,
-      "lower": 86.86,
-      "upper": 96.68,
-      "standard": 81.4,
-      "week": 69
-    },
-    {
-      "date": "2026-10-01",
-      "hped": 89.91,
-      "lower": 85.22,
-      "upper": 94.89,
-      "standard": 81.4,
-      "week": 69
-    },
-    {
-      "date": "2026-10-02",
-      "hped": 90.93,
-      "lower": 86.16,
-      "upper": 95.81,
-      "standard": 81.4,
-      "week": 69
-    },
-    {
-      "date": "2026-10-03",
-      "hped": 90.14,
-      "lower": 85.35,
-      "upper": 95.09,
-      "standard": 81.4,
-      "week": 69
-    },
-    {
-      "date": "2026-10-04",
-      "hped": 91.16,
-      "lower": 86.66,
-      "upper": 96.02,
-      "standard": 81.4,
-      "week": 69
-    },
-    {
-      "date": "2026-10-05",
-      "hped": 90.28,
-      "lower": 85.67,
-      "upper": 95.33,
-      "standard": 80.8,
-      "week": 70
-    },
-    {
-      "date": "2026-10-06",
-      "hped": 90.37,
-      "lower": 85.62,
-      "upper": 95.22,
-      "standard": 80.8,
-      "week": 70
-    },
-    {
-      "date": "2026-10-07",
-      "hped": 90.95,
-      "lower": 86.01,
-      "upper": 95.75,
-      "standard": 80.8,
-      "week": 70
-    },
-    {
-      "date": "2026-10-08",
-      "hped": 89.18,
-      "lower": 84.65,
-      "upper": 93.84,
-      "standard": 80.8,
-      "week": 70
-    },
-    {
-      "date": "2026-10-09",
-      "hped": 91.22,
-      "lower": 86.41,
-      "upper": 96.4,
-      "standard": 80.8,
-      "week": 70
-    },
-    {
-      "date": "2026-10-10",
-      "hped": 90.95,
-      "lower": 86.14,
-      "upper": 95.87,
-      "standard": 80.8,
-      "week": 70
-    },
-    {
-      "date": "2026-10-11",
-      "hped": 91.76,
-      "lower": 86.74,
-      "upper": 96.4,
-      "standard": 80.8,
-      "week": 70
-    }
-  ],
-  "drivers": [
-    {
-      "key": "thi_mean_lag1",
-      "label": "Shed climate (THI daily mean, previous day)",
-      "contribution_pts": 1.54
-    },
-    {
-      "key": "thi_max_lag1",
-      "label": "Shed climate (THI daily peak, previous day)",
-      "contribution_pts": -0.42
-    },
-    {
-      "key": "damaged_pct_lag1",
-      "label": "Cracked/damaged eggs % (previous day)",
-      "contribution_pts": -0.81
-    },
-    {
-      "key": "large_share_lag1",
-      "label": "Large+XL+Jumbo share of eggs % (previous day)",
-      "contribution_pts": 0.74
-    }
-  ],
-  "recent_drops": [
-    {
-      "date": "2026-07-25",
-      "hped": 85.54,
-      "expected": 91.62,
-      "drop_pts": -6.08,
-      "drivers": [
-        {
-          "label": "Shed climate (THI daily mean, previous day)",
-          "contribution_pts": -1.0
-        },
-        {
-          "label": "Shed climate (THI daily peak, previous day)",
-          "contribution_pts": 0.34
-        },
-        {
-          "label": "Cracked/damaged eggs % (previous day)",
-          "contribution_pts": 0.72
-        },
-        {
-          "label": "Large+XL+Jumbo share of eggs % (previous day)",
-          "contribution_pts": 0.75
-        },
-        {
-          "label": "Not explained by these drivers",
-          "contribution_pts": -6.88
-        }
-      ]
-    },
-    {
-      "date": "2026-08-05",
-      "hped": 78.03,
-      "expected": 91.31,
-      "drop_pts": -13.28,
-      "drivers": [
-        {
-          "label": "Shed climate (THI daily mean, previous day)",
-          "contribution_pts": -1.4
-        },
-        {
-          "label": "Shed climate (THI daily peak, previous day)",
-          "contribution_pts": -0.01
-        },
-        {
-          "label": "Cracked/damaged eggs % (previous day)",
-          "contribution_pts": 0.6
-        },
-        {
-          "label": "Large+XL+Jumbo share of eggs % (previous day)",
-          "contribution_pts": 0.82
-        },
-        {
-          "label": "Not explained by these drivers",
-          "contribution_pts": -13.28
-        }
-      ]
-    },
-    {
-      "date": "2026-08-07",
-      "hped": 84.56,
-      "expected": 91.64,
-      "drop_pts": -7.08,
-      "drivers": [
-        {
-          "label": "Shed climate (THI daily mean, previous day)",
-          "contribution_pts": -0.79
-        },
-        {
-          "label": "Shed climate (THI daily peak, previous day)",
-          "contribution_pts": -0.37
-        },
-        {
-          "label": "Cracked/damaged eggs % (previous day)",
-          "contribution_pts": 0.26
-        },
-        {
-          "label": "Large+XL+Jumbo share of eggs % (previous day)",
-          "contribution_pts": 0.82
-        },
-        {
-          "label": "Not explained by these drivers",
-          "contribution_pts": -7.01
-        }
-      ]
-    }
-  ],
-  "notes": [
-    "This is a forecast, not a measurement. It uses only the farm's manual DailyLog egg counts up to 2026-09-13 (the last day with eggs logged). Camera egg counts are not used.",
-    "Accuracy, stated plainly: in the latest backtest (cutoff 2026-08-16) the model's average error was 3.07 points. It beat the breed-standard baseline (4.61) and did not beat the simple last-7-day mean (1.48). The model under-predicted by 2.9 points on average in that window. Lay has been flat for months, so a recent average is hard to beat over 28 days. The model's value is the breed-curve context, the interval and the driver breakdown, not better accuracy.",
-    "HPED = (small + medium + large + XL + jumbo) / live hens × 100, the same formula as the app (damaged eggs are not counted in the total). Live hens = 4,479 starting hens minus cumulative DailyLog mortality.",
-    "The model was trained on 288 logged days from 2025-11-10 to 2026-09-13. Shed sensors have no data before 2026-02-20 or from 2026-02-26 to 2026-04-13. On those days THI was set to its average, so it adds nothing there. In total 334 DailyLog days with eggs exist since first eggs on 2025-10-13.",
-    "The first 28 days of lay (to 2025-11-09) are excluded from fitting. Other excluded days, kept in the history and flagged: 7 days below 50%, a logging gap or partial count: 2025-12-01 (27.5%), 2025-12-02 (3.1%), 2025-12-03 (2.8%), 2025-12-04 (0.4%), 2025-12-05 (2.2%), 2025-12-06 (2.7%), 2025-12-07 (4.3%); 11 days above 100% of live hens, likely eggs carried over from another day: 2025-11-16 (103.6%), 2025-11-20 (101.6%), 2025-11-23 (104.0%), 2025-11-24 (109.4%), 2025-12-16 (101.9%), 2025-12-20 (108.2%), 2025-12-31 (104.8%), 2026-01-29 (104.4%), 2026-04-04 (101.2%), 2026-04-17 (101.4%), 2026-05-13 (100.3%); 1 day a single-day count more than 15 points below the days around it, likely a partial count: 2026-06-30 (69.1%).",
-    "Dates with no DailyLog row: 2026-06-22.",
-    "Damaged eggs were logged as 0 on 8 laying days (2025-11-10, 2026-02-24, 2026-06-25, 2026-07-20, 2026-07-28, 2026-07-29, 2026-08-04, 2026-09-07). These are treated as not recorded, and the cracked % regressor carries the previous day's value forward.",
-    "All regressors are lagged by one day so they are known when the forecast is made. Over the forecast, shed THI uses actual sensor readings where they exist (25 of 28 forecast days; sensors run to 2026-10-07) and the mean of the last 14 sensor days otherwise. Cracked % and size mix are held at their last-14-day means.",
-    "Shed THI never reached the 27.8 °C-eq heat-stress level in the training period (maximum daily peak 26.0). The THI effects therefore describe cooler versus milder days, not heat stress, so the model cannot yet say how a hot spell would affect lay.",
-    "Driver contributions come straight from the model's additive components, so SHAP is not needed. Each value is measured against that driver's average level in the training period, so 0 means an average day.",
-    "For recent drops, 'expected' is the model baseline for that day: the anchor, trend and weekday pattern with every driver at its average. drop_pts = actual − expected. It splits into the listed driver contributions plus the part the model does not explain.",
-    "Model choice: 24 variants (target, anchor, trend, training window) were scored on two earlier 28-day backtests (cutoffs 2026-06-21 and 2026-07-19). The reported backtest (cutoff 2026-08-16) was not used for the choice. It is a single 28-day window, so treat the error as indicative.",
-    "The breed standard (src/lib/henStandard.ts) is a generic layer curve, not this breed's exact curve. This flock has run well above it (recent gap about 8.3 points).",
-    "The 80% interval reflects day-to-day noise and trend uncertainty seen in training. It does not cover events the model has not seen, such as disease, a feed change, a lighting change or a counting error.",
-    "The cracked-egg effect rests mostly on one event. Cracked eggs reached 7.2% on 2026-03-10 and lay fell to 65.2% the next day. Read its contribution as indicative only.",
-    "There is only one autumn-winter-spring of climate data, so the THI effect is mixed up with season (for example day length and the flock's age). Lay dipped in midwinter and recovered as the shed warmed. The model credits that recovery to milder THI, but this is an association, not a proven cause."
-  ]
+  {
+   "date": "2026-09-16",
+   "hped": 92.19,
+   "lower": 88.44,
+   "upper": 96.07,
+   "standard": 82.5
+  }
+ ],
+ "dip_watch": {
+  "status": "normal",
+  "message": "No big drop in water per bird in the last two days (latest 153% of normal). In the past, 3 of 9 big water drops were followed by a lay dip within 3 days, against about 20% of days overall \u2014 a hint, not yet a reliable warning.",
+  "track_record": {
+   "water_drops": 9,
+   "followed_by_dip": 3,
+   "base_rate_pct": 20,
+   "threshold_pct": 60
+  }
+ },
+ "outlook": [
+  {
+   "date": "2026-09-14",
+   "hped": 92.18,
+   "lower": 88.58,
+   "upper": 95.82,
+   "standard": 82.5
+  },
+  {
+   "date": "2026-09-15",
+   "hped": 92.18,
+   "lower": 88.63,
+   "upper": 96.08,
+   "standard": 82.5
+  },
+  {
+   "date": "2026-09-16",
+   "hped": 92.19,
+   "lower": 88.44,
+   "upper": 96.07,
+   "standard": 82.5
+  },
+  {
+   "date": "2026-09-17",
+   "hped": 92.19,
+   "lower": 88.35,
+   "upper": 97.03,
+   "standard": 82.5
+  },
+  {
+   "date": "2026-09-18",
+   "hped": 92.19,
+   "lower": 88.2,
+   "upper": 96.72,
+   "standard": 82.5
+  },
+  {
+   "date": "2026-09-19",
+   "hped": 92.19,
+   "lower": 88.22,
+   "upper": 97.09,
+   "standard": 82.5
+  },
+  {
+   "date": "2026-09-20",
+   "hped": 92.2,
+   "lower": 88.22,
+   "upper": 96.98,
+   "standard": 82.5
+  },
+  {
+   "date": "2026-09-21",
+   "hped": 92.2,
+   "lower": 88.2,
+   "upper": 97.32,
+   "standard": 81.9
+  },
+  {
+   "date": "2026-09-22",
+   "hped": 92.2,
+   "lower": 87.83,
+   "upper": 97.45,
+   "standard": 81.9
+  },
+  {
+   "date": "2026-09-23",
+   "hped": 92.2,
+   "lower": 87.89,
+   "upper": 97.22,
+   "standard": 81.9
+  },
+  {
+   "date": "2026-09-24",
+   "hped": 92.21,
+   "lower": 87.87,
+   "upper": 97.37,
+   "standard": 81.9
+  },
+  {
+   "date": "2026-09-25",
+   "hped": 92.21,
+   "lower": 87.83,
+   "upper": 97.3,
+   "standard": 81.9
+  },
+  {
+   "date": "2026-09-26",
+   "hped": 92.21,
+   "lower": 87.36,
+   "upper": 97.41,
+   "standard": 81.9
+  },
+  {
+   "date": "2026-09-27",
+   "hped": 92.21,
+   "lower": 87.67,
+   "upper": 97.26,
+   "standard": 81.9
+  },
+  {
+   "date": "2026-09-28",
+   "hped": 92.22,
+   "lower": 87.64,
+   "upper": 97.0,
+   "standard": 81.4
+  },
+  {
+   "date": "2026-09-29",
+   "hped": 92.22,
+   "lower": 87.3,
+   "upper": 97.0,
+   "standard": 81.4
+  },
+  {
+   "date": "2026-09-30",
+   "hped": 92.22,
+   "lower": 87.31,
+   "upper": 96.95,
+   "standard": 81.4
+  },
+  {
+   "date": "2026-10-01",
+   "hped": 92.22,
+   "lower": 86.62,
+   "upper": 97.45,
+   "standard": 81.4
+  },
+  {
+   "date": "2026-10-02",
+   "hped": 92.23,
+   "lower": 86.73,
+   "upper": 97.44,
+   "standard": 81.4
+  },
+  {
+   "date": "2026-10-03",
+   "hped": 92.23,
+   "lower": 86.9,
+   "upper": 97.45,
+   "standard": 81.4
+  },
+  {
+   "date": "2026-10-04",
+   "hped": 92.23,
+   "lower": 86.73,
+   "upper": 97.63,
+   "standard": 81.4
+  },
+  {
+   "date": "2026-10-05",
+   "hped": 92.23,
+   "lower": 86.38,
+   "upper": 97.41,
+   "standard": 80.8
+  },
+  {
+   "date": "2026-10-06",
+   "hped": 92.24,
+   "lower": 86.12,
+   "upper": 96.88,
+   "standard": 80.8
+  },
+  {
+   "date": "2026-10-07",
+   "hped": 92.24,
+   "lower": 86.29,
+   "upper": 96.58,
+   "standard": 80.8
+  },
+  {
+   "date": "2026-10-08",
+   "hped": 92.24,
+   "lower": 86.26,
+   "upper": 96.7,
+   "standard": 80.8
+  },
+  {
+   "date": "2026-10-09",
+   "hped": 92.24,
+   "lower": 86.42,
+   "upper": 96.71,
+   "standard": 80.8
+  },
+  {
+   "date": "2026-10-10",
+   "hped": 92.25,
+   "lower": 86.61,
+   "upper": 96.52,
+   "standard": 80.8
+  },
+  {
+   "date": "2026-10-11",
+   "hped": 92.25,
+   "lower": 86.43,
+   "upper": 96.42,
+   "standard": 80.8
+  }
+ ],
+ "accuracy": {
+  "tested_from": "2026-07-01",
+  "tested_to": "2026-09-13",
+  "forecasts_made": 74,
+  "next_day_mae": 2.08,
+  "three_day_mae": 2.18,
+  "four_week_mae": 2.76,
+  "benchmark": {
+   "name": "Plain last-7-day average",
+   "three_day_mae": 2.17,
+   "four_week_mae": 2.75
+  },
+  "dips": 4,
+  "dips_bounced_back": 3,
+  "signals_note": "Adding shed heat, water, cracked eggs, egg size and mortality did not make the 3-day forecast reliably better: the best version was worse on forecasts made Apr\u2013Jun (3.01 vs 2.92 points) and within 0.04 points from Jul (2.13 vs 2.17)."
+ },
+ "history": [
+  {
+   "date": "2026-05-17",
+   "hped": 98.41,
+   "standard": 91.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-05-18",
+   "hped": 93.59,
+   "standard": 90.9,
+   "excluded": false
+  },
+  {
+   "date": "2026-05-19",
+   "hped": 94.75,
+   "standard": 90.9,
+   "excluded": false
+  },
+  {
+   "date": "2026-05-20",
+   "hped": 94.81,
+   "standard": 90.9,
+   "excluded": false
+  },
+  {
+   "date": "2026-05-21",
+   "hped": 94.24,
+   "standard": 90.9,
+   "excluded": false
+  },
+  {
+   "date": "2026-05-22",
+   "hped": 92.56,
+   "standard": 90.9,
+   "excluded": false
+  },
+  {
+   "date": "2026-05-23",
+   "hped": 94.27,
+   "standard": 90.9,
+   "excluded": false
+  },
+  {
+   "date": "2026-05-24",
+   "hped": 90.69,
+   "standard": 90.9,
+   "excluded": false
+  },
+  {
+   "date": "2026-05-25",
+   "hped": 96.56,
+   "standard": 90.5,
+   "excluded": false
+  },
+  {
+   "date": "2026-05-26",
+   "hped": 89.6,
+   "standard": 90.5,
+   "excluded": false
+  },
+  {
+   "date": "2026-05-27",
+   "hped": 94.27,
+   "standard": 90.5,
+   "excluded": false
+  },
+  {
+   "date": "2026-05-28",
+   "hped": 89.51,
+   "standard": 90.5,
+   "excluded": false
+  },
+  {
+   "date": "2026-05-29",
+   "hped": 91.58,
+   "standard": 90.5,
+   "excluded": false
+  },
+  {
+   "date": "2026-05-30",
+   "hped": 89.12,
+   "standard": 90.5,
+   "excluded": false
+  },
+  {
+   "date": "2026-05-31",
+   "hped": 90.62,
+   "standard": 90.5,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-01",
+   "hped": 89.3,
+   "standard": 90.0,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-02",
+   "hped": 90.6,
+   "standard": 90.0,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-03",
+   "hped": 94.1,
+   "standard": 90.0,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-04",
+   "hped": 89.64,
+   "standard": 90.0,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-05",
+   "hped": 89.3,
+   "standard": 90.0,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-06",
+   "hped": 92.85,
+   "standard": 90.0,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-07",
+   "hped": 91.35,
+   "standard": 90.0,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-08",
+   "hped": 75.95,
+   "standard": 89.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-09",
+   "hped": 76.13,
+   "standard": 89.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-10",
+   "hped": 88.68,
+   "standard": 89.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-11",
+   "hped": 91.66,
+   "standard": 89.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-12",
+   "hped": 92.87,
+   "standard": 89.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-13",
+   "hped": 87.38,
+   "standard": 89.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-14",
+   "hped": 94.35,
+   "standard": 89.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-15",
+   "hped": 89.43,
+   "standard": 89.2,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-16",
+   "hped": 92.0,
+   "standard": 89.2,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-17",
+   "hped": 95.4,
+   "standard": 89.2,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-18",
+   "hped": 92.27,
+   "standard": 89.2,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-19",
+   "hped": 94.53,
+   "standard": 89.2,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-20",
+   "hped": 92.18,
+   "standard": 89.2,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-21",
+   "hped": 96.81,
+   "standard": 89.2,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-23",
+   "hped": 94.69,
+   "standard": 88.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-24",
+   "hped": 96.58,
+   "standard": 88.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-25",
+   "hped": 81.98,
+   "standard": 88.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-26",
+   "hped": 94.18,
+   "standard": 88.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-27",
+   "hped": 93.4,
+   "standard": 88.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-28",
+   "hped": 92.47,
+   "standard": 88.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-29",
+   "hped": 90.75,
+   "standard": 88.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-06-30",
+   "hped": 69.13,
+   "standard": 88.3,
+   "excluded": true
+  },
+  {
+   "date": "2026-07-01",
+   "hped": 93.49,
+   "standard": 88.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-02",
+   "hped": 91.39,
+   "standard": 88.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-03",
+   "hped": 88.9,
+   "standard": 88.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-04",
+   "hped": 96.25,
+   "standard": 88.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-05",
+   "hped": 93.81,
+   "standard": 88.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-06",
+   "hped": 90.95,
+   "standard": 87.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-07",
+   "hped": 93.9,
+   "standard": 87.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-08",
+   "hped": 89.88,
+   "standard": 87.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-09",
+   "hped": 87.43,
+   "standard": 87.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-10",
+   "hped": 95.93,
+   "standard": 87.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-11",
+   "hped": 90.45,
+   "standard": 87.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-12",
+   "hped": 91.75,
+   "standard": 87.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-13",
+   "hped": 89.32,
+   "standard": 87.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-14",
+   "hped": 89.71,
+   "standard": 87.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-15",
+   "hped": 93.03,
+   "standard": 87.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-16",
+   "hped": 87.31,
+   "standard": 87.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-17",
+   "hped": 89.07,
+   "standard": 87.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-18",
+   "hped": 89.92,
+   "standard": 87.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-19",
+   "hped": 90.58,
+   "standard": 87.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-20",
+   "hped": 90.62,
+   "standard": 86.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-21",
+   "hped": 89.11,
+   "standard": 86.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-22",
+   "hped": 89.52,
+   "standard": 86.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-23",
+   "hped": 90.11,
+   "standard": 86.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-24",
+   "hped": 93.91,
+   "standard": 86.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-25",
+   "hped": 85.54,
+   "standard": 86.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-26",
+   "hped": 93.5,
+   "standard": 86.8,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-27",
+   "hped": 88.08,
+   "standard": 86.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-28",
+   "hped": 95.54,
+   "standard": 86.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-29",
+   "hped": 92.15,
+   "standard": 86.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-30",
+   "hped": 88.12,
+   "standard": 86.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-07-31",
+   "hped": 94.71,
+   "standard": 86.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-01",
+   "hped": 88.35,
+   "standard": 86.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-02",
+   "hped": 89.21,
+   "standard": 86.3,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-03",
+   "hped": 89.97,
+   "standard": 85.7,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-04",
+   "hped": 89.21,
+   "standard": 85.7,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-05",
+   "hped": 78.03,
+   "standard": 85.7,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-06",
+   "hped": 88.02,
+   "standard": 85.7,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-07",
+   "hped": 84.56,
+   "standard": 85.7,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-08",
+   "hped": 90.06,
+   "standard": 85.7,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-09",
+   "hped": 88.41,
+   "standard": 85.7,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-10",
+   "hped": 90.38,
+   "standard": 85.2,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-11",
+   "hped": 91.78,
+   "standard": 85.2,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-12",
+   "hped": 90.29,
+   "standard": 85.2,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-13",
+   "hped": 91.73,
+   "standard": 85.2,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-14",
+   "hped": 92.14,
+   "standard": 85.2,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-15",
+   "hped": 92.02,
+   "standard": 85.2,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-16",
+   "hped": 91.36,
+   "standard": 85.2,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-17",
+   "hped": 91.61,
+   "standard": 84.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-18",
+   "hped": 91.17,
+   "standard": 84.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-19",
+   "hped": 92.66,
+   "standard": 84.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-20",
+   "hped": 91.95,
+   "standard": 84.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-21",
+   "hped": 92.92,
+   "standard": 84.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-22",
+   "hped": 92.85,
+   "standard": 84.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-23",
+   "hped": 92.94,
+   "standard": 84.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-24",
+   "hped": 92.53,
+   "standard": 84.1,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-25",
+   "hped": 90.65,
+   "standard": 84.1,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-26",
+   "hped": 91.24,
+   "standard": 84.1,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-27",
+   "hped": 94.64,
+   "standard": 84.1,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-28",
+   "hped": 92.8,
+   "standard": 84.1,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-29",
+   "hped": 92.57,
+   "standard": 84.1,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-30",
+   "hped": 92.46,
+   "standard": 84.1,
+   "excluded": false
+  },
+  {
+   "date": "2026-08-31",
+   "hped": 89.61,
+   "standard": 83.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-09-01",
+   "hped": 94.27,
+   "standard": 83.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-09-02",
+   "hped": 95.18,
+   "standard": 83.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-09-03",
+   "hped": 92.45,
+   "standard": 83.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-09-04",
+   "hped": 86.88,
+   "standard": 83.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-09-05",
+   "hped": 91.83,
+   "standard": 83.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-09-06",
+   "hped": 92.45,
+   "standard": 83.6,
+   "excluded": false
+  },
+  {
+   "date": "2026-09-07",
+   "hped": 90.91,
+   "standard": 83.0,
+   "excluded": false
+  },
+  {
+   "date": "2026-09-08",
+   "hped": 91.16,
+   "standard": 83.0,
+   "excluded": false
+  },
+  {
+   "date": "2026-09-09",
+   "hped": 93.85,
+   "standard": 83.0,
+   "excluded": false
+  },
+  {
+   "date": "2026-09-10",
+   "hped": 89.74,
+   "standard": 83.0,
+   "excluded": false
+  },
+  {
+   "date": "2026-09-11",
+   "hped": 93.14,
+   "standard": 83.0,
+   "excluded": false
+  },
+  {
+   "date": "2026-09-12",
+   "hped": 95.02,
+   "standard": 83.0,
+   "excluded": false
+  },
+  {
+   "date": "2026-09-13",
+   "hped": 91.39,
+   "standard": 83.0,
+   "excluded": false
+  }
+ ],
+ "recent_dips": [
+  {
+   "date": "2026-07-25",
+   "hped": 85.54,
+   "expected": 90.55,
+   "drop_pts": -5.01,
+   "days_low": 1,
+   "bounced_back": true,
+   "next_day_hped": 93.5,
+   "water_drop_before": true
+  },
+  {
+   "date": "2026-08-05",
+   "hped": 78.03,
+   "expected": 90.25,
+   "drop_pts": -12.22,
+   "days_low": 1,
+   "bounced_back": false,
+   "next_day_hped": 88.02,
+   "water_drop_before": false
+  },
+  {
+   "date": "2026-09-04",
+   "hped": 86.88,
+   "expected": 92.77,
+   "drop_pts": -5.89,
+   "days_low": 1,
+   "bounced_back": true,
+   "next_day_hped": 91.83,
+   "water_drop_before": false
+  }
+ ],
+ "notes": [
+  "This is a forecast, not a measurement. It uses only the farm's manual DailyLog egg counts up to 2026-09-13 (the last day with eggs logged). Camera egg counts are not used.",
+  "Tested by forecasting from every day using only the data available that day: 74 forecasts made from 01 Jul. Set-ups were compared on forecasts made 15 Apr \u2013 30 Jun as well (lay_backtest.csv).",
+  "The flock's own curve and a flat line scored the same over 4 weeks; the generic breed-standard curve was worse because this flock is not declining as steeply. The flock curve is kept because it will bend down as the flock ages.",
+  "A dip means lay at least 4 points below the recent level. 3 of the 4 dips since July bounced straight back the next day, which points to eggs counted on the wrong day rather than a real drop.",
+  "The range is the 10th\u201390th percentile of past forecast errors at the same number of days ahead.",
+  "HPED = (small + medium + large + XL + jumbo) / live hens \u00d7 100, as in the app. Live hens = starting hens minus cumulative DailyLog mortality.",
+  "Shed heat has not yet reached heat-stress levels (THI 27.8) in this flock's data."
+ ]
 }

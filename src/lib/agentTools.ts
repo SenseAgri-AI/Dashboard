@@ -174,11 +174,12 @@ export interface WaterDetailResult {
 export interface ForecastResult {
   as_of: string;
   model: HpedForecast["model"];
-  backtest: HpedForecast["backtest"];
-  recent_actual: { date: string; hped: number | null; standard: number | null; model_fit: number | null }[];
-  forecast: HpedForecast["forecast"];
-  drivers_now: HpedForecast["drivers"];
-  recent_drops: HpedForecast["recent_drops"];
+  next_3_days: HpedForecast["next_days"];
+  dip_watch: HpedForecast["dip_watch"];
+  next_4_weeks: HpedForecast["outlook"];
+  accuracy: HpedForecast["accuracy"];
+  recent_actual: { date: string; hped: number | null; standard: number }[];
+  recent_dips: HpedForecast["recent_dips"];
   notes: string[];
 }
 
@@ -547,11 +548,12 @@ export class LocalFarmDataSource implements FarmDataSource {
     return {
       as_of: fc.as_of,
       model: fc.model,
-      backtest: fc.backtest,
-      recent_actual: fc.history.slice(-21).map((h) => ({ date: h.date, hped: h.hped, standard: h.standard, model_fit: h.fitted })),
-      forecast: fc.forecast,
-      drivers_now: fc.drivers,
-      recent_drops: fc.recent_drops,
+      next_3_days: fc.next_days,
+      dip_watch: fc.dip_watch,
+      next_4_weeks: fc.outlook,
+      accuracy: fc.accuracy,
+      recent_actual: fc.history.slice(-21).map((h) => ({ date: h.date, hped: h.hped, standard: h.standard })),
+      recent_dips: fc.recent_dips,
       notes: fc.notes,
     };
   }
@@ -635,7 +637,7 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
   {
     name: "get_hped_forecast",
     description:
-      "The lay-rate (hen-day egg %, HPED) forecast: a model anchored to the breed standard (Prophet) with previous-day shed climate (THI), cracked-egg % and egg-size mix as drivers. Returns the date the egg data ends, the next 28 days' forecast with an 80% range, the breed standard, how accurate the model was in a backtest compared with simple baselines, how much each driver is currently adding or taking away (in HPED points), and the recent drops with their driver contributions. It is a forecast, not a measurement.",
+      "The lay-rate (hen-day egg %, HPED) forecast from the flock's recent level carried along its own lay curve (a Gompertz rise and slow decline). Returns the date the egg data ends, the next 3 days and next 4 weeks with an 80% range, the breed standard, a dip watch based on big drops in water per bird (with its past track record), how accurate the forecast was when tested from every day (and against a plain 7-day average), and recent dips with whether lay bounced straight back the next day (a likely counting carry-over). Shed heat, water, cracked eggs, egg size and mortality were tested as extra inputs and did not make it more accurate. It is a forecast, not a measurement.",
     input_schema: { type: "object", properties: {}, required: [] },
   },
   {

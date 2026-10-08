@@ -1,6 +1,49 @@
-# Hen-day egg production (HPED) forecast: AI demo
+# Lay (HPED) forecast: AI demo
 
-**This is a forecast, not a measurement.** Farm `farm_anike_001`, house `house1`. Generated 2026-10-08.
+**This is a forecast, not a measurement.** Farm `farm_anike_001`, house `house1`. It uses DailyLog egg counts only; camera counts are not used.
+
+## Current model: `lay_forecast.py` (shown in the app)
+
+Run from the repository root (add `--offline` to use the local cache; about 20 s):
+
+```
+/Users/dylangeldenhuys/Code/Dashboard/analysis/.venv/bin/python analysis/ai_demo/forecast/lay_forecast.py
+```
+
+- **Model:** the flock's average over its last 7 logged days, carried along the flock's own lay curve (a Gompertz rise with a slow decline, refitted on the data available each day). It forecasts the next 3 days (operational) and the next 4 weeks.
+- **Range:** the 10th–90th percentile of past forecast errors at the same number of days ahead.
+- **Testing:** a forecast is made from every day using only the data available that day, scored on forecasts made 15 Apr – 30 Jun and from 1 Jul. Every set-up tried is in `lay_backtest.csv`.
+
+**Results** on 74 forecasts made from 1 Jul (average error in hen-day % points):
+
+| Forecast | Next day | Next 3 days | Next 4 weeks |
+|---|---|---|---|
+| This model | 2.1 | 2.2 | 2.8 |
+| Plain last-7-day average | 2.1 | 2.2 | 2.8 |
+
+**What we found:**
+- **No set-up beat the recent level by a meaningful margin.**
+  - Level windows of 3, 7 and 14 days all scored about the same.
+  - The flock's own curve and a flat line tied over 4 weeks.
+  - The generic breed-standard curve was worse over 4 weeks (3.2 points), because this flock is not declining as steeply.
+  - The flock curve is kept because it will bend down as the flock ages.
+- **The extra signals didn't help.** A ridge-regression adjustment for the next 3 days used:
+  - the last days' departure from the level and the weekday;
+  - shed heat (THI) and water per bird;
+  - cracked eggs %, egg-size mix and mortality.
+
+  It was worse on forecasts made Apr–Jun (3.01 vs 2.92 points) and within 0.04 points from Jul. It is not used.
+- **Most dips look like counting carry-overs.** 3 of the 4 dips since July (lay at least 4 points below the recent level) bounced straight back the next day, as earlier ones did (22 Jan, 7 Apr, 15 May, 25 Jun, 9 Jul). That pattern points to eggs counted on the wrong day, which no flock signal can predict. 5 Aug was a real dip: it stayed low for 3 days.
+- **Water drops are only a hint.** Of 9 days when water per bird fell below 60% of the past week's median (24 May – 10 Sep), 3 were followed by a lay dip within 3 days. About 20% of all days are followed by one. That is too few cases to call it a reliable warning, so the app shows it as a "dip watch" with this track record.
+
+Outputs:
+- `src/data/ai-demo/hped_forecast.json` (app);
+- `lay_forecast.png` (history, tested next-day forecasts, forecast and range);
+- `lay_backtest.csv` (every set-up).
+
+## Earlier model: `hped_forecast.py` (Prophet, superseded)
+
+The first version below forecast 28 days with Prophet anchored to the breed standard. Its data preparation (DailyLog parsing, HPED, exclusions, THI, the Gompertz fit) is still used by `lay_forecast.py`. Its 28-day backtest lost to the plain 7-day average (3.07 vs 1.48 points), because its slow trend never looked at the latest level. That is why it was replaced.
 
 - **as_of: 2026-09-13**, the last DailyLog day with eggs. The live Google Sheet and the bronze copy both end on that date.
 - Only the farm's **manual DailyLog egg counts** are used. Camera egg counts (InfluxDB `egg_count`) are **not used** because the farm reports them as very inaccurate.

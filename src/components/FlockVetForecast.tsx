@@ -3,24 +3,23 @@
 import { useMemo } from "react";
 import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import type { HpedForecast } from "@/lib/aiDemo";
-import { cardStyle, fmtDay, fmtLong, LegendLine, smallBtn, SparkIcon } from "@/components/FlockVetSigns";
+import { cardStyle, fmtDay, fmtLong, LegendLine, smallBtn, SparkIcon, StatusChip } from "@/components/FlockVetSigns";
 
-// Flock Vet — lay (HPED) forecast card. Prophet anchored to the breed standard, with
-// previous-day shed climate and egg-quality drivers. Always labelled as a forecast with the
-// date its egg data ends; the backtest is shown as measured, including where it lost.
+// Flock Vet — lay (HPED) forecast card. One model: the flock's recent level carried along its
+// own lay curve. Always labelled as a forecast with the date its egg data ends; accuracy comes
+// from forecasting every past day with only the data available then.
 
 const PRIMARY = "#002E35";
 const TEAL = "#2A8E9A";
 const ACTUAL = "#2a78d6"; // categorical slot 1
 const MODEL = "#eb6834";  // categorical slot 2
 const STD = "#6B7C80";    // reference curve, recessive
-const POS = "#2a78d6", NEG = "#e34948"; // diverging poles
 const AXIS = "#3a4d4f";
 const GRID = "rgba(0,0,0,0.06)";
 const DAY_MS = 86_400_000;
 const SHOW_DAYS = 70; // history shown before the forecast starts
 
-type Pt = { t: number; actual?: number | null; fit?: number | null; fc?: number | null; band?: [number, number] | null; standard?: number | null; drop?: boolean };
+type Pt = { t: number; actual?: number | null; fc?: number | null; band?: [number, number] | null; standard?: number | null; next?: boolean };
 
 const ms = (d: string) => Date.parse(`${d}T00:00:00Z`);
 const pct = (v: number, dp = 0) => `${v.toFixed(dp)}%`;
@@ -34,63 +33,45 @@ function ForecastTip(props: { active?: boolean; payload?: Array<{ payload?: Pt }
     <div style={{ background: PRIMARY, border: `1px solid ${TEAL}`, borderRadius: 6, padding: "6px 10px", fontSize: 12, color: "#fff", lineHeight: 1.5 }}>
       <div style={{ color: "#8fd0d8", fontWeight: 700 }}>{fmtDay(d)}</div>
       {p.actual != null && <div>Actual (logged): <strong>{pct(p.actual, 1)}</strong></div>}
-      {p.fit != null && <div>Model fit: <strong>{pct(p.fit, 1)}</strong></div>}
-      {p.fc != null && p.band && <div>Forecast: <strong>{pct(p.fc, 1)}</strong> <span style={{ color: "#cfe3e5" }}>(80% range {pct(p.band[0])}–{pct(p.band[1])})</span></div>}
+      {p.fc != null && p.band && p.band[0] !== p.band[1] && (
+        <div>Forecast: <strong>{pct(p.fc, 1)}</strong> <span style={{ color: "#cfe3e5" }}>(80% range {pct(p.band[0])}–{pct(p.band[1])})</span></div>
+      )}
       {p.standard != null && <div style={{ color: "#cfe3e5" }}>Breed standard: {pct(p.standard, 1)}</div>}
     </div>
   );
 }
 
-function DropDot(props: { cx?: number; cy?: number; index?: number; payload?: Pt }) {
+function NextDot(props: { cx?: number; cy?: number; index?: number; payload?: Pt }) {
   const { cx, cy, payload, index } = props;
-  if (cx == null || cy == null || !payload?.drop) return <g key={`n${index}`} />;
-  return <circle key={`d${index}`} cx={cx} cy={cy} r={4.5} fill={ACTUAL} stroke="#fff" strokeWidth={2} />;
-}
-
-function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
-  return (
-    <div style={{ flex: "1 1 120px", minWidth: 0, background: "var(--card)", borderRadius: 8, padding: "8px 10px" }}>
-      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--t3)" }}>{label}</div>
-      <div style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 20, color: "var(--t1)", lineHeight: 1.2, marginTop: 2 }}>{value}</div>
-      <div style={{ fontSize: 11, color: "var(--t2)", lineHeight: 1.35 }}>{sub}</div>
-    </div>
-  );
+  if (cx == null || cy == null || !payload?.next) return <g key={`n${index}`} />;
+  return <circle key={`d${index}`} cx={cx} cy={cy} r={4} fill={MODEL} stroke="#fff" strokeWidth={1.5} />;
 }
 
 export default function FlockVetForecast({ data, busy, onInvestigate }: {
   data: HpedForecast; busy: boolean; onInvestigate: (prompt: string) => void;
 }) {
-  const fc = data.forecast;
-  const first = fc[0], last = fc[fc.length - 1];
-  const lastLogged = [...data.history].reverse().find((h) => h.hped != null);
+  const next = data.next_days;
+  const acc = data.accuracy;
+  const watch = data.dip_watch;
+  const last = data.outlook[data.outlook.length - 1];
 
   const chart = useMemo(() => {
     const start = ms(data.as_of) - SHOW_DAYS * DAY_MS;
-    const dropDates = new Set(data.recent_drops.map((d) => d.date));
-    const out: Pt[] = data.history.filter((h) => ms(h.date) >= start).map((h) => ({
-      t: ms(h.date), actual: h.hped, fit: h.fitted, standard: h.standard, drop: dropDates.has(h.date),
-    }));
-    const join = out[out.length - 1];
-    if (join && join.fit != null) { join.fc = join.fit; join.band = [join.fit, join.fit]; } // forecast starts where the fit ends
-    for (const f of fc) out.push({ t: ms(f.date), fc: f.hped, band: [f.lower, f.upper], standard: f.standard });
+    const out: Pt[] = data.history.filter((h) => ms(h.date) >= start)
+      .map((h) => ({ t: ms(h.date), actual: h.excluded ? null : h.hped, standard: h.standard }));
+    const lastActual = [...out].reverse().find((p) => p.actual != null);
+    if (lastActual?.actual != null) { lastActual.fc = lastActual.actual; lastActual.band = [lastActual.actual, lastActual.actual]; }
+    data.outlook.forEach((f, i) => out.push({ t: ms(f.date), fc: f.hped, band: [f.lower, f.upper], standard: f.standard, next: i < next.length }));
     const vals = out.flatMap((p) => [p.actual, p.standard, p.band?.[0], p.band?.[1]]).filter((v): v is number => v != null);
     const lo = Math.max(0, Math.floor((Math.min(...vals) - 2) / 5) * 5), hi = Math.min(100, Math.ceil((Math.max(...vals) + 1) / 5) * 5);
-    const ticks = Array.from({ length: (hi - lo) / 5 + 1 }, (_, i) => lo + i * 5);
-    return { pts: out, domain: [lo, hi] as [number, number], ticks };
-  }, [data, fc]);
-
-  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
-  const fcMean = avg(fc.map((f) => f.hped)), loMean = avg(fc.map((f) => f.lower)), hiMean = avg(fc.map((f) => f.upper));
-  const bt = data.backtest;
-  const btRows = [{ name: "This model (Prophet + breed standard)", mae: bt.mae_pts, model: true }, ...bt.baselines.map((b) => ({ name: b.name, mae: b.mae_pts, model: false }))];
-  const btMax = Math.max(...btRows.map((r) => r.mae));
-  const best = btRows.reduce((a, b) => (b.mae < a.mae ? b : a));
-  const drvMax = Math.max(0.5, ...data.drivers.map((d) => Math.abs(d.contribution_pts)));
+    return { pts: out, domain: [lo, hi] as [number, number], ticks: Array.from({ length: (hi - lo) / 5 + 1 }, (_, i) => lo + i * 5) };
+  }, [data, next.length]);
 
   const askForecast = () => onInvestigate(
-    `What does the lay forecast say for ${fmtDay(first.date)} to ${fmtDay(last.date)}, how reliable is it, and what is driving it? The egg log ends on ${fmtLong(data.as_of)}.`);
-  const explainDrop = (d: HpedForecast["recent_drops"][number]) => onInvestigate(
-    `Explain the lay drop on ${fmtLong(d.date)}: lay was ${d.hped.toFixed(1)}% against about ${d.expected.toFixed(1)}% expected (${pts(d.drop_pts)} points). Use the forecast drivers, the daily log (eggs, cracked eggs, mortality, feed, water), events and the shed climate around that date, and tell me the likely causes and what to watch for.`);
+    `What does the lay forecast say for the next 3 days (${fmtDay(next[0].date)} to ${fmtDay(next[next.length - 1].date)}) and the coming weeks? How reliable is it, and is a dip likely? The egg log ends on ${fmtLong(data.as_of)}.`);
+  const explainDip = (d: HpedForecast["recent_dips"][number]) => onInvestigate(
+    `Investigate the lay dip on ${fmtLong(d.date)}: lay was ${d.hped.toFixed(1)}% against about ${d.expected.toFixed(1)}% expected (${pts(d.drop_pts)} points)` +
+    `${d.next_day_hped != null ? `, and ${d.next_day_hped.toFixed(1)}% the next day` : ""}. Was it a real drop or a counting issue? Check the daily log (eggs, cracked eggs, mortality, feed, water), events, water per bird and shed climate around that date, and tell me the likely causes and what to watch for.`);
 
   return (
     <section style={cardStyle} aria-labelledby="fv-fc-title">
@@ -98,18 +79,29 @@ export default function FlockVetForecast({ data, busy, onInvestigate }: {
         <div style={{ minWidth: 0 }}>
           <h2 id="fv-fc-title" style={{ margin: 0, fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 16, color: PRIMARY }}>Lay forecast</h2>
           <div style={{ fontSize: 12, color: "var(--t3)", marginTop: 2, lineHeight: 1.45 }}>
-            Hen-day egg % · forecast from DailyLog egg data up to {fmtDay(data.as_of)}. The log has not been updated since, so this covers {fmtDay(first.date)} – {fmtDay(last.date)}.
+            {`Hen-day egg % · forecast from DailyLog egg data up to ${fmtDay(data.as_of)}. The log has not been updated since, so the next 3 days are ${fmtDay(next[0].date)} – ${fmtDay(next[next.length - 1].date)}.`}
           </div>
         </div>
         <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: TEAL, border: `1px solid ${TEAL}`, borderRadius: 3, padding: "1px 6px" }}>AI</span>
       </div>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-        <Stat label="Forecast, next 4 weeks" value={`≈ ${pct(fcMean)}`} sub={`80% range about ${pct(loMean)}–${pct(hiMean)}`} />
-        <Stat label="Breed standard" value={`${pct(first.standard ?? 0, 1)} → ${pct(last.standard ?? 0, 1)}`} sub={`weeks ${first.week}–${last.week}, generic layer curve`} />
-        {lastLogged?.hped != null && <Stat label="Last logged" value={pct(lastLogged.hped, 1)} sub={`${fmtDay(lastLogged.date)} (DailyLog)`} />}
+      {/* Next 3 days */}
+      <div style={{ fontWeight: 700, fontSize: 12.5, color: "var(--t1)", margin: "12px 0 6px" }}>Next 3 days</div>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${next.length}, minmax(0, 1fr))`, gap: 8 }}>
+        {next.map((d) => (
+          <div key={d.date} style={{ background: "var(--card)", borderRadius: 8, padding: "8px 10px", minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--t3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fmtDay(d.date)}</div>
+            <div style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 20, color: "var(--t1)", lineHeight: 1.2, marginTop: 2 }}>{pct(d.hped)}</div>
+            <div style={{ fontSize: 11, color: "var(--t2)" }}>{pct(d.lower)}–{pct(d.upper)}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 8, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--divider)" }}>
+        <StatusChip status={watch.status} text={watch.status === "watch" ? "Dip watch" : "No dip warning"} />
+        <span style={{ fontSize: 12, color: "var(--t2)", lineHeight: 1.45 }}>{watch.message}</span>
       </div>
 
+      {/* Chart */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", fontSize: 11.5, color: "var(--t2)", margin: "12px 0 4px" }}>
         <LegendLine color={ACTUAL} label="Actual (logged)" />
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -125,93 +117,65 @@ export default function FlockVetForecast({ data, busy, onInvestigate }: {
             <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]}
               tickFormatter={(t: number) => new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}
               tick={{ fontSize: 10, fill: AXIS }} axisLine={{ stroke: "#d1dada" }} tickLine={false} minTickGap={36} />
-            <YAxis domain={chart.domain} ticks={chart.ticks} tick={{ fontSize: 10, fill: AXIS }} axisLine={false} tickLine={false} width={40} tickFormatter={(v: number) => `${v}%`} allowDecimals={false} />
+            <YAxis domain={chart.domain} ticks={chart.ticks} tick={{ fontSize: 10, fill: AXIS }} axisLine={false} tickLine={false} width={40}
+              tickFormatter={(v: number) => `${v}%`} allowDecimals={false} />
             <Tooltip content={<ForecastTip />} cursor={{ stroke: TEAL, strokeOpacity: 0.4 }} />
             <Area dataKey="band" stroke="none" fill={MODEL} fillOpacity={0.18} isAnimationActive={false} connectNulls={false} legendType="none" />
             <Line dataKey="standard" stroke={STD} strokeWidth={1.5} strokeDasharray="5 4" dot={false} isAnimationActive={false} connectNulls />
-            <Line dataKey="fc" stroke={MODEL} strokeWidth={2} strokeDasharray="5 4" dot={false} isAnimationActive={false} connectNulls={false} />
-            <Line dataKey="actual" stroke={ACTUAL} strokeWidth={1.5} dot={<DropDot />} activeDot={{ r: 3.5 }} isAnimationActive={false} connectNulls={false} />
+            <Line dataKey="fc" stroke={MODEL} strokeWidth={2} strokeDasharray="5 4" dot={<NextDot />} activeDot={{ r: 3.5 }} isAnimationActive={false} connectNulls={false} />
+            <Line dataKey="actual" stroke={ACTUAL} strokeWidth={1.5} dot={false} activeDot={{ r: 3.5 }} isAnimationActive={false} connectNulls={false} />
             <ReferenceLine x={ms(data.as_of)} stroke={PRIMARY} strokeDasharray="3 3"
               label={{ value: "Egg data ends", position: "insideTopRight", fontSize: 10, fill: PRIMARY, offset: 4 }} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <div style={{ fontSize: 10.5, color: "var(--t3)", textAlign: "right" }}>Dots mark the recent drops listed below</div>
+      <div style={{ fontSize: 10.5, color: "var(--t3)", textAlign: "right" }}>
+        Dots mark the next 3 days · 4 weeks out: {pct(last.hped)} ({pct(last.lower)}–{pct(last.upper)})
+      </div>
 
-      {/* Backtest */}
+      {/* Accuracy */}
       <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--divider)" }}>
         <div style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 14, color: "var(--t1)" }}>How accurate is it?</div>
         <div style={{ fontSize: 12, color: "var(--t2)", lineHeight: 1.45, margin: "2px 0 8px" }}>
-          We hid the {bt.horizon_days} days after {fmtDay(bt.cutoff)} and forecast them. Average daily error, in hen-day % points (lower is better):
+          {`We forecast from every day since ${fmtDay(acc.tested_from)} (${acc.forecasts_made} forecasts), each time using only the data available that day. Average error, in hen-day % points:`}
         </div>
-        {btRows.map((r) => (
-          <div key={r.name} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 46px", gap: 8, alignItems: "center", marginBottom: 6 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 12, color: "var(--t1)", fontWeight: r.model ? 700 : 400 }}>{r.name}{r === best ? " · most accurate" : ""}</div>
-              <div style={{ height: 8, background: "var(--card-alt)", borderRadius: 4, marginTop: 3 }}>
-                <div style={{ width: `${(r.mae / btMax) * 100}%`, height: "100%", borderRadius: 4, background: r.model ? MODEL : "#9AA8AA" }} />
-              </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+          {([["Next day", acc.next_day_mae], ["Next 3 days", acc.three_day_mae], ["Next 4 weeks", acc.four_week_mae]] as const).map(([label, v]) => (
+            <div key={label} style={{ background: "var(--card)", borderRadius: 8, padding: "8px 10px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--t3)" }}>{label}</div>
+              <div style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 18, color: "var(--t1)" }}>±{v.toFixed(1)}</div>
             </div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--t1)", textAlign: "right" }}>{r.mae.toFixed(1)}</div>
+          ))}
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--t2)", lineHeight: 1.5, marginTop: 8 }}>
+          {`Lay has been flat, and much of the day-to-day movement looks like counting noise: ${acc.dips_bounced_back} of the ${acc.dips} dips since ${fmtDay(acc.tested_from)} bounced straight back the next day. That is why no model beats the recent level by much — simply repeating the last 7-day average scores the same (±${acc.benchmark.three_day_mae.toFixed(1)} over 3 days).`}
+        </div>
+        <div style={{ fontSize: 11, color: "var(--t3)", lineHeight: 1.45, marginTop: 4 }}>{acc.signals_note}</div>
+      </div>
+
+      {/* Recent dips */}
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--divider)" }}>
+        <div style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 14, color: "var(--t1)" }}>Recent dips</div>
+        {data.recent_dips.length === 0 && <div style={{ fontSize: 12, color: "var(--t3)", marginTop: 4 }}>No dips in the last 60 days of the log.</div>}
+        {data.recent_dips.map((d) => (
+          <div key={d.date} style={{ padding: "8px 0", borderTop: "1px solid var(--divider)" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 13, color: "var(--t1)" }}>
+                <strong>{fmtDay(d.date)}</strong>: {pct(d.hped, 1)} against about {pct(d.expected, 1)} expected ({pts(d.drop_pts)} pts)
+              </span>
+              <StatusChip status={d.bounced_back ? "watch" : "alert"} text={d.bounced_back ? "Bounced back" : "Real dip"} />
+            </div>
+            <div style={{ fontSize: 12, color: "var(--t2)", lineHeight: 1.45, marginTop: 2 }}>
+              {d.bounced_back
+                ? `Back to ${d.next_day_hped?.toFixed(1)}% the next day — most likely eggs counted on the wrong day rather than a real drop.`
+                : `Still ${d.next_day_hped != null ? `${d.next_day_hped.toFixed(1)}%` : "low"} the next day — worth investigating.`}
+              {d.water_drop_before ? " Water per bird dropped sharply in the 3 days before." : ""}
+            </div>
+            <button type="button" onClick={() => explainDip(d)} disabled={busy} style={{ ...smallBtn(false, busy), marginTop: 6 }}>
+              <SparkIcon /> Investigate with Flock Vet
+            </button>
           </div>
         ))}
-        <div style={{ fontSize: 11.5, color: "var(--t2)", lineHeight: 1.45, marginTop: 4 }}>
-          {best.model
-            ? "The model beat both simple baselines over this window."
-            : "Lay has been flat at about 89–93% for months, so simply carrying last week forward was hardest to beat over 4 weeks. The model adds the breed-curve context, a range, and what is moving lay."}
-        </div>
-      </div>
-
-      {/* Drivers */}
-      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--divider)" }}>
-        <div style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 14, color: "var(--t1)" }}>What is moving lay now</div>
-        <div style={{ fontSize: 12, color: "var(--t2)", lineHeight: 1.45, margin: "2px 0 8px" }}>
-          Average effect over the forecast, in hen-day % points against an average day, read straight from the model&apos;s components (a SHAP-style breakdown).
-        </div>
-        {data.drivers.map((d) => {
-          const w = (Math.abs(d.contribution_pts) / drvMax) * 50;
-          const up = d.contribution_pts >= 0;
-          return (
-            <div key={d.label} style={{ marginBottom: 7 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12, color: "var(--t1)" }}>
-                <span style={{ minWidth: 0 }}>{d.label}</span>
-                <strong style={{ whiteSpace: "nowrap" }}>{pts(d.contribution_pts)} pts</strong>
-              </div>
-              <div style={{ position: "relative", height: 8, background: "#f0efec", borderRadius: 4, marginTop: 3 }}>
-                <div style={{ position: "absolute", left: "50%", top: -2, bottom: -2, width: 1, background: "#9AA8AA" }} />
-                <div style={{ position: "absolute", top: 0, bottom: 0, left: up ? "50%" : `${50 - w}%`, width: `${w}%`, background: up ? POS : NEG, borderRadius: up ? "0 4px 4px 0" : "4px 0 0 4px" }} />
-              </div>
-            </div>
-          );
-        })}
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: "var(--t3)" }}>
-          <span>← holding lay back</span><span>helping lay →</span>
-        </div>
-      </div>
-
-      {/* Recent drops */}
-      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--divider)" }}>
-        <div style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 14, color: "var(--t1)" }}>Recent drops</div>
-        {data.recent_drops.map((d) => {
-          const known = d.drivers.filter((x) => !/^not explained/i.test(x.label)).reduce((a, x) => a + x.contribution_pts, 0);
-          const unexplained = d.drop_pts - known;
-          return (
-            <div key={d.date} style={{ padding: "8px 0", borderTop: "1px solid var(--divider)" }}>
-              <div style={{ fontSize: 13, color: "var(--t1)" }}>
-                <strong>{fmtDay(d.date)}</strong>: {pct(d.hped, 1)} against about {pct(d.expected, 1)} expected ({pts(d.drop_pts)} pts)
-              </div>
-              <div style={{ fontSize: 12, color: "var(--t2)", lineHeight: 1.45, marginTop: 2 }}>
-                Climate, cracked eggs and egg size account for {pts(known)} pts; {pts(unexplained)} pts is not explained by them
-                {Math.abs(unexplained) > 0.6 * Math.abs(d.drop_pts)
-                  ? ", so the cause is likely elsewhere — worth checking the log and events."
-                  : "."}
-              </div>
-              <button type="button" onClick={() => explainDrop(d)} disabled={busy} style={{ ...smallBtn(false, busy), marginTop: 6 }}>
-                <SparkIcon /> Explain with Flock Vet
-              </button>
-            </div>
-          );
-        })}
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>

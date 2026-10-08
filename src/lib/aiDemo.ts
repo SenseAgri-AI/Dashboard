@@ -80,10 +80,12 @@ export function getWarningSigns(farmId: string): WarningSnapshot | null {
   return farmId === WARNING_SIGNS.farm_id ? WARNING_SIGNS : null;
 }
 
-export interface ForecastDriver {
-  key?: string;
-  label: string;
-  contribution_pts: number;
+export interface ForecastDay {
+  date: string;
+  hped: number;
+  lower: number;
+  upper: number;
+  standard: number;
 }
 
 export interface HpedForecast {
@@ -91,12 +93,37 @@ export interface HpedForecast {
   farm_id: string;
   house_id: string;
   as_of: string;
-  model: { name: string; description: string; target: string; regressors: { key: string; label: string; lag_days: number }[] };
-  backtest: { cutoff: string; horizon_days: number; mae_pts: number; mape_pct: number; baselines: { name: string; mae_pts: number }[] };
-  history: { date: string; hped: number | null; standard: number | null; fitted: number | null; week: number | null; excluded: boolean }[];
-  forecast: { date: string; hped: number; lower: number; upper: number; standard: number | null; week: number | null }[];
-  drivers: ForecastDriver[];
-  recent_drops: { date: string; hped: number; expected: number; drop_pts: number; drivers: ForecastDriver[] }[];
+  model: { name: string; description: string; level_days: number; curve_slope_pts_per_week: number };
+  next_days: ForecastDay[];
+  dip_watch: {
+    status: "normal" | "watch";
+    message: string;
+    track_record: { water_drops: number; followed_by_dip: number; base_rate_pct: number; threshold_pct: number };
+  };
+  outlook: ForecastDay[];
+  accuracy: {
+    tested_from: string;
+    tested_to: string;
+    forecasts_made: number;
+    next_day_mae: number;
+    three_day_mae: number;
+    four_week_mae: number;
+    benchmark: { name: string; three_day_mae: number; four_week_mae: number };
+    dips: number;
+    dips_bounced_back: number;
+    signals_note: string;
+  };
+  history: { date: string; hped: number | null; standard: number; excluded: boolean }[];
+  recent_dips: {
+    date: string;
+    hped: number;
+    expected: number;
+    drop_pts: number;
+    days_low: number;
+    bounced_back: boolean;
+    next_day_hped: number | null;
+    water_drop_before: boolean;
+  }[];
   notes: string[];
 }
 
