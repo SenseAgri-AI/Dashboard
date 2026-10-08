@@ -1,9 +1,9 @@
 {
- "generated_at": "2026-10-08T08:40:15+00:00",
+ "generated_at": "2026-10-08T11:08:00+00:00",
  "farm_id": "farm_anike_001",
  "house_id": "house1",
  "as_of": "2026-10-07",
- "baseline": "Each flock sign is compared with the flock's own previous 7 days, leaving out days with a meter or supply fault.",
+ "baseline": "Each sign is compared with your flock's own last 7 normal days (days with a meter or supply fault are left out).",
  "birds_note": "Water per bird uses the live-hen count from the DailyLog (last mortality entry 2026-09-13); after that the last known count is carried forward.",
  "day": {
   "date": "2026-10-07",
@@ -15,7 +15,7 @@
   "signs": [
    {
     "key": "water_per_bird",
-    "label": "Daily water per bird",
+    "label": "Water per bird",
     "unit": "ml/bird/day",
     "group": "flock",
     "value": 408.7256,
@@ -23,12 +23,12 @@
     "normal_high": 568.4718,
     "z": -0.54,
     "status": "normal",
-    "message": "409 ml/bird/day \u2014 within the last week's normal (338\u2013568).",
+    "message": "409 ml per bird \u00b7 normal 338\u2013568 ml.",
     "research": "A sudden change in daily water, especially a drop, is often the earliest sign of a health or supply problem."
    },
    {
     "key": "drinking_start",
-    "label": "Drinking start after lights-on",
+    "label": "Morning drinking start",
     "unit": "min",
     "group": "flock",
     "value": 130.0,
@@ -36,12 +36,12 @@
     "normal_high": 188.956,
     "z": 0.67,
     "status": "normal",
-    "message": "Started 07:50, 130 min after lights-on \u2014 within the last week's normal (11\u2013189).",
+    "message": "Started 07:50, 130 min after lights-on \u00b7 normal up to 189 min.",
     "research": "A late or sluggish morning start can mean a flock that is unwell or water that is not reaching the drinkers."
    },
    {
     "key": "dusk_share",
-    "label": "Drinking around dusk",
+    "label": "Evening drinking",
     "unit": "% of day",
     "group": "flock",
     "value": 0.2809,
@@ -49,12 +49,12 @@
     "normal_high": 0.4923,
     "z": -1.52,
     "status": "normal",
-    "message": "28% \u2014 within the last week's normal (25%\u201349%).",
+    "message": "28% of the day's water \u00b7 normal 25\u201349%.",
     "research": "Laying hens normally drink heavily in the hours before dark; losing that evening peak is a behaviour change."
    },
    {
     "key": "frame_balance",
-    "label": "A-frame 1 share of water",
+    "label": "A-frame balance",
     "unit": "% of house",
     "group": "supply",
     "value": 0.5,
@@ -62,12 +62,12 @@
     "normal_high": 0.5763,
     "z": 0.09,
     "status": "normal",
-    "message": "50% \u2014 within the last week's normal (42%\u201358%).",
+    "message": "A-frame 1 drank 50% of the water \u00b7 normal 42\u201358%.",
     "research": "The two A-frames hold similar flocks, so a shift in balance points to a local line, drinker or meter problem."
    },
    {
     "key": "flock_activity",
-    "label": "Flock activity (noise)",
+    "label": "Flock activity (sound)",
     "unit": "dB above night",
     "group": "flock",
     "value": 3.0919,
@@ -75,12 +75,12 @@
     "normal_high": 5.7254,
     "z": -0.63,
     "status": "normal",
-    "message": "3.1 dB above night \u2014 within the last week's normal (1.7\u20135.7).",
+    "message": "3.1 dB above night \u00b7 normal 1.7\u20135.7 dB.",
     "research": "Changes in flock sound level accompany stress and illness; a quieter day can mean lethargic birds."
    },
    {
     "key": "night_flow",
-    "label": "Water used at night (22:00\u201305:00)",
+    "label": "Water at night",
     "unit": "L",
     "group": "supply",
     "value": 0.0,
@@ -88,12 +88,12 @@
     "normal_high": 20,
     "z": null,
     "status": "normal",
-    "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark.",
+    "message": "None overnight.",
     "research": "Hens stop drinking after lights-out; flow in the dark points to leaks, flushing, light leaks or disturbed birds."
    },
    {
     "key": "dry_frame_hours",
-    "label": "One A-frame dry while the other drinks",
+    "label": "One A-frame dry",
     "unit": "h",
     "group": "supply",
     "value": 1,
@@ -101,12 +101,12 @@
     "normal_high": 1,
     "z": null,
     "status": "normal",
-    "message": "A-frame 1 (WM1) read 0 L from 07:00 to 08:00 while A-frame 2 drank 30 L \u2014 a single hour, often just a slow start on one frame.",
+    "message": "Both A-frames drank all day, apart from one quiet hour on A-frame 1 at 07:00.",
     "research": "Uneven or interrupted flow points to blocked lines, closed valves or meter faults rather than the birds."
    },
    {
     "key": "heat_load",
-    "label": "Heat load (THI above comfort)",
+    "label": "Heat stress",
     "unit": "h",
     "group": "environment",
     "value": 0,
@@ -114,56 +114,56 @@
     "normal_high": 1,
     "z": null,
     "status": "normal",
-    "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 26.3, house max 29.7 \u00b0C).",
+    "message": "No heat stress (peak THI 26.3, house max 29.7 \u00b0C).",
     "research": "Water-to-feed ratio climbs from about 2:1 at 21 \u00b0C to 8:1 at 38 \u00b0C; heat raises water need and stresses birds."
    }
   ]
  },
  "sign_info": {
   "water_per_bird": {
-   "label": "Daily water per bird",
+   "label": "Water per bird",
    "unit": "ml/bird/day",
    "group": "flock",
    "research": "A sudden change in daily water, especially a drop, is often the earliest sign of a health or supply problem."
   },
   "drinking_start": {
-   "label": "Drinking start after lights-on",
+   "label": "Morning drinking start",
    "unit": "min",
    "group": "flock",
    "research": "A late or sluggish morning start can mean a flock that is unwell or water that is not reaching the drinkers."
   },
   "dusk_share": {
-   "label": "Drinking around dusk",
+   "label": "Evening drinking",
    "unit": "% of day",
    "group": "flock",
    "research": "Laying hens normally drink heavily in the hours before dark; losing that evening peak is a behaviour change."
   },
   "frame_balance": {
-   "label": "A-frame 1 share of water",
+   "label": "A-frame balance",
    "unit": "% of house",
    "group": "supply",
    "research": "The two A-frames hold similar flocks, so a shift in balance points to a local line, drinker or meter problem."
   },
   "flock_activity": {
-   "label": "Flock activity (noise)",
+   "label": "Flock activity (sound)",
    "unit": "dB above night",
    "group": "flock",
    "research": "Changes in flock sound level accompany stress and illness; a quieter day can mean lethargic birds."
   },
   "night_flow": {
-   "label": "Water used at night (22:00\u201305:00)",
+   "label": "Water at night",
    "unit": "L",
    "group": "supply",
    "research": "Hens stop drinking after lights-out; flow in the dark points to leaks, flushing, light leaks or disturbed birds."
   },
   "dry_frame_hours": {
-   "label": "One A-frame dry while the other drinks",
+   "label": "One A-frame dry",
    "unit": "h",
    "group": "supply",
    "research": "Uneven or interrupted flow points to blocked lines, closed valves or meter faults rather than the birds."
   },
   "heat_load": {
-   "label": "Heat load (THI above comfort)",
+   "label": "Heat stress",
    "unit": "h",
    "group": "environment",
    "research": "Water-to-feed ratio climbs from about 2:1 at 21 \u00b0C to 8:1 at 38 \u00b0C; heat raises water need and stresses birds."
@@ -187,7 +187,7 @@
      "value": 263.9431,
      "normal_low": 248.0992,
      "normal_high": 374.8916,
-     "message": "264 ml/bird/day \u2014 within the last week's normal (248\u2013375)."
+     "message": "264 ml per bird \u00b7 normal 248\u2013375 ml."
     },
     {
      "key": "drinking_start",
@@ -195,7 +195,7 @@
      "value": 120.0,
      "normal_low": 20.0,
      "normal_high": 140.0,
-     "message": "Started 08:30, 120 min after lights-on \u2014 within the last week's normal (20\u2013140)."
+     "message": "Started 08:30, 120 min after lights-on \u00b7 normal up to 140 min."
     },
     {
      "key": "dusk_share",
@@ -203,7 +203,7 @@
      "value": 0.3826,
      "normal_low": 0.259,
      "normal_high": 0.499,
-     "message": "38% \u2014 within the last week's normal (26%\u201350%)."
+     "message": "38% of the day's water \u00b7 normal 26\u201350%."
     },
     {
      "key": "frame_balance",
@@ -211,7 +211,7 @@
      "value": 0.4353,
      "normal_low": 0.42,
      "normal_high": 0.58,
-     "message": "44% \u2014 within the last week's normal (42%\u201358%)."
+     "message": "A-frame 1 drank 44% of the water \u00b7 normal 42\u201358%."
     },
     {
      "key": "flock_activity",
@@ -219,7 +219,7 @@
      "value": 4.0643,
      "normal_low": null,
      "normal_high": null,
-     "message": "4.1 dB above night \u2014 not enough recent days to judge."
+     "message": "4.1 dB above night \u00b7 not enough recent days to compare."
     },
     {
      "key": "night_flow",
@@ -227,7 +227,7 @@
      "value": 10.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 10 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "Almost none overnight (10 L)."
     },
     {
      "key": "dry_frame_hours",
@@ -235,7 +235,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -243,7 +243,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 23.8, house max 26.0 \u00b0C)."
+     "message": "No heat stress (peak THI 23.8, house max 26.0 \u00b0C)."
     }
    ]
   },
@@ -264,7 +264,7 @@
      "value": 270.8286,
      "normal_low": 216.3113,
      "normal_high": 374.1023,
-     "message": "271 ml/bird/day \u2014 within the last week's normal (216\u2013374)."
+     "message": "271 ml per bird \u00b7 normal 216\u2013374 ml."
     },
     {
      "key": "drinking_start",
@@ -272,7 +272,7 @@
      "value": 100.0,
      "normal_low": 20.0,
      "normal_high": 140.0,
-     "message": "Started 08:00, 100 min after lights-on \u2014 within the last week's normal (20\u2013140)."
+     "message": "Started 08:00, 100 min after lights-on \u00b7 normal up to 140 min."
     },
     {
      "key": "dusk_share",
@@ -280,7 +280,7 @@
      "value": 0.322,
      "normal_low": 0.2624,
      "normal_high": 0.5024,
-     "message": "32% \u2014 within the last week's normal (26%\u201350%)."
+     "message": "32% of the day's water \u00b7 normal 26\u201350%."
     },
     {
      "key": "frame_balance",
@@ -288,7 +288,7 @@
      "value": 0.5252,
      "normal_low": 0.4021,
      "normal_high": 0.5621,
-     "message": "53% \u2014 within the last week's normal (40%\u201356%)."
+     "message": "A-frame 1 drank 53% of the water \u00b7 normal 40\u201356%."
     },
     {
      "key": "flock_activity",
@@ -296,7 +296,7 @@
      "value": 3.1743,
      "normal_low": null,
      "normal_high": null,
-     "message": "3.2 dB above night \u2014 not enough recent days to judge."
+     "message": "3.2 dB above night \u00b7 not enough recent days to compare."
     },
     {
      "key": "night_flow",
@@ -304,7 +304,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -312,7 +312,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -320,7 +320,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 24.6, house max 27.5 \u00b0C)."
+     "message": "No heat stress (peak THI 24.6, house max 27.5 \u00b0C)."
     }
    ]
   },
@@ -341,7 +341,7 @@
      "value": 309.9174,
      "normal_low": 231.6862,
      "normal_high": 316.5838,
-     "message": "310 ml/bird/day \u2014 within the last week's normal (232\u2013317)."
+     "message": "310 ml per bird \u00b7 normal 232\u2013317 ml."
     },
     {
      "key": "drinking_start",
@@ -349,7 +349,7 @@
      "value": 100.0,
      "normal_low": 20.0,
      "normal_high": 140.0,
-     "message": "Started 08:10, 100 min after lights-on \u2014 within the last week's normal (20\u2013140)."
+     "message": "Started 08:10, 100 min after lights-on \u00b7 normal up to 140 min."
     },
     {
      "key": "dusk_share",
@@ -357,7 +357,7 @@
      "value": 0.3556,
      "normal_low": 0.2624,
      "normal_high": 0.5024,
-     "message": "36% \u2014 within the last week's normal (26%\u201350%)."
+     "message": "36% of the day's water \u00b7 normal 26\u201350%."
     },
     {
      "key": "frame_balance",
@@ -365,7 +365,7 @@
      "value": 0.4963,
      "normal_low": 0.4021,
      "normal_high": 0.5621,
-     "message": "50% \u2014 within the last week's normal (40%\u201356%)."
+     "message": "A-frame 1 drank 50% of the water \u00b7 normal 40\u201356%."
     },
     {
      "key": "flock_activity",
@@ -373,7 +373,7 @@
      "value": 3.8535,
      "normal_low": null,
      "normal_high": null,
-     "message": "3.9 dB above night \u2014 not enough recent days to judge."
+     "message": "3.9 dB above night \u00b7 not enough recent days to compare."
     },
     {
      "key": "night_flow",
@@ -381,7 +381,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -389,7 +389,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -397,14 +397,14 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 25.2, house max 28.4 \u00b0C)."
+     "message": "No heat stress (peak THI 25.2, house max 28.4 \u00b0C)."
     }
    ]
   },
   {
    "date": "2026-09-13",
    "alerts": 0,
-   "watches": 2,
+   "watches": 1,
    "meter_fault": false,
    "house_litres": 1900.0,
    "wm1_litres": 970.0,
@@ -418,15 +418,15 @@
      "value": 436.2801,
      "normal_low": 220.6462,
      "normal_high": 366.7525,
-     "message": "436 ml/bird/day \u2014 53% above the last week's normal (221\u2013367)."
+     "message": "436 ml per bird \u2014 53% more than normal (normal 221\u2013367 ml)."
     },
     {
      "key": "drinking_start",
-     "status": "watch",
+     "status": "normal",
      "value": 140.0,
      "normal_low": 20.0,
      "normal_high": 140.0,
-     "message": "Started 08:30, 140 min after lights-on \u2014 later than the last week's normal (20\u2013140)."
+     "message": "Started 08:30, 140 min after lights-on \u00b7 normal up to 140 min."
     },
     {
      "key": "dusk_share",
@@ -434,7 +434,7 @@
      "value": 0.3316,
      "normal_low": 0.259,
      "normal_high": 0.499,
-     "message": "33% \u2014 within the last week's normal (26%\u201350%)."
+     "message": "33% of the day's water \u00b7 normal 26\u201350%."
     },
     {
      "key": "frame_balance",
@@ -442,7 +442,7 @@
      "value": 0.5105,
      "normal_low": 0.4021,
      "normal_high": 0.5621,
-     "message": "51% \u2014 within the last week's normal (40%\u201356%)."
+     "message": "A-frame 1 drank 51% of the water \u00b7 normal 40\u201356%."
     },
     {
      "key": "flock_activity",
@@ -450,7 +450,7 @@
      "value": 4.679,
      "normal_low": 1.9589,
      "normal_high": 5.9589,
-     "message": "4.7 dB above night \u2014 within the last week's normal (2.0\u20136.0)."
+     "message": "4.7 dB above night \u00b7 normal 2.0\u20136.0 dB."
     },
     {
      "key": "night_flow",
@@ -458,7 +458,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -466,7 +466,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -474,14 +474,14 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 26.0, house max 29.5 \u00b0C)."
+     "message": "No heat stress (peak THI 26.0, house max 29.5 \u00b0C)."
     }
    ]
   },
   {
    "date": "2026-09-14",
    "alerts": 0,
-   "watches": 1,
+   "watches": 0,
    "meter_fault": false,
    "house_litres": 1810.0,
    "wm1_litres": 930.0,
@@ -495,15 +495,15 @@
      "value": 415.6142,
      "normal_low": 207.7922,
      "normal_high": 462.2348,
-     "message": "416 ml/bird/day \u2014 within the last week's normal (208\u2013462)."
+     "message": "416 ml per bird \u00b7 normal 208\u2013462 ml."
     },
     {
      "key": "drinking_start",
-     "status": "watch",
+     "status": "normal",
      "value": 160.0,
      "normal_low": 40.0,
      "normal_high": 160.0,
-     "message": "Started 08:50, 160 min after lights-on \u2014 later than the last week's normal (40\u2013160)."
+     "message": "Started 08:50, 160 min after lights-on \u00b7 normal up to 160 min."
     },
     {
      "key": "dusk_share",
@@ -511,7 +511,7 @@
      "value": 0.3536,
      "normal_low": 0.2356,
      "normal_high": 0.4756,
-     "message": "35% \u2014 within the last week's normal (24%\u201348%)."
+     "message": "35% of the day's water \u00b7 normal 24\u201348%."
     },
     {
      "key": "frame_balance",
@@ -519,7 +519,7 @@
      "value": 0.5137,
      "normal_low": 0.3981,
      "normal_high": 0.5661,
-     "message": "51% \u2014 within the last week's normal (40%\u201357%)."
+     "message": "A-frame 1 drank 51% of the water \u00b7 normal 40\u201357%."
     },
     {
      "key": "flock_activity",
@@ -527,7 +527,7 @@
      "value": 4.5958,
      "normal_low": 2.0643,
      "normal_high": 6.0643,
-     "message": "4.6 dB above night \u2014 within the last week's normal (2.1\u20136.1)."
+     "message": "4.6 dB above night \u00b7 normal 2.1\u20136.1 dB."
     },
     {
      "key": "night_flow",
@@ -535,7 +535,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -543,7 +543,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -551,7 +551,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 23.9, house max 26.3 \u00b0C)."
+     "message": "No heat stress (peak THI 23.9, house max 26.3 \u00b0C)."
     }
    ]
   },
@@ -572,7 +572,7 @@
      "value": 349.0241,
      "normal_low": 192.5616,
      "normal_high": 505.5155,
-     "message": "349 ml/bird/day \u2014 within the last week's normal (193\u2013506)."
+     "message": "349 ml per bird \u00b7 normal 193\u2013506 ml."
     },
     {
      "key": "drinking_start",
@@ -580,7 +580,7 @@
      "value": 180.0,
      "normal_low": 40.0,
      "normal_high": 160.0,
-     "message": "Started 09:10, 180 min after lights-on \u2014 later than the last week's normal (40\u2013160)."
+     "message": "Started 09:10, 180 min after lights-on \u2014 later than normal (normal up to 160 min)."
     },
     {
      "key": "dusk_share",
@@ -588,7 +588,7 @@
      "value": 0.4342,
      "normal_low": 0.2336,
      "normal_high": 0.4736,
-     "message": "43% \u2014 within the last week's normal (23%\u201347%)."
+     "message": "43% of the day's water \u00b7 normal 23\u201347%."
     },
     {
      "key": "frame_balance",
@@ -596,7 +596,7 @@
      "value": 0.4542,
      "normal_low": 0.4163,
      "normal_high": 0.5763,
-     "message": "45% \u2014 within the last week's normal (42%\u201358%)."
+     "message": "A-frame 1 drank 45% of the water \u00b7 normal 42\u201358%."
     },
     {
      "key": "flock_activity",
@@ -604,7 +604,7 @@
      "value": 4.9825,
      "normal_low": 2.3218,
      "normal_high": 6.3218,
-     "message": "5.0 dB above night \u2014 within the last week's normal (2.3\u20136.3)."
+     "message": "5.0 dB above night \u00b7 normal 2.3\u20136.3 dB."
     },
     {
      "key": "night_flow",
@@ -612,7 +612,7 @@
      "value": 10.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 10 L, A-frame 2 10 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "Almost none overnight (10 L)."
     },
     {
      "key": "dry_frame_hours",
@@ -620,7 +620,7 @@
      "value": 3,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "A-frame 1 (WM1) read 0 L from 09:00 to 12:00 while A-frame 2 drank 200 L \u2014 check the meter, valve and supply to that frame."
+     "message": "A-frame 1 read 0 L from 09:00 to 12:00 while A-frame 2 drank 200 L \u2014 check that line's meter, valve and supply."
     },
     {
      "key": "heat_load",
@@ -628,7 +628,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 23.1, house max 25.0 \u00b0C)."
+     "message": "No heat stress (peak THI 23.1, house max 25.0 \u00b0C)."
     }
    ]
   },
@@ -649,7 +649,7 @@
      "value": 456.946,
      "normal_low": 192.5616,
      "normal_high": 505.5155,
-     "message": "457 ml/bird/day \u2014 within the last week's normal (193\u2013506)."
+     "message": "457 ml per bird \u00b7 normal 193\u2013506 ml."
     },
     {
      "key": "drinking_start",
@@ -657,7 +657,7 @@
      "value": 150.0,
      "normal_low": 40.0,
      "normal_high": 160.0,
-     "message": "Started 08:40, 150 min after lights-on \u2014 within the last week's normal (40\u2013160)."
+     "message": "Started 08:40, 150 min after lights-on \u00b7 normal up to 160 min."
     },
     {
      "key": "dusk_share",
@@ -665,7 +665,7 @@
      "value": 0.3568,
      "normal_low": 0.2336,
      "normal_high": 0.4736,
-     "message": "36% \u2014 within the last week's normal (23%\u201347%)."
+     "message": "36% of the day's water \u00b7 normal 23\u201347%."
     },
     {
      "key": "frame_balance",
@@ -673,7 +673,7 @@
      "value": 0.5275,
      "normal_low": 0.4163,
      "normal_high": 0.5763,
-     "message": "53% \u2014 within the last week's normal (42%\u201358%)."
+     "message": "A-frame 1 drank 53% of the water \u00b7 normal 42\u201358%."
     },
     {
      "key": "flock_activity",
@@ -681,7 +681,7 @@
      "value": 4.1705,
      "normal_low": 2.3218,
      "normal_high": 6.3218,
-     "message": "4.2 dB above night \u2014 within the last week's normal (2.3\u20136.3)."
+     "message": "4.2 dB above night \u00b7 normal 2.3\u20136.3 dB."
     },
     {
      "key": "night_flow",
@@ -689,7 +689,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -697,7 +697,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -705,7 +705,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 26.2, house max 29.2 \u00b0C)."
+     "message": "No heat stress (peak THI 26.2, house max 29.2 \u00b0C)."
     }
    ]
   },
@@ -726,7 +726,7 @@
      "value": 181.4007,
      "normal_low": 220.1113,
      "normal_high": 612.383,
-     "message": "181 ml/bird/day \u2014 51% below the last week's normal (220\u2013612)."
+     "message": "181 ml per bird \u2014 51% less than normal (normal 220\u2013612 ml)."
     },
     {
      "key": "drinking_start",
@@ -734,7 +734,7 @@
      "value": 120.0,
      "normal_low": 60.0,
      "normal_high": 180.0,
-     "message": "Started 09:00, 120 min after lights-on \u2014 within the last week's normal (60\u2013180)."
+     "message": "Started 09:00, 120 min after lights-on \u00b7 normal up to 180 min."
     },
     {
      "key": "dusk_share",
@@ -742,7 +742,7 @@
      "value": 0.3544,
      "normal_low": 0.2336,
      "normal_high": 0.4736,
-     "message": "35% \u2014 within the last week's normal (23%\u201347%)."
+     "message": "35% of the day's water \u00b7 normal 23\u201347%."
     },
     {
      "key": "frame_balance",
@@ -750,7 +750,7 @@
      "value": 0.0063,
      "normal_low": 0.4305,
      "normal_high": 0.5905,
-     "message": "1% \u2014 below the last week's normal (43%\u201359%)."
+     "message": "A-frame 1 drank 1% of the water \u2014 less than normal (normal 43\u201359%)."
     },
     {
      "key": "flock_activity",
@@ -758,7 +758,7 @@
      "value": 3.88,
      "normal_low": 2.1705,
      "normal_high": 6.1705,
-     "message": "3.9 dB above night \u2014 within the last week's normal (2.2\u20136.2)."
+     "message": "3.9 dB above night \u00b7 normal 2.2\u20136.2 dB."
     },
     {
      "key": "night_flow",
@@ -766,7 +766,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -774,7 +774,7 @@
      "value": 8,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "A-frame 1 (WM1) read 0 L from 09:00 to 17:00 while A-frame 2 drank 560 L \u2014 check the meter, valve and supply to that frame."
+     "message": "A-frame 1 read 0 L from 09:00 to 17:00 while A-frame 2 drank 560 L \u2014 check that line's meter, valve and supply."
     },
     {
      "key": "heat_load",
@@ -782,7 +782,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 23.6, house max 25.4 \u00b0C)."
+     "message": "No heat stress (peak THI 23.6, house max 25.4 \u00b0C)."
     }
    ]
   },
@@ -803,7 +803,7 @@
      "value": 257.1757,
      "normal_low": 220.1113,
      "normal_high": 612.383,
-     "message": "257 ml/bird/day \u2014 within the last week's normal (220\u2013612)."
+     "message": "257 ml per bird \u00b7 normal 220\u2013612 ml."
     },
     {
      "key": "drinking_start",
@@ -811,7 +811,7 @@
      "value": 120.0,
      "normal_low": 60.0,
      "normal_high": 180.0,
-     "message": "Started 08:10, 120 min after lights-on \u2014 within the last week's normal (60\u2013180)."
+     "message": "Started 08:10, 120 min after lights-on \u00b7 normal up to 180 min."
     },
     {
      "key": "dusk_share",
@@ -819,7 +819,7 @@
      "value": 0.4286,
      "normal_low": 0.2336,
      "normal_high": 0.4736,
-     "message": "43% \u2014 within the last week's normal (23%\u201347%)."
+     "message": "43% of the day's water \u00b7 normal 23\u201347%."
     },
     {
      "key": "frame_balance",
@@ -827,7 +827,7 @@
      "value": 0.5442,
      "normal_low": 0.4305,
      "normal_high": 0.5905,
-     "message": "54% \u2014 within the last week's normal (43%\u201359%)."
+     "message": "A-frame 1 drank 54% of the water \u00b7 normal 43\u201359%."
     },
     {
      "key": "flock_activity",
@@ -835,7 +835,7 @@
      "value": 3.4397,
      "normal_low": 2.1705,
      "normal_high": 6.1705,
-     "message": "3.4 dB above night \u2014 within the last week's normal (2.2\u20136.2)."
+     "message": "3.4 dB above night \u00b7 normal 2.2\u20136.2 dB."
     },
     {
      "key": "night_flow",
@@ -843,7 +843,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -851,7 +851,7 @@
      "value": 1,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "A-frame 2 (WM2) read 0 L from 10:00 to 11:00 while A-frame 1 drank 30 L \u2014 a single hour, often just a slow start on one frame."
+     "message": "Both A-frames drank all day, apart from one quiet hour on A-frame 2 at 10:00."
     },
     {
      "key": "heat_load",
@@ -859,7 +859,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 16.9, house max 17.1 \u00b0C)."
+     "message": "No heat stress (peak THI 16.9, house max 17.1 \u00b0C)."
     }
    ]
   },
@@ -880,7 +880,7 @@
      "value": 383.4673,
      "normal_low": 178.2449,
      "normal_high": 538.8584,
-     "message": "383 ml/bird/day \u2014 within the last week's normal (178\u2013539)."
+     "message": "383 ml per bird \u00b7 normal 178\u2013539 ml."
     },
     {
      "key": "drinking_start",
@@ -888,7 +888,7 @@
      "value": 110.0,
      "normal_low": 60.0,
      "normal_high": 180.0,
-     "message": "Started 08:00, 110 min after lights-on \u2014 within the last week's normal (60\u2013180)."
+     "message": "Started 08:00, 110 min after lights-on \u00b7 normal up to 180 min."
     },
     {
      "key": "dusk_share",
@@ -896,7 +896,7 @@
      "value": 0.3713,
      "normal_low": 0.2356,
      "normal_high": 0.4756,
-     "message": "37% \u2014 within the last week's normal (24%\u201348%)."
+     "message": "37% of the day's water \u00b7 normal 24\u201348%."
     },
     {
      "key": "frame_balance",
@@ -904,7 +904,7 @@
      "value": 0.5268,
      "normal_low": 0.4337,
      "normal_high": 0.5937,
-     "message": "53% \u2014 within the last week's normal (43%\u201359%)."
+     "message": "A-frame 1 drank 53% of the water \u00b7 normal 43\u201359%."
     },
     {
      "key": "flock_activity",
@@ -912,7 +912,7 @@
      "value": 3.6605,
      "normal_low": 2.0643,
      "normal_high": 6.0643,
-     "message": "3.7 dB above night \u2014 within the last week's normal (2.1\u20136.1)."
+     "message": "3.7 dB above night \u00b7 normal 2.1\u20136.1 dB."
     },
     {
      "key": "night_flow",
@@ -920,7 +920,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -928,7 +928,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -936,7 +936,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 23.5, house max 25.4 \u00b0C)."
+     "message": "No heat stress (peak THI 23.5, house max 25.4 \u00b0C)."
     }
    ]
   },
@@ -957,7 +957,7 @@
      "value": 394.9483,
      "normal_low": 228.0174,
      "normal_high": 644.8944,
-     "message": "395 ml/bird/day \u2014 within the last week's normal (228\u2013645)."
+     "message": "395 ml per bird \u00b7 normal 228\u2013645 ml."
     },
     {
      "key": "drinking_start",
@@ -965,7 +965,7 @@
      "value": 130.0,
      "normal_low": 60.0,
      "normal_high": 180.0,
-     "message": "Started 08:20, 130 min after lights-on \u2014 within the last week's normal (60\u2013180)."
+     "message": "Started 08:20, 130 min after lights-on \u00b7 normal up to 180 min."
     },
     {
      "key": "dusk_share",
@@ -973,7 +973,7 @@
      "value": 0.3779,
      "normal_low": 0.2356,
      "normal_high": 0.4756,
-     "message": "38% \u2014 within the last week's normal (24%\u201348%)."
+     "message": "38% of the day's water \u00b7 normal 24\u201348%."
     },
     {
      "key": "frame_balance",
@@ -981,7 +981,7 @@
      "value": 0.552,
      "normal_low": 0.4452,
      "normal_high": 0.6052,
-     "message": "55% \u2014 within the last week's normal (45%\u201361%)."
+     "message": "A-frame 1 drank 55% of the water \u00b7 normal 45\u201361%."
     },
     {
      "key": "flock_activity",
@@ -989,7 +989,7 @@
      "value": 3.9569,
      "normal_low": 1.8535,
      "normal_high": 5.8535,
-     "message": "4.0 dB above night \u2014 within the last week's normal (1.9\u20135.9)."
+     "message": "4.0 dB above night \u00b7 normal 1.9\u20135.9 dB."
     },
     {
      "key": "night_flow",
@@ -997,7 +997,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -1005,7 +1005,7 @@
      "value": 1,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "A-frame 2 (WM2) read 0 L from 08:00 to 09:00 while A-frame 1 drank 50 L \u2014 a single hour, often just a slow start on one frame."
+     "message": "Both A-frames drank all day, apart from one quiet hour on A-frame 2 at 08:00."
     },
     {
      "key": "heat_load",
@@ -1013,7 +1013,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 23.8, house max 26.0 \u00b0C)."
+     "message": "No heat stress (peak THI 23.8, house max 26.0 \u00b0C)."
     }
    ]
   },
@@ -1034,7 +1034,7 @@
      "value": 417.9104,
      "normal_low": 294.0147,
      "normal_high": 530.5319,
-     "message": "418 ml/bird/day \u2014 within the last week's normal (294\u2013531)."
+     "message": "418 ml per bird \u00b7 normal 294\u2013531 ml."
     },
     {
      "key": "drinking_start",
@@ -1042,7 +1042,7 @@
      "value": 150.0,
      "normal_low": 70.0,
      "normal_high": 190.0,
-     "message": "Started 08:40, 150 min after lights-on \u2014 within the last week's normal (70\u2013190)."
+     "message": "Started 08:40, 150 min after lights-on \u00b7 normal up to 190 min."
     },
     {
      "key": "dusk_share",
@@ -1050,7 +1050,7 @@
      "value": 0.3956,
      "normal_low": 0.2368,
      "normal_high": 0.4768,
-     "message": "40% \u2014 within the last week's normal (24%\u201348%)."
+     "message": "40% of the day's water \u00b7 normal 24\u201348%."
     },
     {
      "key": "frame_balance",
@@ -1058,7 +1058,7 @@
      "value": 0.4945,
      "normal_low": 0.4468,
      "normal_high": 0.6068,
-     "message": "49% \u2014 within the last week's normal (45%\u201361%)."
+     "message": "A-frame 1 drank 49% of the water \u00b7 normal 45\u201361%."
     },
     {
      "key": "flock_activity",
@@ -1066,7 +1066,7 @@
      "value": 3.7673,
      "normal_low": 1.9569,
      "normal_high": 5.9569,
-     "message": "3.8 dB above night \u2014 within the last week's normal (2.0\u20136.0)."
+     "message": "3.8 dB above night \u00b7 normal 2.0\u20136.0 dB."
     },
     {
      "key": "night_flow",
@@ -1074,7 +1074,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -1082,7 +1082,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -1090,7 +1090,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 23.1, house max 25.0 \u00b0C)."
+     "message": "No heat stress (peak THI 23.1, house max 25.0 \u00b0C)."
     }
    ]
   },
@@ -1111,7 +1111,7 @@
      "value": 362.8014,
      "normal_low": 357.2818,
      "normal_high": 483.4705,
-     "message": "363 ml/bird/day \u2014 within the last week's normal (357\u2013483)."
+     "message": "363 ml per bird \u00b7 normal 357\u2013483 ml."
     },
     {
      "key": "drinking_start",
@@ -1119,7 +1119,7 @@
      "value": 130.0,
      "normal_low": 80.0,
      "normal_high": 200.0,
-     "message": "Started 08:10, 130 min after lights-on \u2014 within the last week's normal (80\u2013200)."
+     "message": "Started 08:10, 130 min after lights-on \u00b7 normal up to 200 min."
     },
     {
      "key": "dusk_share",
@@ -1127,7 +1127,7 @@
      "value": 0.3734,
      "normal_low": 0.2513,
      "normal_high": 0.4913,
-     "message": "37% \u2014 within the last week's normal (25%\u201349%)."
+     "message": "37% of the day's water \u00b7 normal 25\u201349%."
     },
     {
      "key": "frame_balance",
@@ -1135,7 +1135,7 @@
      "value": 0.4937,
      "normal_low": 0.4468,
      "normal_high": 0.6068,
-     "message": "49% \u2014 within the last week's normal (45%\u201361%)."
+     "message": "A-frame 1 drank 49% of the water \u00b7 normal 45\u201361%."
     },
     {
      "key": "flock_activity",
@@ -1143,7 +1143,7 @@
      "value": 5.2413,
      "normal_low": 1.9569,
      "normal_high": 5.9569,
-     "message": "5.2 dB above night \u2014 within the last week's normal (2.0\u20136.0)."
+     "message": "5.2 dB above night \u00b7 normal 2.0\u20136.0 dB."
     },
     {
      "key": "night_flow",
@@ -1151,7 +1151,7 @@
      "value": 60.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 60 L overnight \u2014 water should be close to zero in the dark; check for leaks, flushing or disturbance."
+     "message": "A-frame 1 0 L, A-frame 2 60 L between 22:00 and 05:00 \u2014 check for leaks or flushing."
     },
     {
      "key": "dry_frame_hours",
@@ -1159,7 +1159,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -1167,7 +1167,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 24.9, house max 27.4 \u00b0C)."
+     "message": "No heat stress (peak THI 24.9, house max 27.4 \u00b0C)."
     }
    ]
   },
@@ -1188,7 +1188,7 @@
      "value": 433.9839,
      "normal_low": 357.2818,
      "normal_high": 483.4705,
-     "message": "434 ml/bird/day \u2014 within the last week's normal (357\u2013483)."
+     "message": "434 ml per bird \u00b7 normal 357\u2013483 ml."
     },
     {
      "key": "drinking_start",
@@ -1196,7 +1196,7 @@
      "value": 80.0,
      "normal_low": 80.0,
      "normal_high": 200.0,
-     "message": "Started 08:10, 80 min after lights-on \u2014 earlier than the last week's normal (80\u2013200); not a warning sign on its own."
+     "message": "Started 08:10, 80 min after lights-on \u00b7 normal up to 200 min."
     },
     {
      "key": "dusk_share",
@@ -1204,7 +1204,7 @@
      "value": 0.3333,
      "normal_low": 0.2513,
      "normal_high": 0.4913,
-     "message": "33% \u2014 within the last week's normal (25%\u201349%)."
+     "message": "33% of the day's water \u00b7 normal 25\u201349%."
     },
     {
      "key": "frame_balance",
@@ -1212,7 +1212,7 @@
      "value": 0.5237,
      "normal_low": 0.4468,
      "normal_high": 0.6068,
-     "message": "52% \u2014 within the last week's normal (45%\u201361%)."
+     "message": "A-frame 1 drank 52% of the water \u00b7 normal 45\u201361%."
     },
     {
      "key": "flock_activity",
@@ -1220,7 +1220,7 @@
      "value": 3.7254,
      "normal_low": 1.9569,
      "normal_high": 5.9569,
-     "message": "3.7 dB above night \u2014 within the last week's normal (2.0\u20136.0)."
+     "message": "3.7 dB above night \u00b7 normal 2.0\u20136.0 dB."
     },
     {
      "key": "night_flow",
@@ -1228,7 +1228,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -1236,7 +1236,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -1244,7 +1244,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 25.3, house max 28.0 \u00b0C)."
+     "message": "No heat stress (peak THI 25.3, house max 28.0 \u00b0C)."
     }
    ]
   },
@@ -1265,7 +1265,7 @@
      "value": 539.6096,
      "normal_low": 357.2818,
      "normal_high": 483.4705,
-     "message": "540 ml/bird/day \u2014 30% above the last week's normal (357\u2013483)."
+     "message": "540 ml per bird \u2014 30% more than normal (normal 357\u2013483 ml)."
     },
     {
      "key": "drinking_start",
@@ -1273,7 +1273,7 @@
      "value": 120.0,
      "normal_low": 70.0,
      "normal_high": 190.0,
-     "message": "Started 08:10, 120 min after lights-on \u2014 within the last week's normal (70\u2013190)."
+     "message": "Started 08:10, 120 min after lights-on \u00b7 normal up to 190 min."
     },
     {
      "key": "dusk_share",
@@ -1281,7 +1281,7 @@
      "value": 0.3362,
      "normal_low": 0.2513,
      "normal_high": 0.4913,
-     "message": "34% \u2014 within the last week's normal (25%\u201349%)."
+     "message": "34% of the day's water \u00b7 normal 25\u201349%."
     },
     {
      "key": "frame_balance",
@@ -1289,7 +1289,7 @@
      "value": 0.5403,
      "normal_low": 0.4468,
      "normal_high": 0.6068,
-     "message": "54% \u2014 within the last week's normal (45%\u201361%)."
+     "message": "A-frame 1 drank 54% of the water \u00b7 normal 45\u201361%."
     },
     {
      "key": "flock_activity",
@@ -1297,7 +1297,7 @@
      "value": null,
      "normal_low": 1.7673,
      "normal_high": 5.7673,
-     "message": "No data for this day."
+     "message": "No data."
     },
     {
      "key": "night_flow",
@@ -1305,7 +1305,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -1313,7 +1313,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -1321,7 +1321,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 26.0, house max 28.8 \u00b0C)."
+     "message": "No heat stress (peak THI 26.0, house max 28.8 \u00b0C)."
     }
    ]
   },
@@ -1342,7 +1342,7 @@
      "value": 535.0172,
      "normal_low": 323.831,
      "normal_high": 539.3219,
-     "message": "535 ml/bird/day \u2014 within the last week's normal (324\u2013539)."
+     "message": "535 ml per bird \u00b7 normal 324\u2013539 ml."
     },
     {
      "key": "drinking_start",
@@ -1350,7 +1350,7 @@
      "value": 140.0,
      "normal_low": 60.0,
      "normal_high": 180.0,
-     "message": "Started 08:20, 140 min after lights-on \u2014 within the last week's normal (60\u2013180)."
+     "message": "Started 08:20, 140 min after lights-on \u00b7 normal up to 180 min."
     },
     {
      "key": "dusk_share",
@@ -1358,7 +1358,7 @@
      "value": 0.3433,
      "normal_low": 0.2513,
      "normal_high": 0.4913,
-     "message": "34% \u2014 within the last week's normal (25%\u201349%)."
+     "message": "34% of the day's water \u00b7 normal 25\u201349%."
     },
     {
      "key": "frame_balance",
@@ -1366,7 +1366,7 @@
      "value": 0.5107,
      "normal_low": 0.4475,
      "normal_high": 0.6075,
-     "message": "51% \u2014 within the last week's normal (45%\u201361%)."
+     "message": "A-frame 1 drank 51% of the water \u00b7 normal 45\u201361%."
     },
     {
      "key": "flock_activity",
@@ -1374,7 +1374,7 @@
      "value": null,
      "normal_low": 1.7673,
      "normal_high": 5.7673,
-     "message": "No data for this day."
+     "message": "No data."
     },
     {
      "key": "night_flow",
@@ -1382,7 +1382,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -1390,7 +1390,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -1398,7 +1398,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 26.3, house max 29.4 \u00b0C)."
+     "message": "No heat stress (peak THI 26.3, house max 29.4 \u00b0C)."
     }
    ]
   },
@@ -1419,7 +1419,7 @@
      "value": 847.302,
      "normal_low": 323.831,
      "normal_high": 539.3219,
-     "message": "847 ml/bird/day \u2014 103% above the last week's normal (324\u2013539)."
+     "message": "847 ml per bird \u2014 103% more than normal (normal 324\u2013539 ml)."
     },
     {
      "key": "drinking_start",
@@ -1427,7 +1427,7 @@
      "value": -110.0,
      "normal_low": 60.0,
      "normal_high": 180.0,
-     "message": "Water was flowing 110 min before lights-on \u2014 hens don't normally drink in the dark; see the night-water sign."
+     "message": "Water flowing 110 min before lights-on."
     },
     {
      "key": "dusk_share",
@@ -1435,7 +1435,7 @@
      "value": 0.2439,
      "normal_low": 0.2513,
      "normal_high": 0.4913,
-     "message": "24% \u2014 below the last week's normal (25%\u201349%)."
+     "message": "24% of the day's water \u2014 less than normal (normal 25\u201349%)."
     },
     {
      "key": "frame_balance",
@@ -1443,7 +1443,7 @@
      "value": 0.6662,
      "normal_low": 0.4468,
      "normal_high": 0.6068,
-     "message": "67% \u2014 above the last week's normal (45%\u201361%)."
+     "message": "A-frame 1 drank 67% of the water \u2014 more than normal (normal 45\u201361%)."
     },
     {
      "key": "flock_activity",
@@ -1451,7 +1451,7 @@
      "value": null,
      "normal_low": 1.7673,
      "normal_high": 5.7673,
-     "message": "No data for this day."
+     "message": "No data."
     },
     {
      "key": "night_flow",
@@ -1459,7 +1459,7 @@
      "value": 110.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 110 L, A-frame 2 0 L overnight \u2014 water should be close to zero in the dark; check for leaks, flushing or disturbance."
+     "message": "A-frame 1 110 L, A-frame 2 0 L between 22:00 and 05:00 \u2014 check for leaks or flushing."
     },
     {
      "key": "dry_frame_hours",
@@ -1467,7 +1467,7 @@
      "value": 2,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "A-frame 2 (WM2) read 0 L from 06:00 to 08:00 while A-frame 1 drank 360 L \u2014 check the meter, valve and supply to that frame."
+     "message": "A-frame 2 read 0 L from 06:00 to 08:00 while A-frame 1 drank 360 L \u2014 check that line's meter, valve and supply."
     },
     {
      "key": "heat_load",
@@ -1475,7 +1475,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 25.8, house max 28.7 \u00b0C)."
+     "message": "No heat stress (peak THI 25.8, house max 28.7 \u00b0C)."
     }
    ]
   },
@@ -1496,7 +1496,7 @@
      "value": 555.6831,
      "normal_low": 323.831,
      "normal_high": 539.3219,
-     "message": "556 ml/bird/day \u2014 33% above the last week's normal (324\u2013539)."
+     "message": "556 ml per bird \u2014 33% more than normal (normal 324\u2013539 ml)."
     },
     {
      "key": "drinking_start",
@@ -1504,7 +1504,7 @@
      "value": 40.0,
      "normal_low": 60.0,
      "normal_high": 180.0,
-     "message": "Started 07:20, 40 min after lights-on \u2014 earlier than the last week's normal (60\u2013180); not a warning sign on its own."
+     "message": "Started 07:20, 40 min after lights-on \u00b7 normal up to 180 min."
     },
     {
      "key": "dusk_share",
@@ -1512,7 +1512,7 @@
      "value": 0.186,
      "normal_low": 0.2513,
      "normal_high": 0.4913,
-     "message": "19% \u2014 below the last week's normal (25%\u201349%)."
+     "message": "19% of the day's water \u2014 less than normal (normal 25\u201349%)."
     },
     {
      "key": "frame_balance",
@@ -1520,7 +1520,7 @@
      "value": 0.5123,
      "normal_low": 0.4468,
      "normal_high": 0.6068,
-     "message": "51% \u2014 within the last week's normal (45%\u201361%)."
+     "message": "A-frame 1 drank 51% of the water \u00b7 normal 45\u201361%."
     },
     {
      "key": "flock_activity",
@@ -1528,7 +1528,7 @@
      "value": null,
      "normal_low": 1.7673,
      "normal_high": 5.7673,
-     "message": "No data for this day."
+     "message": "No data."
     },
     {
      "key": "night_flow",
@@ -1536,7 +1536,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -1544,7 +1544,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -1552,7 +1552,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 25.8, house max 28.5 \u00b0C)."
+     "message": "No heat stress (peak THI 25.8, house max 28.5 \u00b0C)."
     }
    ]
   },
@@ -1573,7 +1573,7 @@
      "value": 438.5763,
      "normal_low": 300.6824,
      "normal_high": 626.3821,
-     "message": "439 ml/bird/day \u2014 within the last week's normal (301\u2013626)."
+     "message": "439 ml per bird \u00b7 normal 301\u2013626 ml."
     },
     {
      "key": "drinking_start",
@@ -1581,7 +1581,7 @@
      "value": 120.0,
      "normal_low": 60.0,
      "normal_high": 180.0,
-     "message": "Started 08:20, 120 min after lights-on \u2014 within the last week's normal (60\u2013180)."
+     "message": "Started 08:20, 120 min after lights-on \u00b7 normal up to 180 min."
     },
     {
      "key": "dusk_share",
@@ -1589,7 +1589,7 @@
      "value": 0.3927,
      "normal_low": 0.2233,
      "normal_high": 0.4633,
-     "message": "39% \u2014 within the last week's normal (22%\u201346%)."
+     "message": "39% of the day's water \u00b7 normal 22\u201346%."
     },
     {
      "key": "frame_balance",
@@ -1597,7 +1597,7 @@
      "value": 0.4661,
      "normal_low": 0.4437,
      "normal_high": 0.6037,
-     "message": "47% \u2014 within the last week's normal (44%\u201360%)."
+     "message": "A-frame 1 drank 47% of the water \u00b7 normal 44\u201360%."
     },
     {
      "key": "flock_activity",
@@ -1605,7 +1605,7 @@
      "value": null,
      "normal_low": 1.7673,
      "normal_high": 5.7673,
-     "message": "No data for this day."
+     "message": "No data."
     },
     {
      "key": "night_flow",
@@ -1613,7 +1613,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -1621,7 +1621,7 @@
      "value": 1,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "A-frame 1 (WM1) read 0 L from 08:00 to 09:00 while A-frame 2 drank 50 L \u2014 a single hour, often just a slow start on one frame."
+     "message": "Both A-frames drank all day, apart from one quiet hour on A-frame 1 at 08:00."
     },
     {
      "key": "heat_load",
@@ -1629,7 +1629,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 25.6, house max 27.9 \u00b0C)."
+     "message": "No heat stress (peak THI 25.6, house max 27.9 \u00b0C)."
     }
    ]
   },
@@ -1650,7 +1650,7 @@
      "value": 452.3536,
      "normal_low": 321.4504,
      "normal_high": 598.3791,
-     "message": "452 ml/bird/day \u2014 within the last week's normal (321\u2013598)."
+     "message": "452 ml per bird \u00b7 normal 321\u2013598 ml."
     },
     {
      "key": "drinking_start",
@@ -1658,7 +1658,7 @@
      "value": 90.0,
      "normal_low": 60.0,
      "normal_high": 180.0,
-     "message": "Started 08:00, 90 min after lights-on \u2014 within the last week's normal (60\u2013180)."
+     "message": "Started 08:00, 90 min after lights-on \u00b7 normal up to 180 min."
     },
     {
      "key": "dusk_share",
@@ -1666,7 +1666,7 @@
      "value": 0.4518,
      "normal_low": 0.2233,
      "normal_high": 0.4633,
-     "message": "45% \u2014 within the last week's normal (22%\u201346%)."
+     "message": "45% of the day's water \u00b7 normal 22\u201346%."
     },
     {
      "key": "frame_balance",
@@ -1674,7 +1674,7 @@
      "value": 0.3359,
      "normal_low": 0.4323,
      "normal_high": 0.5923,
-     "message": "34% \u2014 below the last week's normal (43%\u201359%)."
+     "message": "A-frame 1 drank 34% of the water \u2014 less than normal (normal 43\u201359%)."
     },
     {
      "key": "flock_activity",
@@ -1682,7 +1682,7 @@
      "value": 3.0262,
      "normal_low": 1.7673,
      "normal_high": 5.7673,
-     "message": "3.0 dB above night \u2014 within the last week's normal (1.8\u20135.8)."
+     "message": "3.0 dB above night \u00b7 normal 1.8\u20135.8 dB."
     },
     {
      "key": "night_flow",
@@ -1690,7 +1690,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -1698,7 +1698,7 @@
      "value": 5,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "A-frame 1 (WM1) read 0 L from 08:00 to 13:00 while A-frame 2 drank 460 L \u2014 check the meter, valve and supply to that frame."
+     "message": "A-frame 1 read 0 L from 08:00 to 13:00 while A-frame 2 drank 460 L \u2014 check that line's meter, valve and supply."
     },
     {
      "key": "heat_load",
@@ -1706,7 +1706,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 15.1, house max 15.1 \u00b0C)."
+     "message": "No heat stress (peak THI 15.1, house max 15.1 \u00b0C)."
     }
    ]
   },
@@ -1727,7 +1727,7 @@
      "value": 463.8347,
      "normal_low": 321.4504,
      "normal_high": 598.3791,
-     "message": "464 ml/bird/day \u2014 within the last week's normal (321\u2013598)."
+     "message": "464 ml per bird \u00b7 normal 321\u2013598 ml."
     },
     {
      "key": "drinking_start",
@@ -1735,7 +1735,7 @@
      "value": 100.0,
      "normal_low": 60.0,
      "normal_high": 180.0,
-     "message": "Started 08:10, 100 min after lights-on \u2014 within the last week's normal (60\u2013180)."
+     "message": "Started 08:10, 100 min after lights-on \u00b7 normal up to 180 min."
     },
     {
      "key": "dusk_share",
@@ -1743,7 +1743,7 @@
      "value": 0.505,
      "normal_low": 0.2233,
      "normal_high": 0.4633,
-     "message": "50% \u2014 above the last week's normal (22%\u201346%); not a warning sign on its own."
+     "message": "50% of the day's water \u00b7 normal 22\u201346%."
     },
     {
      "key": "frame_balance",
@@ -1751,7 +1751,7 @@
      "value": 0.4557,
      "normal_low": 0.4323,
      "normal_high": 0.5923,
-     "message": "46% \u2014 within the last week's normal (43%\u201359%)."
+     "message": "A-frame 1 drank 46% of the water \u00b7 normal 43\u201359%."
     },
     {
      "key": "flock_activity",
@@ -1759,7 +1759,7 @@
      "value": 4.032,
      "normal_low": 1.7673,
      "normal_high": 5.7673,
-     "message": "4.0 dB above night \u2014 within the last week's normal (1.8\u20135.8)."
+     "message": "4.0 dB above night \u00b7 normal 1.8\u20135.8 dB."
     },
     {
      "key": "night_flow",
@@ -1767,7 +1767,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -1775,7 +1775,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -1783,7 +1783,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 16.1, house max 16.3 \u00b0C)."
+     "message": "No heat stress (peak THI 16.1, house max 16.3 \u00b0C)."
     }
    ]
   },
@@ -1804,7 +1804,7 @@
      "value": 629.1619,
      "normal_low": 340.4858,
      "normal_high": 631.8695,
-     "message": "629 ml/bird/day \u2014 within the last week's normal (340\u2013632)."
+     "message": "629 ml per bird \u00b7 normal 340\u2013632 ml."
     },
     {
      "key": "drinking_start",
@@ -1812,7 +1812,7 @@
      "value": 80.0,
      "normal_low": 60.0,
      "normal_high": 180.0,
-     "message": "Started 07:10, 80 min after lights-on \u2014 within the last week's normal (60\u2013180)."
+     "message": "Started 07:10, 80 min after lights-on \u00b7 normal up to 180 min."
     },
     {
      "key": "dusk_share",
@@ -1820,7 +1820,7 @@
      "value": 0.4015,
      "normal_low": 0.1971,
      "normal_high": 0.4896,
-     "message": "40% \u2014 within the last week's normal (20%\u201349%)."
+     "message": "40% of the day's water \u00b7 normal 20\u201349%."
     },
     {
      "key": "frame_balance",
@@ -1828,7 +1828,7 @@
      "value": 0.4745,
      "normal_low": 0.4307,
      "normal_high": 0.5907,
-     "message": "47% \u2014 within the last week's normal (43%\u201359%)."
+     "message": "A-frame 1 drank 47% of the water \u00b7 normal 43\u201359%."
     },
     {
      "key": "flock_activity",
@@ -1836,7 +1836,7 @@
      "value": 4.9975,
      "normal_low": 1.7673,
      "normal_high": 5.7673,
-     "message": "5.0 dB above night \u2014 within the last week's normal (1.8\u20135.8)."
+     "message": "5.0 dB above night \u00b7 normal 1.8\u20135.8 dB."
     },
     {
      "key": "night_flow",
@@ -1844,7 +1844,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -1852,7 +1852,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -1860,7 +1860,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 21.7, house max 23.5 \u00b0C)."
+     "message": "No heat stress (peak THI 21.7, house max 23.5 \u00b0C)."
     }
    ]
   },
@@ -1881,7 +1881,7 @@
      "value": 590.1263,
      "normal_low": 350.3579,
      "normal_high": 817.003,
-     "message": "590 ml/bird/day \u2014 within the last week's normal (350\u2013817)."
+     "message": "590 ml per bird \u00b7 normal 350\u2013817 ml."
     },
     {
      "key": "drinking_start",
@@ -1889,7 +1889,7 @@
      "value": 70.0,
      "normal_low": 40.0,
      "normal_high": 160.0,
-     "message": "Started 07:10, 70 min after lights-on \u2014 within the last week's normal (40\u2013160)."
+     "message": "Started 07:10, 70 min after lights-on \u00b7 normal up to 160 min."
     },
     {
      "key": "dusk_share",
@@ -1897,7 +1897,7 @@
      "value": 0.1634,
      "normal_low": 0.1971,
      "normal_high": 0.4896,
-     "message": "16% \u2014 below the last week's normal (20%\u201349%)."
+     "message": "16% of the day's water \u2014 less than normal (normal 20\u201349%)."
     },
     {
      "key": "frame_balance",
@@ -1905,7 +1905,7 @@
      "value": 0.5136,
      "normal_low": 0.423,
      "normal_high": 0.5984,
-     "message": "51% \u2014 within the last week's normal (42%\u201360%)."
+     "message": "A-frame 1 drank 51% of the water \u00b7 normal 42\u201360%."
     },
     {
      "key": "flock_activity",
@@ -1913,7 +1913,7 @@
      "value": 3.5357,
      "normal_low": 1.7673,
      "normal_high": 5.7673,
-     "message": "3.5 dB above night \u2014 within the last week's normal (1.8\u20135.8)."
+     "message": "3.5 dB above night \u00b7 normal 1.8\u20135.8 dB."
     },
     {
      "key": "night_flow",
@@ -1921,7 +1921,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -1929,7 +1929,7 @@
      "value": 1,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "A-frame 2 (WM2) read 0 L from 08:00 to 09:00 while A-frame 1 drank 130 L \u2014 a single hour, often just a slow start on one frame."
+     "message": "Both A-frames drank all day, apart from one quiet hour on A-frame 2 at 08:00."
     },
     {
      "key": "heat_load",
@@ -1937,7 +1937,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 22.7, house max 24.6 \u00b0C)."
+     "message": "No heat stress (peak THI 22.7, house max 24.6 \u00b0C)."
     }
    ]
   },
@@ -1958,7 +1958,7 @@
      "value": 309.9885,
      "normal_low": 413.8438,
      "normal_high": 703.5954,
-     "message": "310 ml/bird/day \u2014 43% below the last week's normal (414\u2013704)."
+     "message": "310 ml per bird \u2014 43% less than normal (normal 414\u2013704 ml)."
     },
     {
      "key": "drinking_start",
@@ -1966,7 +1966,7 @@
      "value": 140.0,
      "normal_low": 40.0,
      "normal_high": 160.0,
-     "message": "Started 08:00, 140 min after lights-on \u2014 within the last week's normal (40\u2013160)."
+     "message": "Started 08:00, 140 min after lights-on \u00b7 normal up to 160 min."
     },
     {
      "key": "dusk_share",
@@ -1974,7 +1974,7 @@
      "value": 0.363,
      "normal_low": 0.171,
      "normal_high": 0.5157,
-     "message": "36% \u2014 within the last week's normal (17%\u201352%)."
+     "message": "36% of the day's water \u00b7 normal 17\u201352%."
     },
     {
      "key": "frame_balance",
@@ -1982,7 +1982,7 @@
      "value": 0.4963,
      "normal_low": 0.423,
      "normal_high": 0.5984,
-     "message": "50% \u2014 within the last week's normal (42%\u201360%)."
+     "message": "A-frame 1 drank 50% of the water \u00b7 normal 42\u201360%."
     },
     {
      "key": "flock_activity",
@@ -1990,7 +1990,7 @@
      "value": 3.161,
      "normal_low": 1.7673,
      "normal_high": 5.7673,
-     "message": "3.2 dB above night \u2014 within the last week's normal (1.8\u20135.8)."
+     "message": "3.2 dB above night \u00b7 normal 1.8\u20135.8 dB."
     },
     {
      "key": "night_flow",
@@ -1998,7 +1998,7 @@
      "value": 20.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 20 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "Almost none overnight (20 L)."
     },
     {
      "key": "dry_frame_hours",
@@ -2006,7 +2006,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -2014,7 +2014,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 23.6, house max 25.9 \u00b0C)."
+     "message": "No heat stress (peak THI 23.6, house max 25.9 \u00b0C)."
     }
    ]
   },
@@ -2035,7 +2035,7 @@
      "value": 431.6877,
      "normal_low": 413.8438,
      "normal_high": 703.5954,
-     "message": "432 ml/bird/day \u2014 within the last week's normal (414\u2013704)."
+     "message": "432 ml per bird \u00b7 normal 414\u2013704 ml."
     },
     {
      "key": "drinking_start",
@@ -2043,7 +2043,7 @@
      "value": 130.0,
      "normal_low": 11.044,
      "normal_high": 188.956,
-     "message": "Started 07:50, 130 min after lights-on \u2014 within the last week's normal (11\u2013189)."
+     "message": "Started 07:50, 130 min after lights-on \u00b7 normal up to 189 min."
     },
     {
      "key": "dusk_share",
@@ -2051,7 +2051,7 @@
      "value": 0.3723,
      "normal_low": 0.243,
      "normal_high": 0.483,
-     "message": "37% \u2014 within the last week's normal (24%\u201348%)."
+     "message": "37% of the day's water \u00b7 normal 24\u201348%."
     },
     {
      "key": "frame_balance",
@@ -2059,7 +2059,7 @@
      "value": 0.4788,
      "normal_low": 0.4163,
      "normal_high": 0.5763,
-     "message": "48% \u2014 within the last week's normal (42%\u201358%)."
+     "message": "A-frame 1 drank 48% of the water \u00b7 normal 42\u201358%."
     },
     {
      "key": "flock_activity",
@@ -2067,7 +2067,7 @@
      "value": null,
      "normal_low": 1.7673,
      "normal_high": 5.7673,
-     "message": "No data for this day."
+     "message": "No data."
     },
     {
      "key": "night_flow",
@@ -2075,7 +2075,7 @@
      "value": 10.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 10 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "Almost none overnight (10 L)."
     },
     {
      "key": "dry_frame_hours",
@@ -2083,7 +2083,7 @@
      "value": 1,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "A-frame 1 (WM1) read 0 L from 07:00 to 08:00 while A-frame 2 drank 70 L \u2014 a single hour, often just a slow start on one frame."
+     "message": "Both A-frames drank all day, apart from one quiet hour on A-frame 1 at 07:00."
     },
     {
      "key": "heat_load",
@@ -2091,7 +2091,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 22.6, house max 24.5 \u00b0C)."
+     "message": "No heat stress (peak THI 22.6, house max 24.5 \u00b0C)."
     }
    ]
   },
@@ -2112,7 +2112,7 @@
      "value": 401.837,
      "normal_low": 350.3579,
      "normal_high": 817.003,
-     "message": "402 ml/bird/day \u2014 within the last week's normal (350\u2013817)."
+     "message": "402 ml per bird \u00b7 normal 350\u2013817 ml."
     },
     {
      "key": "drinking_start",
@@ -2120,7 +2120,7 @@
      "value": 150.0,
      "normal_low": 11.044,
      "normal_high": 188.956,
-     "message": "Started 08:20, 150 min after lights-on \u2014 within the last week's normal (11\u2013189)."
+     "message": "Started 08:20, 150 min after lights-on \u00b7 normal up to 189 min."
     },
     {
      "key": "dusk_share",
@@ -2128,7 +2128,7 @@
      "value": 0.2114,
      "normal_low": 0.2523,
      "normal_high": 0.4923,
-     "message": "21% \u2014 below the last week's normal (25%\u201349%)."
+     "message": "21% of the day's water \u2014 less than normal (normal 25\u201349%)."
     },
     {
      "key": "frame_balance",
@@ -2136,7 +2136,7 @@
      "value": 0.5028,
      "normal_low": 0.3988,
      "normal_high": 0.5588,
-     "message": "50% \u2014 within the last week's normal (40%\u201356%)."
+     "message": "A-frame 1 drank 50% of the water \u00b7 normal 40\u201356%."
     },
     {
      "key": "flock_activity",
@@ -2144,7 +2144,7 @@
      "value": null,
      "normal_low": 1.7673,
      "normal_high": 5.7673,
-     "message": "No data for this day."
+     "message": "No data."
     },
     {
      "key": "night_flow",
@@ -2152,7 +2152,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -2160,7 +2160,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -2168,7 +2168,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 21.4, house max 22.7 \u00b0C)."
+     "message": "No heat stress (peak THI 21.4, house max 22.7 \u00b0C)."
     }
    ]
   },
@@ -2189,7 +2189,7 @@
      "value": 300.8037,
      "normal_low": 303.1041,
      "normal_high": 709.7978,
-     "message": "301 ml/bird/day \u2014 35% below the last week's normal (303\u2013710)."
+     "message": "301 ml per bird \u2014 35% less than normal (normal 303\u2013710 ml)."
     },
     {
      "key": "drinking_start",
@@ -2197,7 +2197,7 @@
      "value": 100.0,
      "normal_low": 60.0,
      "normal_high": 180.0,
-     "message": "Started 07:50, 100 min after lights-on \u2014 within the last week's normal (60\u2013180)."
+     "message": "Started 07:50, 100 min after lights-on \u00b7 normal up to 180 min."
     },
     {
      "key": "dusk_share",
@@ -2205,7 +2205,7 @@
      "value": 0.3969,
      "normal_low": 0.2523,
      "normal_high": 0.4923,
-     "message": "40% \u2014 within the last week's normal (25%\u201349%)."
+     "message": "40% of the day's water \u00b7 normal 25\u201349%."
     },
     {
      "key": "frame_balance",
@@ -2213,7 +2213,7 @@
      "value": 0.5492,
      "normal_low": 0.3988,
      "normal_high": 0.5588,
-     "message": "55% \u2014 within the last week's normal (40%\u201356%)."
+     "message": "A-frame 1 drank 55% of the water \u00b7 normal 40\u201356%."
     },
     {
      "key": "flock_activity",
@@ -2221,7 +2221,7 @@
      "value": 2.5535,
      "normal_low": 1.7673,
      "normal_high": 5.7673,
-     "message": "2.6 dB above night \u2014 within the last week's normal (1.8\u20135.8)."
+     "message": "2.6 dB above night \u00b7 normal 1.8\u20135.8 dB."
     },
     {
      "key": "night_flow",
@@ -2229,7 +2229,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -2237,7 +2237,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "Both A-frames drank through the lit hours."
+     "message": "Both A-frames drank all day."
     },
     {
      "key": "heat_load",
@@ -2245,7 +2245,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 22.9, house max 24.7 \u00b0C)."
+     "message": "No heat stress (peak THI 22.9, house max 24.7 \u00b0C)."
     }
    ]
   },
@@ -2266,7 +2266,7 @@
      "value": 408.7256,
      "normal_low": 338.3619,
      "normal_high": 568.4718,
-     "message": "409 ml/bird/day \u2014 within the last week's normal (338\u2013568)."
+     "message": "409 ml per bird \u00b7 normal 338\u2013568 ml."
     },
     {
      "key": "drinking_start",
@@ -2274,7 +2274,7 @@
      "value": 130.0,
      "normal_low": 11.044,
      "normal_high": 188.956,
-     "message": "Started 07:50, 130 min after lights-on \u2014 within the last week's normal (11\u2013189)."
+     "message": "Started 07:50, 130 min after lights-on \u00b7 normal up to 189 min."
     },
     {
      "key": "dusk_share",
@@ -2282,7 +2282,7 @@
      "value": 0.2809,
      "normal_low": 0.2523,
      "normal_high": 0.4923,
-     "message": "28% \u2014 within the last week's normal (25%\u201349%)."
+     "message": "28% of the day's water \u00b7 normal 25\u201349%."
     },
     {
      "key": "frame_balance",
@@ -2290,7 +2290,7 @@
      "value": 0.5,
      "normal_low": 0.4163,
      "normal_high": 0.5763,
-     "message": "50% \u2014 within the last week's normal (42%\u201358%)."
+     "message": "A-frame 1 drank 50% of the water \u00b7 normal 42\u201358%."
     },
     {
      "key": "flock_activity",
@@ -2298,7 +2298,7 @@
      "value": 3.0919,
      "normal_low": 1.7254,
      "normal_high": 5.7254,
-     "message": "3.1 dB above night \u2014 within the last week's normal (1.7\u20135.7)."
+     "message": "3.1 dB above night \u00b7 normal 1.7\u20135.7 dB."
     },
     {
      "key": "night_flow",
@@ -2306,7 +2306,7 @@
      "value": 0.0,
      "normal_low": 0,
      "normal_high": 20,
-     "message": "A-frame 1 0 L, A-frame 2 0 L overnight \u2014 close to zero, as expected in the dark."
+     "message": "None overnight."
     },
     {
      "key": "dry_frame_hours",
@@ -2314,7 +2314,7 @@
      "value": 1,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "A-frame 1 (WM1) read 0 L from 07:00 to 08:00 while A-frame 2 drank 30 L \u2014 a single hour, often just a slow start on one frame."
+     "message": "Both A-frames drank all day, apart from one quiet hour on A-frame 1 at 07:00."
     },
     {
      "key": "heat_load",
@@ -2322,7 +2322,7 @@
      "value": 0,
      "normal_low": 0,
      "normal_high": 1,
-     "message": "0 h above the 27.8 \u00b0C-eq comfort threshold (peak THI 26.3, house max 29.7 \u00b0C)."
+     "message": "No heat stress (peak THI 26.3, house max 29.7 \u00b0C)."
     }
    ]
   }
@@ -2331,259 +2331,238 @@
   {
    "date": "2026-10-06",
    "status": "watch",
-   "headline": "Daily water per bird: 301 ml/bird/day \u2014 35% below the last week's normal (303\u2013710).",
+   "headline": "Water per bird: 301 ml per bird \u2014 35% less than normal (normal 303\u2013710 ml).",
    "reasons": [
     {
      "key": "water_per_bird",
-     "label": "Daily water per bird",
+     "label": "Water per bird",
      "status": "watch",
      "group": "flock",
-     "message": "301 ml/bird/day \u2014 35% below the last week's normal (303\u2013710)."
+     "message": "301 ml per bird \u2014 35% less than normal (normal 303\u2013710 ml)."
     }
    ]
   },
   {
    "date": "2026-10-05",
    "status": "watch",
-   "headline": "Drinking around dusk: 21% \u2014 below the last week's normal (25%\u201349%).",
+   "headline": "Evening drinking: 21% of the day's water \u2014 less than normal (normal 25\u201349%).",
    "reasons": [
     {
      "key": "dusk_share",
-     "label": "Drinking around dusk",
+     "label": "Evening drinking",
      "status": "watch",
      "group": "flock",
-     "message": "21% \u2014 below the last week's normal (25%\u201349%)."
+     "message": "21% of the day's water \u2014 less than normal (normal 25\u201349%)."
     }
    ]
   },
   {
    "date": "2026-10-03",
    "status": "alert",
-   "headline": "Daily water per bird: 310 ml/bird/day \u2014 43% below the last week's normal (414\u2013704).",
+   "headline": "Water per bird: 310 ml per bird \u2014 43% less than normal (normal 414\u2013704 ml).",
    "reasons": [
     {
      "key": "water_per_bird",
-     "label": "Daily water per bird",
+     "label": "Water per bird",
      "status": "alert",
      "group": "flock",
-     "message": "310 ml/bird/day \u2014 43% below the last week's normal (414\u2013704)."
+     "message": "310 ml per bird \u2014 43% less than normal (normal 414\u2013704 ml)."
     }
    ]
   },
   {
    "date": "2026-10-02",
    "status": "watch",
-   "headline": "Drinking around dusk: 16% \u2014 below the last week's normal (20%\u201349%).",
+   "headline": "Evening drinking: 16% of the day's water \u2014 less than normal (normal 20\u201349%).",
    "reasons": [
     {
      "key": "dusk_share",
-     "label": "Drinking around dusk",
+     "label": "Evening drinking",
      "status": "watch",
      "group": "flock",
-     "message": "16% \u2014 below the last week's normal (20%\u201349%)."
+     "message": "16% of the day's water \u2014 less than normal (normal 20\u201349%)."
     }
    ]
   },
   {
    "date": "2026-09-29",
    "status": "alert",
-   "headline": "A-frame 1 share of water: 34% \u2014 below the last week's normal (43%\u201359%).",
+   "headline": "A-frame balance: A-frame 1 drank 34% of the water \u2014 less than normal (normal 43\u201359%).",
    "reasons": [
     {
      "key": "frame_balance",
-     "label": "A-frame 1 share of water",
+     "label": "A-frame balance",
      "status": "alert",
      "group": "supply",
-     "message": "34% \u2014 below the last week's normal (43%\u201359%)."
+     "message": "A-frame 1 drank 34% of the water \u2014 less than normal (normal 43\u201359%)."
     },
     {
      "key": "dry_frame_hours",
-     "label": "One A-frame dry while the other drinks",
+     "label": "One A-frame dry",
      "status": "alert",
      "group": "supply",
-     "message": "A-frame 1 (WM1) read 0 L from 08:00 to 13:00 while A-frame 2 drank 460 L \u2014 check the meter, valve and supply to that frame."
+     "message": "A-frame 1 read 0 L from 08:00 to 13:00 while A-frame 2 drank 460 L \u2014 check that line's meter, valve and supply."
     }
    ]
   },
   {
    "date": "2026-09-27",
    "status": "watch",
-   "headline": "Daily water per bird: 556 ml/bird/day \u2014 33% above the last week's normal (324\u2013539).",
+   "headline": "Water per bird: 556 ml per bird \u2014 33% more than normal (normal 324\u2013539 ml).",
    "reasons": [
     {
      "key": "water_per_bird",
-     "label": "Daily water per bird",
+     "label": "Water per bird",
      "status": "watch",
      "group": "flock",
-     "message": "556 ml/bird/day \u2014 33% above the last week's normal (324\u2013539)."
+     "message": "556 ml per bird \u2014 33% more than normal (normal 324\u2013539 ml)."
     },
     {
      "key": "dusk_share",
-     "label": "Drinking around dusk",
+     "label": "Evening drinking",
      "status": "watch",
      "group": "flock",
-     "message": "19% \u2014 below the last week's normal (25%\u201349%)."
+     "message": "19% of the day's water \u2014 less than normal (normal 25\u201349%)."
     }
    ]
   },
   {
    "date": "2026-09-26",
    "status": "alert",
-   "headline": "Daily water per bird: 847 ml/bird/day \u2014 103% above the last week's normal (324\u2013539).",
+   "headline": "Water per bird: 847 ml per bird \u2014 103% more than normal (normal 324\u2013539 ml).",
    "reasons": [
     {
      "key": "water_per_bird",
-     "label": "Daily water per bird",
+     "label": "Water per bird",
      "status": "alert",
      "group": "flock",
-     "message": "847 ml/bird/day \u2014 103% above the last week's normal (324\u2013539)."
+     "message": "847 ml per bird \u2014 103% more than normal (normal 324\u2013539 ml)."
     },
     {
      "key": "night_flow",
-     "label": "Water used at night (22:00\u201305:00)",
+     "label": "Water at night",
      "status": "alert",
      "group": "supply",
-     "message": "A-frame 1 110 L, A-frame 2 0 L overnight \u2014 water should be close to zero in the dark; check for leaks, flushing or disturbance."
+     "message": "A-frame 1 110 L, A-frame 2 0 L between 22:00 and 05:00 \u2014 check for leaks or flushing."
     },
     {
      "key": "drinking_start",
-     "label": "Drinking start after lights-on",
+     "label": "Morning drinking start",
      "status": "watch",
      "group": "flock",
-     "message": "Water was flowing 110 min before lights-on \u2014 hens don't normally drink in the dark; see the night-water sign."
+     "message": "Water flowing 110 min before lights-on."
     },
     {
      "key": "dusk_share",
-     "label": "Drinking around dusk",
+     "label": "Evening drinking",
      "status": "watch",
      "group": "flock",
-     "message": "24% \u2014 below the last week's normal (25%\u201349%)."
+     "message": "24% of the day's water \u2014 less than normal (normal 25\u201349%)."
     },
     {
      "key": "frame_balance",
-     "label": "A-frame 1 share of water",
+     "label": "A-frame balance",
      "status": "watch",
      "group": "supply",
-     "message": "67% \u2014 above the last week's normal (45%\u201361%)."
+     "message": "A-frame 1 drank 67% of the water \u2014 more than normal (normal 45\u201361%)."
     },
     {
      "key": "dry_frame_hours",
-     "label": "One A-frame dry while the other drinks",
+     "label": "One A-frame dry",
      "status": "watch",
      "group": "supply",
-     "message": "A-frame 2 (WM2) read 0 L from 06:00 to 08:00 while A-frame 1 drank 360 L \u2014 check the meter, valve and supply to that frame."
+     "message": "A-frame 2 read 0 L from 06:00 to 08:00 while A-frame 1 drank 360 L \u2014 check that line's meter, valve and supply."
     }
    ]
   },
   {
    "date": "2026-09-24",
    "status": "watch",
-   "headline": "Daily water per bird: 540 ml/bird/day \u2014 30% above the last week's normal (357\u2013483).",
+   "headline": "Water per bird: 540 ml per bird \u2014 30% more than normal (normal 357\u2013483 ml).",
    "reasons": [
     {
      "key": "water_per_bird",
-     "label": "Daily water per bird",
+     "label": "Water per bird",
      "status": "watch",
      "group": "flock",
-     "message": "540 ml/bird/day \u2014 30% above the last week's normal (357\u2013483)."
+     "message": "540 ml per bird \u2014 30% more than normal (normal 357\u2013483 ml)."
     }
    ]
   },
   {
    "date": "2026-09-22",
    "status": "alert",
-   "headline": "Water used at night (22:00\u201305:00): A-frame 1 0 L, A-frame 2 60 L overnight \u2014 water should be close to zero in the dark; check for leaks, flushing or disturbance.",
+   "headline": "Water at night: A-frame 1 0 L, A-frame 2 60 L between 22:00 and 05:00 \u2014 check for leaks or flushing.",
    "reasons": [
     {
      "key": "night_flow",
-     "label": "Water used at night (22:00\u201305:00)",
+     "label": "Water at night",
      "status": "alert",
      "group": "supply",
-     "message": "A-frame 1 0 L, A-frame 2 60 L overnight \u2014 water should be close to zero in the dark; check for leaks, flushing or disturbance."
+     "message": "A-frame 1 0 L, A-frame 2 60 L between 22:00 and 05:00 \u2014 check for leaks or flushing."
     }
    ]
   },
   {
    "date": "2026-09-17",
    "status": "alert",
-   "headline": "A-frame 1 share of water: 1% \u2014 below the last week's normal (43%\u201359%).",
+   "headline": "A-frame balance: A-frame 1 drank 1% of the water \u2014 less than normal (normal 43\u201359%).",
    "reasons": [
     {
      "key": "frame_balance",
-     "label": "A-frame 1 share of water",
+     "label": "A-frame balance",
      "status": "alert",
      "group": "supply",
-     "message": "1% \u2014 below the last week's normal (43%\u201359%)."
+     "message": "A-frame 1 drank 1% of the water \u2014 less than normal (normal 43\u201359%)."
     },
     {
      "key": "dry_frame_hours",
-     "label": "One A-frame dry while the other drinks",
+     "label": "One A-frame dry",
      "status": "alert",
      "group": "supply",
-     "message": "A-frame 1 (WM1) read 0 L from 09:00 to 17:00 while A-frame 2 drank 560 L \u2014 check the meter, valve and supply to that frame."
+     "message": "A-frame 1 read 0 L from 09:00 to 17:00 while A-frame 2 drank 560 L \u2014 check that line's meter, valve and supply."
     },
     {
      "key": "water_per_bird",
-     "label": "Daily water per bird",
+     "label": "Water per bird",
      "status": "watch",
      "group": "flock",
-     "message": "181 ml/bird/day \u2014 51% below the last week's normal (220\u2013612)."
+     "message": "181 ml per bird \u2014 51% less than normal (normal 220\u2013612 ml)."
     }
    ]
   },
   {
    "date": "2026-09-15",
    "status": "alert",
-   "headline": "One A-frame dry while the other drinks: A-frame 1 (WM1) read 0 L from 09:00 to 12:00 while A-frame 2 drank 200 L \u2014 check the meter, valve and supply to that frame.",
+   "headline": "One A-frame dry: A-frame 1 read 0 L from 09:00 to 12:00 while A-frame 2 drank 200 L \u2014 check that line's meter, valve and supply.",
    "reasons": [
     {
      "key": "dry_frame_hours",
-     "label": "One A-frame dry while the other drinks",
+     "label": "One A-frame dry",
      "status": "alert",
      "group": "supply",
-     "message": "A-frame 1 (WM1) read 0 L from 09:00 to 12:00 while A-frame 2 drank 200 L \u2014 check the meter, valve and supply to that frame."
+     "message": "A-frame 1 read 0 L from 09:00 to 12:00 while A-frame 2 drank 200 L \u2014 check that line's meter, valve and supply."
     },
     {
      "key": "drinking_start",
-     "label": "Drinking start after lights-on",
+     "label": "Morning drinking start",
      "status": "watch",
      "group": "flock",
-     "message": "Started 09:10, 180 min after lights-on \u2014 later than the last week's normal (40\u2013160)."
-    }
-   ]
-  },
-  {
-   "date": "2026-09-14",
-   "status": "watch",
-   "headline": "Drinking start after lights-on: Started 08:50, 160 min after lights-on \u2014 later than the last week's normal (40\u2013160).",
-   "reasons": [
-    {
-     "key": "drinking_start",
-     "label": "Drinking start after lights-on",
-     "status": "watch",
-     "group": "flock",
-     "message": "Started 08:50, 160 min after lights-on \u2014 later than the last week's normal (40\u2013160)."
+     "message": "Started 09:10, 180 min after lights-on \u2014 later than normal (normal up to 160 min)."
     }
    ]
   },
   {
    "date": "2026-09-13",
    "status": "watch",
-   "headline": "Daily water per bird: 436 ml/bird/day \u2014 53% above the last week's normal (221\u2013367).",
+   "headline": "Water per bird: 436 ml per bird \u2014 53% more than normal (normal 221\u2013367 ml).",
    "reasons": [
     {
      "key": "water_per_bird",
-     "label": "Daily water per bird",
+     "label": "Water per bird",
      "status": "watch",
      "group": "flock",
-     "message": "436 ml/bird/day \u2014 53% above the last week's normal (221\u2013367)."
-    },
-    {
-     "key": "drinking_start",
-     "label": "Drinking start after lights-on",
-     "status": "watch",
-     "group": "flock",
-     "message": "Started 08:30, 140 min after lights-on \u2014 later than the last week's normal (20\u2013140)."
+     "message": "436 ml per bird \u2014 53% more than normal (normal 221\u2013367 ml)."
     }
    ]
   }

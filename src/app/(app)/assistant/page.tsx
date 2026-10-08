@@ -243,7 +243,7 @@ export default function AssistantPage() {
               <div style={{ background: "#fff", border: "1px solid var(--divider)", borderLeft: `3px solid ${TEAL}`, padding: "14px 16px", borderRadius: 8 }}>
                 <div style={{ fontWeight: 700, color: PRIMARY, marginBottom: 4 }}>Ask about your flock</div>
                 <div style={{ fontSize: 13.5, color: "var(--t2)", lineHeight: 1.5 }}>
-                  I can look at your production history, mortality, egg quality, barn environment, events and schedules to help you spot problems and decide what to do. I can also investigate any warning sign or forecast drop — use the <strong>Investigate</strong> buttons in Insights. I give husbandry and veterinary <strong>decision-support</strong> — for anything clinical or urgent, please still contact a licensed vet.
+                  I look at your flock&apos;s production, mortality, egg quality, barn environment, events and schedules to help you spot problems and decide what to do. Tap <strong>Investigate</strong> on any warning sign and I&apos;ll check it for you. For anything clinical or urgent, please contact a licensed vet.
                 </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "1fr 1fr", gap: 10 }}>

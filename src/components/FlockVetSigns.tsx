@@ -114,7 +114,7 @@ function HourlyWater({ hours, day }: { hours: HourDetail[]; day: WarningDay }) {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
-      <div style={{ fontSize: 10.5, color: "var(--t3)", textAlign: "right" }}>Litres per hour, from the 10-minute meter readings</div>
+      <div style={{ fontSize: 10.5, color: "var(--t3)", textAlign: "right" }}>Litres per hour</div>
     </div>
   );
 }
@@ -180,7 +180,7 @@ export default function FlockVetSigns({ data, narrow, busy, onInvestigate }: {
         <div style={{ minWidth: 0 }}>
           <h2 id="fv-signs-title" style={{ margin: 0, fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 16, color: PRIMARY }}>Warning signs</h2>
           <div style={{ fontSize: 12, color: "var(--t3)", marginTop: 2, lineHeight: 1.45 }}>
-            {`House 1 · data to ${fmtDay(data.as_of)} · each sign compared with the flock's own previous 7 good days`}
+            {`House 1 · up to ${fmtDay(data.as_of)} · compared with your flock's last 7 normal days`}
           </div>
         </div>
         <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: TEAL, border: `1px solid ${TEAL}`, borderRadius: 3, padding: "1px 6px" }}>AI</span>
@@ -189,10 +189,10 @@ export default function FlockVetSigns({ data, narrow, busy, onInvestigate }: {
       {/* Flags per day */}
       <div style={{ marginTop: 14 }}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "4px 10px", fontSize: 11.5, color: "var(--t2)", marginBottom: 6 }}>
-          <span style={{ fontWeight: 700, color: "var(--t1)" }}>Signs flagged per day</span>
+          <span style={{ fontWeight: 700, color: "var(--t1)" }}>{narrow ? "Last 2 weeks" : "Last 4 weeks"}</span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 9, height: 9, background: MARK.alert, borderRadius: 2 }} />Alert</span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><span style={{ width: 9, height: 9, background: MARK.watch, borderRadius: 2 }} />Watch</span>
-          <span style={{ color: "var(--t3)" }}>taller = more signs · tap a day</span>
+          <span style={{ color: "var(--t3)" }}>tap a day</span>
         </div>
         <div role="group" aria-label="Signs flagged per day" style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 62 }}>
           {strip.map((d) => {
@@ -223,7 +223,6 @@ export default function FlockVetSigns({ data, narrow, busy, onInvestigate }: {
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
           <span style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 15, color: "var(--t1)" }}>{fmtDay(day.date)}</span>
           <StatusChip status={worst(day)} text={daySummary(day).replace(/^./, (c) => c.toUpperCase())} />
-          {day.meter_fault && <span style={{ fontSize: 11, color: "var(--t3)" }}>meter or supply fault — left out of the normal range</span>}
         </div>
         <div style={{ fontSize: 12, color: "var(--t2)", marginTop: 5, lineHeight: 1.5 }}>
           House water {fmtInt(day.house_litres)} L (A-frame 1 {fmtInt(day.wm1_litres)} L · A-frame 2 {fmtInt(day.wm2_litres)} L)
@@ -251,14 +250,9 @@ export default function FlockVetSigns({ data, narrow, busy, onInvestigate }: {
                       <div style={{ fontWeight: 700, fontSize: 13.5, color: "var(--t1)" }}>{info[s.key]?.label ?? s.key}</div>
                       <div style={{ fontSize: 12.5, color: "var(--t2)", lineHeight: 1.45, marginTop: 1 }}>{s.message}</div>
                       {hot && (
-                        <>
-                          <div style={{ fontSize: 11.5, color: "var(--t3)", lineHeight: 1.45, marginTop: 4 }}>
-                            <strong style={{ fontWeight: 700 }}>Why it matters:</strong> {info[s.key]?.research}
-                          </div>
-                          <button type="button" onClick={() => investigateSign(s.key, s.message)} disabled={busy} style={{ ...smallBtn(false, busy), marginTop: 6 }}>
-                            <SparkIcon /> Investigate
-                          </button>
-                        </>
+                        <button type="button" onClick={() => investigateSign(s.key, s.message)} disabled={busy} style={{ ...smallBtn(false, busy), marginTop: 6 }}>
+                          <SparkIcon /> Investigate
+                        </button>
                       )}
                     </div>
                   </div>
@@ -290,8 +284,6 @@ export default function FlockVetSigns({ data, narrow, busy, onInvestigate }: {
         <ul style={{ margin: "6px 0 0", paddingLeft: 18, lineHeight: 1.5 }}>
           <li>{data.baseline}</li>
           {Object.entries(info).map(([k, v]) => <li key={k}><strong>{v.label}:</strong> {v.research}</li>)}
-          <li>{data.birds_note}</li>
-          {data.notes.map((n) => <li key={n}>{n}</li>)}
         </ul>
       </details>
     </section>

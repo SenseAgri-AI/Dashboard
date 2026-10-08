@@ -6,8 +6,8 @@ import type { HpedForecast } from "@/lib/aiDemo";
 import { cardStyle, fmtDay, fmtLong, LegendLine, smallBtn, SparkIcon, StatusChip } from "@/components/FlockVetSigns";
 
 // Flock Vet — lay (HPED) forecast card. One model: the flock's recent level carried along its
-// own lay curve. Always labelled as a forecast with the date its egg data ends; accuracy comes
-// from forecasting every past day with only the data available then.
+// own lay curve. Always labelled as a forecast with the date its egg data ends; the range comes
+// from past forecast errors (analysis/ai_demo/forecast/lay_forecast.py).
 
 const PRIMARY = "#002E35";
 const TEAL = "#2A8E9A";
@@ -51,7 +51,6 @@ export default function FlockVetForecast({ data, busy, onInvestigate }: {
   data: HpedForecast; busy: boolean; onInvestigate: (prompt: string) => void;
 }) {
   const next = data.next_days;
-  const acc = data.accuracy;
   const watch = data.dip_watch;
   const last = data.outlook[data.outlook.length - 1];
 
@@ -79,7 +78,7 @@ export default function FlockVetForecast({ data, busy, onInvestigate }: {
         <div style={{ minWidth: 0 }}>
           <h2 id="fv-fc-title" style={{ margin: 0, fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 16, color: PRIMARY }}>Lay forecast</h2>
           <div style={{ fontSize: 12, color: "var(--t3)", marginTop: 2, lineHeight: 1.45 }}>
-            {`Hen-day egg % · forecast from DailyLog egg data up to ${fmtDay(data.as_of)}. The log has not been updated since, so the next 3 days are ${fmtDay(next[0].date)} – ${fmtDay(next[next.length - 1].date)}.`}
+            {`Hen-day egg % · based on your egg log up to ${fmtDay(data.as_of)}. Keep the log up to date for a current forecast.`}
           </div>
         </div>
         <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: TEAL, border: `1px solid ${TEAL}`, borderRadius: 3, padding: "1px 6px" }}>AI</span>
@@ -130,27 +129,7 @@ export default function FlockVetForecast({ data, busy, onInvestigate }: {
         </ResponsiveContainer>
       </div>
       <div style={{ fontSize: 10.5, color: "var(--t3)", textAlign: "right" }}>
-        Dots mark the next 3 days · 4 weeks out: {pct(last.hped)} ({pct(last.lower)}–{pct(last.upper)})
-      </div>
-
-      {/* Accuracy */}
-      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--divider)" }}>
-        <div style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 14, color: "var(--t1)" }}>How accurate is it?</div>
-        <div style={{ fontSize: 12, color: "var(--t2)", lineHeight: 1.45, margin: "2px 0 8px" }}>
-          {`We forecast from every day since ${fmtDay(acc.tested_from)} (${acc.forecasts_made} forecasts), each time using only the data available that day. Average error, in hen-day % points:`}
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
-          {([["Next day", acc.next_day_mae], ["Next 3 days", acc.three_day_mae], ["Next 4 weeks", acc.four_week_mae]] as const).map(([label, v]) => (
-            <div key={label} style={{ background: "var(--card)", borderRadius: 8, padding: "8px 10px" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--t3)" }}>{label}</div>
-              <div style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 18, color: "var(--t1)" }}>±{v.toFixed(1)}</div>
-            </div>
-          ))}
-        </div>
-        <div style={{ fontSize: 11.5, color: "var(--t2)", lineHeight: 1.5, marginTop: 8 }}>
-          {`Lay has been flat, and much of the day-to-day movement looks like counting noise: ${acc.dips_bounced_back} of the ${acc.dips} dips since ${fmtDay(acc.tested_from)} bounced straight back the next day. That is why no model beats the recent level by much — simply repeating the last 7-day average scores the same (±${acc.benchmark.three_day_mae.toFixed(1)} over 3 days).`}
-        </div>
-        <div style={{ fontSize: 11, color: "var(--t3)", lineHeight: 1.45, marginTop: 4 }}>{acc.signals_note}</div>
+        In 4 weeks: about {pct(last.hped)}
       </div>
 
       {/* Recent dips */}
@@ -167,9 +146,9 @@ export default function FlockVetForecast({ data, busy, onInvestigate }: {
             </div>
             <div style={{ fontSize: 12, color: "var(--t2)", lineHeight: 1.45, marginTop: 2 }}>
               {d.bounced_back
-                ? `Back to ${d.next_day_hped?.toFixed(1)}% the next day — most likely eggs counted on the wrong day rather than a real drop.`
-                : `Still ${d.next_day_hped != null ? `${d.next_day_hped.toFixed(1)}%` : "low"} the next day — worth investigating.`}
-              {d.water_drop_before ? " Water per bird dropped sharply in the 3 days before." : ""}
+                ? `Back to ${d.next_day_hped?.toFixed(1)}% the next day — likely a counting mix-up.`
+                : `Still ${d.next_day_hped != null ? `${d.next_day_hped.toFixed(1)}%` : "low"} the next day — worth a look.`}
+              {d.water_drop_before ? " Water use dropped beforehand." : ""}
             </div>
             <button type="button" onClick={() => explainDip(d)} disabled={busy} style={{ ...smallBtn(false, busy), marginTop: 6 }}>
               <SparkIcon /> Investigate with Flock Vet
@@ -186,9 +165,10 @@ export default function FlockVetForecast({ data, busy, onInvestigate }: {
 
       <details style={{ marginTop: 12, fontSize: 12, color: "var(--t2)" }}>
         <summary style={{ cursor: "pointer", fontWeight: 700, color: PRIMARY, minHeight: 32, display: "flex", alignItems: "center" }}>How the forecast works</summary>
-        <p style={{ margin: "6px 0", lineHeight: 1.5 }}>{data.model.description}</p>
-        <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.5 }}>
-          {data.notes.map((n) => <li key={n}>{n}</li>)}
+        <ul style={{ margin: "6px 0 0", paddingLeft: 18, lineHeight: 1.5 }}>
+          <li>{`Starts from your flock's average over its last ${data.model.level_days} logged days and follows your flock's own lay curve.`}</li>
+          <li>The shaded band shows where lay usually lands (8 days in 10).</li>
+          <li>Uses your egg log only, not the camera counts.</li>
         </ul>
       </details>
     </section>

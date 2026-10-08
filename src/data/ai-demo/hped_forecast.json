@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-10-08T10:49:12+00:00",
+ "generated_at": "2026-10-08T11:08:22+00:00",
  "farm_id": "farm_anike_001",
  "house_id": "house1",
  "as_of": "2026-09-13",
@@ -34,7 +34,7 @@
  ],
  "dip_watch": {
   "status": "normal",
-  "message": "No big drop in water per bird in the last two days (latest 153% of normal). In the past, 3 of 9 big water drops were followed by a lay dip within 3 days, against about 20% of days overall \u2014 a hint, not yet a reliable warning.",
+  "message": "No warning signs in water use.",
   "track_record": {
    "water_drops": 9,
    "followed_by_dip": 3,

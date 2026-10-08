@@ -216,15 +216,15 @@ def daily_features(s: pd.DataFrame, light: pd.DataFrame, birds: pd.Series) -> pd
 
 SIGNS = [
     # key, label, unit, spread floor, direction that matters, group, research note
-    ("water_per_bird", "Daily water per bird", "ml/bird/day", 0.07, "both", "flock",
+    ("water_per_bird", "Water per bird", "ml/bird/day", 0.07, "both", "flock",
      "A sudden change in daily water, especially a drop, is often the earliest sign of a health or supply problem."),
-    ("drinking_start", "Drinking start after lights-on", "min", 30.0, "high", "flock",
+    ("drinking_start", "Morning drinking start", "min", 30.0, "high", "flock",
      "A late or sluggish morning start can mean a flock that is unwell or water that is not reaching the drinkers."),
-    ("dusk_share", "Drinking around dusk", "% of day", 0.06, "low", "flock",
+    ("dusk_share", "Evening drinking", "% of day", 0.06, "low", "flock",
      "Laying hens normally drink heavily in the hours before dark; losing that evening peak is a behaviour change."),
-    ("frame_balance", "A-frame 1 share of water", "% of house", 0.04, "both", "supply",
+    ("frame_balance", "A-frame balance", "% of house", 0.04, "both", "supply",
      "The two A-frames hold similar flocks, so a shift in balance points to a local line, drinker or meter problem."),
-    ("flock_activity", "Flock activity (noise)", "dB above night", 1.0, "both", "flock",
+    ("flock_activity", "Flock activity (sound)", "dB above night", 1.0, "both", "flock",
      "Changes in flock sound level accompany stress and illness; a quieter day can mean lethargic birds."),
 ]
 
@@ -233,7 +233,7 @@ def status_from_z(z: float, direction: str) -> str:
     if not np.isfinite(z):
         return "unknown"
     zz = abs(z) if direction == "both" else (z if direction == "high" else -z)
-    return "alert" if zz >= 3.5 else ("watch" if zz >= 2.0 else "normal")
+    return "alert" if zz > 3.5 else ("watch" if zz > 2.0 else "normal")   # on the edge of normal is normal
 
 
 def score(df: pd.DataFrame) -> pd.DataFrame:
@@ -283,33 +283,40 @@ def describe(day: pd.Series) -> list[dict]:
             lo_n, hi_n, med_n = med - 2 * sd, med + 2 * sd, med
         else:
             lo_n = hi_n = med_n = np.nan
-        u = "" if key in ("dusk_share", "frame_balance") else f" {unit}"
-        rng = f"({_fmt(key, max(lo_n, 0))}–{_fmt(key, hi_n)})" if np.isfinite(lo_n) else ""
         if not np.isfinite(v):
-            msg = "No data for this day."
+            msg = "No data."
         elif key == "drinking_start" and v < 0:
             st = "watch"
-            msg = (f"Water was flowing {abs(v):.0f} min before lights-on — hens don't normally drink in the dark; "
-                   "see the night-water sign.")
-        elif not np.isfinite(med):
-            msg = f"{_fmt(key, v)}{u} — not enough recent days to judge."
+            msg = f"Water flowing {abs(v):.0f} min before lights-on."
         else:
-            higher = v > med_n
+            higher = np.isfinite(med_n) and v > med_n
             if key == "water_per_bird":
-                change = f"{abs(v / med_n - 1) * 100:.0f}% {'above' if higher else 'below'} the last week's normal"
+                what = f"{v:.0f} ml per bird"
+                rng = f"normal {max(lo_n, 0):.0f}–{hi_n:.0f} ml"
+                change = f"{abs(v / med_n - 1) * 100:.0f}% {'more' if higher else 'less'} than normal" if np.isfinite(med_n) else ""
             elif key == "drinking_start":
-                change = f"{'later' if higher else 'earlier'} than the last week's normal"
+                start = day.get("drink_from")
+                what = (f"Started {start:%H:%M}, " if pd.notna(start) else "") + f"{v:.0f} min after lights-on"
+                rng = f"normal up to {hi_n:.0f} min"
+                change = "later than normal"
+            elif key == "dusk_share":
+                what = f"{v * 100:.0f}% of the day's water"
+                rng = f"normal {max(lo_n, 0) * 100:.0f}–{hi_n * 100:.0f}%"
+                change = "less than normal"
+            elif key == "frame_balance":
+                what = f"A-frame 1 drank {v * 100:.0f}% of the water"
+                rng = f"normal {max(lo_n, 0) * 100:.0f}–{hi_n * 100:.0f}%"
+                change = f"{'more' if higher else 'less'} than normal"
             else:
-                change = f"{'above' if higher else 'below'} the last week's normal"
-            prefix = f"{_fmt(key, v)}{u}"
-            if key == "drinking_start" and pd.notna(day.get("drink_from")):
-                prefix = f"Started {day['drink_from']:%H:%M}, {v:.0f} min after lights-on"
-            if st in ("watch", "alert"):
-                msg = f"{prefix} — {change} {rng}."
-            elif abs(z) >= 2.0:
-                msg = f"{prefix} — {change} {rng}; not a warning sign on its own."
+                what = f"{v:.1f} dB above night"
+                rng = f"normal {max(lo_n, 0):.1f}–{hi_n:.1f} dB"
+                change = f"{'louder' if higher else 'quieter'} than normal"
+            if not np.isfinite(med_n):
+                msg = f"{what} · not enough recent days to compare."
+            elif st in ("watch", "alert"):
+                msg = f"{what} — {change} ({rng})."
             else:
-                msg = f"{prefix} — within the last week's normal {rng}."
+                msg = f"{what} · {rng}."
         signs.append({"key": key, "label": label, "unit": unit, "group": group,
                       "value": None if not np.isfinite(v) else round(v, 4),
                       "normal_low": None if not np.isfinite(lo_n) else round(float(max(lo_n, 0)), 4),
@@ -319,32 +326,33 @@ def describe(day: pd.Series) -> list[dict]:
     # Rule-based signs
     nf1, nf2 = float(day.get("night_flow_wm1", 0) or 0), float(day.get("night_flow_wm2", 0) or 0)
     nf = max(nf1, nf2)
-    signs.append({"key": "night_flow", "label": "Water used at night (22:00–05:00)", "unit": "L", "group": "supply",
+    signs.append({"key": "night_flow", "label": "Water at night", "unit": "L", "group": "supply",
                   "value": round(nf, 1), "normal_low": 0, "normal_high": 20, "z": None,
                   "status": "alert" if nf >= 50 else ("watch" if nf >= 30 else "normal"),
-                  "message": (f"A-frame 1 {nf1:.0f} L, A-frame 2 {nf2:.0f} L overnight — "
-                              + ("water should be close to zero in the dark; check for leaks, flushing or disturbance."
-                                 if nf >= 30 else "close to zero, as expected in the dark.")),
+                  "message": (f"A-frame 1 {nf1:.0f} L, A-frame 2 {nf2:.0f} L between 22:00 and 05:00 — check for leaks or flushing."
+                              if nf >= 30 else ("None overnight." if nf < 10 else f"Almost none overnight ({nf:.0f} L).")),
                   "research": "Hens stop drinking after lights-out; flow in the dark points to leaks, flushing, light leaks or disturbed birds."})
     dh = int(day.get("dry_frame_hours", 0) or 0)
     if dh:
-        dry, other = ("A-frame 1 (WM1)", "A-frame 2") if day.get("dry_frame") == "WM1" else ("A-frame 2 (WM2)", "A-frame 1")
-        dmsg = (f"{dry} read 0 L from {day['dry_from']:%H:%M} to {day['dry_to']:%H:%M} while {other} drank "
-                f"{day['dry_other_l']:.0f} L" + (" — check the meter, valve and supply to that frame." if dh >= 2
-                                                   else " — a single hour, often just a slow start on one frame."))
+        dry, other = ("A-frame 1", "A-frame 2") if day.get("dry_frame") == "WM1" else ("A-frame 2", "A-frame 1")
+        if dh >= 2:
+            dmsg = (f"{dry} read 0 L from {day['dry_from']:%H:%M} to {day['dry_to']:%H:%M} while {other} drank "
+                    f"{day['dry_other_l']:.0f} L — check that line's meter, valve and supply.")
+        else:
+            dmsg = f"Both A-frames drank all day, apart from one quiet hour on {dry} at {day['dry_from']:%H:%M}."
     else:
-        dmsg = "Both A-frames drank through the lit hours."
-    signs.append({"key": "dry_frame_hours", "label": "One A-frame dry while the other drinks", "unit": "h", "group": "supply",
+        dmsg = "Both A-frames drank all day."
+    signs.append({"key": "dry_frame_hours", "label": "One A-frame dry", "unit": "h", "group": "supply",
                   "value": dh, "normal_low": 0, "normal_high": 1, "z": None,
                   "status": "alert" if dh >= 3 else ("watch" if dh >= 2 else "normal"), "message": dmsg,
                   "research": "Uneven or interrupted flow points to blocked lines, closed valves or meter faults rather than the birds."})
     hl = int(day.get("heat_load", 0) or 0)
     thi_max = float(day.get("thi_max", np.nan))
-    signs.append({"key": "heat_load", "label": "Heat load (THI above comfort)", "unit": "h", "group": "environment",
+    signs.append({"key": "heat_load", "label": "Heat stress", "unit": "h", "group": "environment",
                   "value": hl, "normal_low": 0, "normal_high": 1, "z": None,
                   "status": "alert" if thi_max >= 30 else ("watch" if hl >= 2 else "normal"),
-                  "message": f"{hl} h above the {THI_COMFORT} °C-eq comfort threshold (peak THI {thi_max:.1f}, "
-                             f"house max {float(day.get('temp_max', np.nan)):.1f} °C).",
+                  "message": (f"{hl} h above the comfort limit" if hl else "No heat stress")
+                             + f" (peak THI {thi_max:.1f}, house max {float(day.get('temp_max', np.nan)):.1f} °C).",
                   "research": "Water-to-feed ratio climbs from about 2:1 at 21 °C to 8:1 at 38 °C; heat raises water need and stresses birds."})
     return signs
 
@@ -396,7 +404,7 @@ def main() -> None:
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "farm_id": "farm_anike_001", "house_id": "house1",
         "as_of": f"{as_of:%Y-%m-%d}",
-        "baseline": f"Each flock sign is compared with the flock's own previous {BASE_DAYS} days, leaving out days with a meter or supply fault.",
+        "baseline": f"Each sign is compared with your flock's own last {BASE_DAYS} normal days (days with a meter or supply fault are left out).",
         "birds_note": f"Water per bird uses the live-hen count from the DailyLog (last mortality entry {last_log}); "
                       "after that the last known count is carried forward.",
         "day": {"date": f"{as_of:%Y-%m-%d}", "house_litres": round(float(today_row["house_l"]), 0),

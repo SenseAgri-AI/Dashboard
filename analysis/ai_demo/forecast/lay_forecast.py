@@ -300,14 +300,9 @@ def main() -> None:
     dropped_now = [d for d in latest if ratio[d] < WATER_DROP]
     if dropped_now:
         d = dropped_now[-1]
-        watch = {"status": "watch", "message": (f"Water per bird on {d:%a %d %b} was {ratio[d] * 100:.0f}% of the past week's "
-                 f"normal. In the past, {followed} of {len(drops)} drops like this were followed by a lay dip within 3 days.")}
+        watch = {"status": "watch", "message": f"Water use dropped sharply on {d:%a %d %b}. Lay sometimes dips 1–3 days after this."}
     else:
-        last = latest[-1] if latest else None
-        watch = {"status": "normal", "message": (
-            "No big drop in water per bird in the last two days" + (f" (latest {ratio[last] * 100:.0f}% of normal)." if last else ".")
-            + f" In the past, {followed} of {len(drops)} big water drops were followed by a lay dip within 3 days, "
-            f"against about {base_rate * 100:.0f}% of days overall — a hint, not yet a reliable warning.")}
+        watch = {"status": "normal", "message": "No warning signs in water use."}
     watch["track_record"] = {"water_drops": len(drops), "followed_by_dip": int(followed),
                              "base_rate_pct": round(base_rate * 100), "threshold_pct": int(WATER_DROP * 100)}
 
