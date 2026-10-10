@@ -116,8 +116,9 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
   const plotRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ x: number; window: [number, number] } | null>(null);
   const [dragging, setDragging] = useState(false);
-  const first = timeline[0]?.t ?? 0;
-  const last = timeline.at(-1)?.t ?? 0;
+  // Half a day of margin either side so the first and last daily points are not clipped.
+  const first = (timeline[0]?.t ?? 0) - DAY_MS / 2;
+  const last = (timeline.at(-1)?.t ?? 0) + DAY_MS / 2;
   // Every day stays in the chart; the x-axis window only clips the drawing, so lines run to the edges.
   const windowMs = clampWindow(view ?? [first, last], first, last);
   const xTicks = Array.from({ length: 5 }, (_, i) => Math.round(windowMs[0] + (i / 4) * (windowMs[1] - windowMs[0])));
