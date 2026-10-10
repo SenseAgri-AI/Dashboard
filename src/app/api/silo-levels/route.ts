@@ -19,9 +19,7 @@ const MAX_VALID_DISTANCE_MM = 3500;
 // of midday); the gauges use the median of the last 24 hours of valid readings.
 const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-// Low feed: the latest 5 readings are all past 3,400 mm of head space. Readings over 3.5 m are echo
-// bounces rather than levels, but they only appear when a silo is running low, so they count here;
-// no-echo and under-10 cm readings never count.
+// Low feed: the latest 5 kept readings (the ones on the plot) are all past 3,400 mm of head space.
 const LOW_DISTANCE_MM = 3400;
 const LOW_CONSECUTIVE = 5;
 const LOW_DISPLAY_PERCENT = 20; // a low silo's gauge stays at 20%
@@ -61,9 +59,8 @@ function validDistance(row: SiloRow): number | null {
 function lowStatus(rows: SiloRow[], deviceId: string) {
   const readings = rows
     .filter((row) => String(row.device_id ?? "").trim() === deviceId)
-    .map((row) => ({ t: toTimeMs(row.time), mm: toNumber(row.distance), signal: toNumber(row.radar_signal_rssi) }))
-    .filter((r): r is { t: number; mm: number; signal: number | null } =>
-      r.t != null && r.mm != null && r.mm >= MIN_VALID_DISTANCE_MM && r.signal !== 0)
+    .map((row) => ({ t: toTimeMs(row.time), mm: validDistance(row) }))
+    .filter((r): r is { t: number; mm: number } => r.t != null && r.mm != null)
     .sort((a, b) => a.t - b.t);
   let streak = 0;
   for (let index = readings.length - 1; index >= 0 && readings[index].mm > LOW_DISTANCE_MM; index--) streak++;

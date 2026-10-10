@@ -157,7 +157,7 @@ function SiloGauge({ silo, index, narrow, lowLine }: { silo: SiloLevel; index: n
 
       <div style={{ borderTop: "1px solid var(--divider)", paddingTop: 9, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
         <span style={{ fontSize: 9.5, color: isLow ? RED : "var(--t3)" }}>
-          {isLow && silo.lowSince ? `Low since ${formatSast(silo.lowSince)}` : `Updated ${formatSast(silo.lastReadingAt ?? silo.updatedAt)}`}
+          {isLow && silo.lowSince ? `Low since ${formatSast(silo.lowSince)}` : `Updated ${formatSast(silo.updatedAt)}`}
         </span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 9, fontWeight: 800, letterSpacing: "0.07em", color: TEAL }}><RadarIcon /> LIVE RADAR</span>
       </div>
