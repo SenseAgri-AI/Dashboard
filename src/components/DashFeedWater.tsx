@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import DashSiloLevels, { type SiloHistoryPoint, type SiloLevelsData } from "./DashSiloLevels";
 import type { SparklinePoint } from "./DashEnvCol";
@@ -11,6 +12,10 @@ const NAVY = "#2B3F66";
 const GREEN = "#16A34A";
 const SILO_COLORS = [NAVY, "#2A8E9A"];
 const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_WINDOW_MS = 7 * DAY_MS; // the level plot opens on the latest week; drag to pan through 30 days
+const MIN_WINDOW_MS = 6 * 60 * 60 * 1000;
+const PLOT_SIDE_PX = 72; // y-axis width + chart margins, excluded when converting a drag to time
 
 const cardStyle: React.CSSProperties = {
   background: "#fff",
@@ -69,9 +74,50 @@ function buildSiloTimeline(data: SiloLevelsData | null) {
     .sort((a, b) => a.t - b.t);
 }
 
+// Keep a [from, to] window inside the data range, preserving its length where possible.
+function clampWindow([from, to]: [number, number], min: number, max: number): [number, number] {
+  const span = Math.min(Math.max(to - from, MIN_WINDOW_MS), Math.max(max - min, 1));
+  const start = Math.max(min, Math.min(from, max - span));
+  return [start, start + span];
+}
+
+const panButton: React.CSSProperties = {
+  minWidth: 30, height: 26, padding: "0 8px", border: "1px solid var(--divider)", borderRadius: 6, background: "#fff",
+  color: INK, fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "var(--font-s)",
+};
+
 function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null; height: number; house?: { startDate: string; startAgeDays: number } | null }) {
   const silos = data?.silos ?? [];
   const timeline = buildSiloTimeline(data);
+  const [view, setView] = useState<[number, number] | null>(null); // null = the latest week
+  const plotRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ x: number; window: [number, number] } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const first = timeline[0]?.t ?? 0;
+  const last = timeline.at(-1)?.t ?? 0;
+  const windowMs = clampWindow(view ?? [last - DEFAULT_WINDOW_MS, last], first, last);
+  // Draw only the visible samples plus one either side, so lines run to the plot edges.
+  const lo = timeline.findIndex((event) => event.t >= windowMs[0]);
+  const hi = timeline.findLastIndex((event) => event.t <= windowMs[1]);
+  const visible = lo < 0 || hi < 0 ? timeline : timeline.slice(Math.max(0, lo - 1), Math.min(timeline.length, hi + 2));
+  const zoom = (factor: number) => {
+    const mid = (windowMs[0] + windowMs[1]) / 2, half = ((windowMs[1] - windowMs[0]) * factor) / 2;
+    setView(clampWindow([mid - half, mid + half], first, last));
+  };
+  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    dragRef.current = { x: event.clientX, window: windowMs };
+    setDragging(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    const width = (plotRef.current?.getBoundingClientRect().width ?? 0) - PLOT_SIDE_PX;
+    if (!drag || width <= 0) return;
+    const shift = (-(event.clientX - drag.x) / width) * (drag.window[1] - drag.window[0]);
+    setView(clampWindow([drag.window[0] + shift, drag.window[1] + shift], first, last));
+  };
+  const endDrag = () => { dragRef.current = null; setDragging(false); };
   const refillTimes = silos.map((silo) => latestRefill(silo.history));
   const distances = silos.flatMap((silo) => silo.history.map((point) => point.distanceMm));
   const distanceMin = distances.length ? Math.min(...distances) : 1000;
@@ -81,7 +127,7 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
   return (
     <article style={cardStyle}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        <div><div style={{ fontFamily: "var(--font-d)", fontSize: 15, fontWeight: 800, color: INK }}>Radar head space over time</div><div style={{ fontSize: 9.5, color: "var(--t3)", marginTop: 2 }}>Latest 30 days · actual sensor samples · a larger head space means less feed remains</div></div>
+        <div><div style={{ fontFamily: "var(--font-d)", fontSize: 15, fontWeight: 800, color: INK }}>Radar head space over time</div><div style={{ fontSize: 9.5, color: "var(--t3)", marginTop: 2 }}>Last 30 days · drag the plot to pan · a larger head space means less feed remains</div></div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {silos.map((silo, index) => <span key={silo.deviceId} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 9.5, color: "var(--t2)", fontWeight: 700 }}><span style={{ width: 9, height: 3, borderRadius: 2, background: SILO_COLORS[index] }} />Silo {index + 1}</span>)}
         </div>
@@ -89,16 +135,30 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
       {timeline.length < 1 ? (
         <div style={{ height, display: "grid", placeItems: "center", color: "var(--t3)", fontSize: 11 }}>Waiting for radar history.</div>
       ) : (
+        <>
+        <div ref={plotRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag}
+          style={{ touchAction: "pan-y", cursor: dragging ? "grabbing" : "grab", userSelect: "none" }}>
         <ResponsiveContainer width="100%" height={height}>
-          <LineChart data={timeline} margin={{ top: 16, right: 12, bottom: 0, left: 4 }}>
+          <LineChart data={visible} margin={{ top: 16, right: 12, bottom: 0, left: 4 }}>
             <CartesianGrid stroke="#E6EBEB" vertical={false} strokeDasharray="3 3" />
-            <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={(t) => dateTimeLabel(Number(t), house)} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} minTickGap={54} />
+            <XAxis dataKey="t" type="number" scale="time" domain={windowMs} allowDataOverflow tickFormatter={(t) => dateTimeLabel(Number(t), house)} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} minTickGap={54} />
             <YAxis domain={distanceDomain} reversed tickFormatter={(value) => `${Math.round(value).toLocaleString("en-ZA")}`} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} width={56} label={{ value: "mm", angle: -90, position: "insideLeft", offset: 14, style: { fontSize: 8.5, fill: "#5A6A6C", fontWeight: 700 } }} />
             <Tooltip content={<SiloTooltip house={house} />} cursor={{ stroke: TEAL, strokeOpacity: 0.35 }} />
             {refillTimes.map((refill, index) => refill && <ReferenceLine key={`${refill.time}-${index}`} x={new Date(refill.time).getTime()} stroke={SILO_COLORS[index]} strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: `S${index + 1} fill`, position: "insideTopRight", fontSize: 8, fill: SILO_COLORS[index] }} />)}
             {silos.map((silo, index) => <Line key={silo.deviceId} type="monotone" dataKey={`silo${index}`} name={`Silo ${index + 1}`} stroke={SILO_COLORS[index]} strokeWidth={2.2} dot={{ r: 4, fill: SILO_COLORS[index], stroke: "#fff", strokeWidth: 1.5 }} activeDot={{ r: 5 }} connectNulls isAnimationActive={false} />)}
           </LineChart>
         </ResponsiveContainer>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", margin: "4px 0 8px" }}>
+          <span style={{ fontSize: 9.5, color: "var(--t3)" }}>Showing {dateTimeLabel(windowMs[0])} – {dateTimeLabel(windowMs[1])}</span>
+          <div style={{ display: "flex", gap: 4 }}>
+            <button type="button" aria-label="Zoom out" onClick={() => zoom(2)} style={panButton}>−</button>
+            <button type="button" aria-label="Zoom in" onClick={() => zoom(0.5)} style={panButton}>+</button>
+            <button type="button" onClick={() => setView(null)} style={panButton}>Latest week</button>
+            <button type="button" onClick={() => setView([first, last])} style={panButton}>All 30 days</button>
+          </div>
+        </div>
+        </>
       )}
       {silos.length > 0 && <div style={{ borderTop: "1px solid var(--divider)", paddingTop: 7, display: "flex", gap: 14, flexWrap: "wrap" }}>
         {silos.map((silo, index) => {

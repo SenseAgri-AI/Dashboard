@@ -10,6 +10,10 @@ export const runtime = "nodejs";
 // physical head space above the feed.
 const FULL_DISTANCE_MM = 1500;
 const EMPTY_DISTANCE_MM = 3800;
+// Readings outside this band are treated as radar faults and dropped from both the current
+// level and the history: the silo shows its latest reading inside the band.
+const MIN_VALID_DISTANCE_MM = 100;
+const MAX_VALID_DISTANCE_MM = 3500;
 const HISTORY_DAYS = 30;
 const HISTORY_HOURS = HISTORY_DAYS * 24;
 const NON_PHYSICAL_DEVICE = /(test|demo|mock|simulator|virtual)/i;
@@ -36,6 +40,11 @@ function toTimeMs(value: SiloRow["time"]): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function validDistance(value: SiloRow["distance"]): number | null {
+  const distanceMm = toNumber(value);
+  return distanceMm != null && distanceMm >= MIN_VALID_DISTANCE_MM && distanceMm <= MAX_VALID_DISTANCE_MM ? distanceMm : null;
+}
+
 function fillPercent(distanceMm: number): number {
   const raw = ((EMPTY_DISTANCE_MM - distanceMm) / (EMPTY_DISTANCE_MM - FULL_DISTANCE_MM)) * 100;
   return Math.round(Math.max(0, Math.min(100, raw)) * 10) / 10;
@@ -47,7 +56,7 @@ function historyForDevice(rows: SiloRow[], deviceId: string) {
 
   for (const row of rows) {
     if (String(row.device_id ?? "").trim() !== deviceId) continue;
-    const distanceMm = toNumber(row.distance);
+    const distanceMm = validDistance(row.distance);
     const timestamp = toTimeMs(row.time);
     if (distanceMm == null || timestamp == null || timestamp < cutoff) continue;
     const bucket = Math.floor(timestamp / (30 * 60 * 1000));
@@ -89,7 +98,7 @@ export async function GET() {
     for (const row of rows) {
       const deviceId = String(row.device_id ?? "").trim();
       if (!deviceId || NON_PHYSICAL_DEVICE.test(deviceId) || latestByDevice.has(deviceId)) continue;
-      if (toNumber(row.distance) == null || toTimeMs(row.time) == null) continue;
+      if (validDistance(row.distance) == null || toTimeMs(row.time) == null) continue;
       latestByDevice.set(deviceId, row);
     }
 
@@ -113,6 +122,7 @@ export async function GET() {
     return NextResponse.json({
       silos,
       calibration: { fullDistanceMm: FULL_DISTANCE_MM, emptyDistanceMm: EMPTY_DISTANCE_MM },
+      validRangeMm: { min: MIN_VALID_DISTANCE_MM, max: MAX_VALID_DISTANCE_MM },
       updatedAt: silos.length
         ? silos.reduce((latest, silo) => silo.updatedAt > latest ? silo.updatedAt : latest, silos[0].updatedAt)
         : null,
