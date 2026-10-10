@@ -24,6 +24,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // no-echo and under-10 cm readings never count.
 const LOW_DISTANCE_MM = 3400;
 const LOW_CONSECUTIVE = 5;
+const LOW_DISPLAY_PERCENT = 20; // a low silo's gauge stays at 20%
 const HISTORY_DAYS = 30;
 const HISTORY_HOURS = HISTORY_DAYS * 24;
 const NON_PHYSICAL_DEVICE = /(test|demo|mock|simulator|virtual)/i;
@@ -180,7 +181,7 @@ export async function GET() {
       silos,
       calibration: { fullDistanceMm: FULL_DISTANCE_MM, emptyDistanceMm: EMPTY_DISTANCE_MM },
       validRangeMm: { min: MIN_VALID_DISTANCE_MM, max: MAX_VALID_DISTANCE_MM },
-      low: { distanceMm: LOW_DISTANCE_MM, readings: LOW_CONSECUTIVE },
+      low: { distanceMm: LOW_DISTANCE_MM, readings: LOW_CONSECUTIVE, displayPercent: LOW_DISPLAY_PERCENT },
       updatedAt: silos.length
         ? silos.reduce((latest, silo) => silo.updatedAt > latest ? silo.updatedAt : latest, silos[0].updatedAt)
         : null,

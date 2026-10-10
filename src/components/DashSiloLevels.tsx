@@ -42,7 +42,7 @@ export interface SiloLevelsData {
   silos: SiloLevel[];
   calibration: { fullDistanceMm: number; emptyDistanceMm: number };
   validRangeMm?: { min: number; max: number };
-  low?: { distanceMm: number; readings: number };
+  low?: { distanceMm: number; readings: number; displayPercent: number };
   updatedAt: string | null;
 }
 
@@ -88,7 +88,7 @@ function SiloGauge({ silo, index, narrow, lowLine }: { silo: SiloLevel; index: n
   // shown beneath it. When the latest readings are all past the low line, the silo is shown as low instead.
   const isLow = silo.low === true && lowLine != null;
   const medianPct = Math.max(0, Math.min(100, silo.medianFillPercent ?? silo.fillPercent));
-  const pct = isLow ? Math.min(medianPct, lowLine.fillPercent) : medianPct;
+  const pct = isLow ? lowLine.fillPercent : medianPct;
   const headMm = isLow ? lowLine.distanceMm : silo.medianMm ?? silo.distanceMm;
   // Full usable capacity is drawn at 80% of the vessel so the real radar head
   // space remains visible even when the operational reading is 100% full.
@@ -137,7 +137,7 @@ function SiloGauge({ silo, index, narrow, lowLine }: { silo: SiloLevel; index: n
         <div style={{ minWidth: 0, display: narrow ? "grid" : "block", gridTemplateColumns: narrow ? "1.25fr 1fr 0.8fr" : undefined, gap: narrow ? 10 : undefined, alignItems: "end" }}>
           <div>
             <div style={{ fontSize: 9, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--t3)" }}>Estimated fill</div>
-            <div style={{ fontFamily: "var(--font-d)", fontSize: narrow ? 30 : 38, fontWeight: 800, letterSpacing: "-0.04em", color: isLow ? RED : INK, lineHeight: 1.05, marginTop: 4 }}>{isLow ? `<${Math.round(pct)}` : Math.round(pct)}%</div>
+            <div style={{ fontFamily: "var(--font-d)", fontSize: narrow ? 30 : 38, fontWeight: 800, letterSpacing: "-0.04em", color: isLow ? RED : INK, lineHeight: 1.05, marginTop: 4 }}>{Math.round(pct)}%</div>
             <div style={{ width: "100%", maxWidth: 120, height: 6, background: "#E2E9EA", marginTop: 10, overflow: "hidden", borderRadius: 10 }}>
               <div style={{ width: `${pct}%`, height: "100%", background: isLow ? RED : `linear-gradient(90deg, ${NAVY}, ${TEAL})` }} />
             </div>
@@ -169,8 +169,7 @@ export default function DashSiloLevels({ data, narrow = false }: { data: SiloLev
   const silos = data?.silos ?? [];
   const cal = data?.calibration;
   const lowLine = data?.low && cal ? {
-    distanceMm: data.low.distanceMm, readings: data.low.readings,
-    fillPercent: Math.max(0, Math.min(100, ((cal.emptyDistanceMm - data.low.distanceMm) / (cal.emptyDistanceMm - cal.fullDistanceMm)) * 100)),
+    distanceMm: data.low.distanceMm, readings: data.low.readings, fillPercent: data.low.displayPercent,
   } : null;
   return (
     <section aria-label="Silo feed levels">
