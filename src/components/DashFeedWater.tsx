@@ -78,23 +78,19 @@ function WaterTooltip(props: { active?: boolean; label?: number; payload?: Array
   return <div style={{ background: INK, color: "#fff", borderRadius: 6, padding: "7px 9px", fontSize: 10 }}><div style={{ color: "rgba(255,255,255,0.6)", marginBottom: 3 }}>{dateTimeLabel(props.label, props.house)}</div><strong>{Math.round(value * 10) / 10} L / 30 min</strong></div>;
 }
 
-// One row per calendar day across both silos; a day without readings is null, so the line breaks there.
+// One row per day that has readings (either silo), holding each silo's median for that day.
 function buildDailyTimeline(data: SiloLevelsData | null): DayRow[] {
   const silos = data?.silos ?? [];
-  const dates = silos.flatMap((silo) => (silo.daily ?? []).map((day) => day.date)).sort();
-  if (!dates.length) return [];
-  const rows: DayRow[] = [];
-  for (let t = middayMs(dates[0]); t <= middayMs(dates[dates.length - 1]); t += DAY_MS) {
-    const date = new Date(t + SAST_OFFSET_MS).toISOString().slice(0, 10);
-    const row: DayRow = { t };
+  const dates = [...new Set(silos.flatMap((silo) => (silo.daily ?? []).map((day) => day.date)))].sort();
+  return dates.map((date) => {
+    const row: DayRow = { t: middayMs(date) };
     silos.forEach((silo, index) => {
       const day = silo.daily?.find((d) => d.date === date);
       row[`silo${index}`] = day?.medianMm ?? null;
       row[`silo${index}n`] = day?.readings ?? null;
     });
-    rows.push(row);
-  }
-  return rows;
+    return row;
+  });
 }
 
 // Keep a [from, to] window inside the data range, preserving its length where possible.
@@ -167,7 +163,7 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
             <YAxis domain={distanceDomain} reversed tickFormatter={(value) => `${Math.round(value).toLocaleString("en-ZA")}`} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} width={56} label={{ value: "mm", angle: -90, position: "insideLeft", offset: 14, style: { fontSize: 8.5, fill: "#5A6A6C", fontWeight: 700 } }} />
             <Tooltip content={<SiloTooltip house={house} />} cursor={{ stroke: TEAL, strokeOpacity: 0.35 }} />
             {refills.map((refill, index) => refill && <ReferenceLine key={`${refill.date}-${index}`} x={middayMs(refill.date)} stroke={SILO_COLORS[index]} strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: `S${index + 1} fill`, position: "insideTopRight", fontSize: 8, fill: SILO_COLORS[index] }} />)}
-            {silos.map((silo, index) => <Line key={silo.deviceId} type="linear" dataKey={`silo${index}`} name={`Silo ${index + 1}`} stroke={SILO_COLORS[index]} strokeWidth={2.2} dot={{ r: 3.5, fill: SILO_COLORS[index], stroke: "#fff", strokeWidth: 1.5 }} activeDot={{ r: 5 }} connectNulls={false} isAnimationActive={false} />)}
+            {silos.map((silo, index) => <Line key={silo.deviceId} type="linear" dataKey={`silo${index}`} name={`Silo ${index + 1}`} stroke={SILO_COLORS[index]} strokeWidth={2.2} dot={{ r: 3.5, fill: SILO_COLORS[index], stroke: "#fff", strokeWidth: 1.5 }} activeDot={{ r: 5 }} connectNulls isAnimationActive={false} />)}
           </LineChart>
         </ResponsiveContainer>
         </div>
