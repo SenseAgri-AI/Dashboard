@@ -15,6 +15,10 @@ const EMPTY_DISTANCE_MM = 3800;
 // sensor's "no echo" placeholder (it arrives with a -3 mm distance), so those are dropped too.
 const MIN_VALID_DISTANCE_MM = 100;
 const MAX_VALID_DISTANCE_MM = 3500;
+// Smoothing: one value per SAST day, the median of that day's valid readings (12 hours either side
+// of midday); the gauges use the median of the last 24 hours of valid readings.
+const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const HISTORY_DAYS = 30;
 const HISTORY_HOURS = HISTORY_DAYS * 24;
 const NON_PHYSICAL_DEVICE = /(test|demo|mock|simulator|virtual)/i;
@@ -53,6 +57,12 @@ function fillPercent(distanceMm: number): number {
   return Math.round(Math.max(0, Math.min(100, raw)) * 10) / 10;
 }
 
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
 function historyForDevice(rows: SiloRow[], deviceId: string) {
   const cutoff = Date.now() - HISTORY_HOURS * 60 * 60 * 1000;
   const byHalfHour = new Map<number, { time: string; distanceMm: number; fillPercent: number }>();
@@ -74,6 +84,18 @@ function historyForDevice(rows: SiloRow[], deviceId: string) {
   }
 
   return [...byHalfHour.values()].sort((a, b) => a.time.localeCompare(b.time));
+}
+
+function dailyMedians(points: { time: string; distanceMm: number }[]) {
+  const byDay = new Map<string, number[]>();
+  for (const point of points) {
+    const day = new Date(Date.parse(point.time) + SAST_OFFSET_MS).toISOString().slice(0, 10);
+    byDay.set(day, [...(byDay.get(day) ?? []), point.distanceMm]);
+  }
+  return [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, values]) => {
+    const medianMm = median(values);
+    return { date, medianMm: Math.round(medianMm), medianFillPercent: fillPercent(medianMm), readings: values.length };
+  });
 }
 
 export async function GET() {
@@ -111,14 +133,22 @@ export async function GET() {
       .map(([deviceId, row]) => {
         const distanceMm = toNumber(row.distance)!;
         const timestamp = toTimeMs(row.time)!;
+        const history = historyForDevice(rows, deviceId);
+        const latestMs = history.length ? Date.parse(history[history.length - 1].time) : timestamp;
+        const lastDay = history.filter((point) => latestMs - Date.parse(point.time) < DAY_MS).map((point) => point.distanceMm);
+        const medianMm = lastDay.length ? median(lastDay) : distanceMm;
         return {
           deviceId,
           distanceMm: Math.round(distanceMm),
           fillPercent: fillPercent(distanceMm),
+          medianMm: Math.round(medianMm),
+          medianFillPercent: fillPercent(medianMm),
+          medianReadings: lastDay.length,
           battery: toNumber(row.battery),
           signalRssi: toNumber(row.radar_signal_rssi),
           updatedAt: new Date(timestamp).toISOString(),
-          history: historyForDevice(rows, deviceId),
+          history,
+          daily: dailyMedians(history),
         };
       });
 

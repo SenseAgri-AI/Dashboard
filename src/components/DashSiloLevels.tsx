@@ -10,14 +10,27 @@ export interface SiloHistoryPoint {
   fillPercent: number;
 }
 
+/** One point per SAST day: the median of that day's valid readings. */
+export interface SiloDayMedian {
+  date: string;
+  medianMm: number;
+  medianFillPercent: number;
+  readings: number;
+}
+
 export interface SiloLevel {
   deviceId: string;
   distanceMm: number;
   fillPercent: number;
+  /** Median of the last 24 hours of valid readings. */
+  medianMm?: number;
+  medianFillPercent?: number;
+  medianReadings?: number;
   battery: number | null;
   signalRssi: number | null;
   updatedAt: string;
   history: SiloHistoryPoint[];
+  daily?: SiloDayMedian[];
 }
 
 export interface SiloLevelsData {
@@ -65,7 +78,9 @@ function RadarIcon() {
 }
 
 function SiloGauge({ silo, index, narrow }: { silo: SiloLevel; index: number; narrow: boolean }) {
-  const pct = Math.max(0, Math.min(100, silo.fillPercent));
+  // The gauge shows the median of the last 24 hours, which steadies the jumpy radar; the latest single reading is shown beneath it.
+  const headMm = silo.medianMm ?? silo.distanceMm;
+  const pct = Math.max(0, Math.min(100, silo.medianFillPercent ?? silo.fillPercent));
   // Full usable capacity is drawn at 80% of the vessel so the real radar head
   // space remains visible even when the operational reading is 100% full.
   const visualFillPercent = Math.min(80, pct);
@@ -106,7 +121,7 @@ function SiloGauge({ silo, index, narrow }: { silo: SiloLevel; index: number; na
           <circle cx="140" cy="33" r="4" fill="#08717A" /><path d="M133 40q7-7 14 0" fill="none" stroke="#08717A" strokeWidth="1.5" />
           <path d={`M240 42h10M245 42V${surfaceY}M240 ${surfaceY}h10`} fill="none" stroke="#08717A" strokeWidth="1.5" strokeDasharray="4 3" />
           <rect x="253" y={(42 + surfaceY) / 2 - 18} width="44" height="36" rx="6" fill="#F0FAFA" stroke="#2A8E9A" />
-          <text x="275" y={(42 + surfaceY) / 2 - 2} textAnchor="middle" fill="#08717A" fontSize="11" fontWeight="800">{silo.distanceMm}</text>
+          <text x="275" y={(42 + surfaceY) / 2 - 2} textAnchor="middle" fill="#08717A" fontSize="11" fontWeight="800">{headMm}</text>
           <text x="275" y={(42 + surfaceY) / 2 + 11} textAnchor="middle" fill="#397D84" fontSize="8" fontWeight="700">mm</text>
         </svg>
 
@@ -119,7 +134,8 @@ function SiloGauge({ silo, index, narrow }: { silo: SiloLevel; index: number; na
             </div>
           </div>
           <div style={{ fontSize: 9.5, lineHeight: 1.5, color: "var(--t3)", marginTop: narrow ? 0 : 13 }}>
-            <div>Head space</div><strong style={{ color: "var(--t2)", fontSize: 11 }}>{silo.distanceMm.toLocaleString("en-ZA")} mm</strong>
+            <div>Head space · 24-h median</div><strong style={{ color: "var(--t2)", fontSize: 11 }}>{headMm.toLocaleString("en-ZA")} mm</strong>
+            {headMm !== silo.distanceMm && <div style={{ fontSize: 9 }}>Latest reading {silo.distanceMm.toLocaleString("en-ZA")} mm</div>}
           </div>
           {silo.battery != null && <div style={{ fontSize: 9.5, color: "var(--t3)", marginTop: narrow ? 0 : 8 }}>Battery<br /><strong style={{ color: "var(--t2)" }}>{Math.round(silo.battery)}%</strong></div>}
         </div>

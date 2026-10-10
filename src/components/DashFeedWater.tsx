@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import DashSiloLevels, { type SiloHistoryPoint, type SiloLevelsData } from "./DashSiloLevels";
+import DashSiloLevels, { type SiloDayMedian, type SiloLevelsData } from "./DashSiloLevels";
 import type { SparklinePoint } from "./DashEnvCol";
 import { withFlockAge } from "@/lib/flockAge";
 
@@ -14,7 +14,7 @@ const SILO_COLORS = [NAVY, "#2A8E9A"];
 const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
-const MIN_WINDOW_MS = 6 * 60 * 60 * 1000;
+const MIN_WINDOW_MS = 3 * DAY_MS;
 const PLOT_SIDE_PX = 72; // y-axis width + chart margins, excluded when converting a drag to time
 
 const cardStyle: React.CSSProperties = {
@@ -34,6 +34,10 @@ function dateTimeLabel(timestamp: number, house?: { startDate: string; startAgeD
   return withFlockAge(new Date(timestamp).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }), house, timestamp, true);
 }
 
+function dayLabel(timestamp: number, house?: { startDate: string; startAgeDays: number } | null): string {
+  return withFlockAge(new Date(timestamp).toLocaleDateString("en-ZA", { timeZone: "Africa/Johannesburg", weekday: "short", day: "numeric", month: "short" }), house, timestamp, true);
+}
+
 function todaySast(points: SparklinePoint[]): SparklinePoint[] {
   const today = new Date(Date.now() + SAST_OFFSET_MS).toISOString().slice(0, 10);
   return points.filter((point) => {
@@ -42,21 +46,28 @@ function todaySast(points: SparklinePoint[]): SparklinePoint[] {
   });
 }
 
-function latestRefill(history: SiloHistoryPoint[]): SiloHistoryPoint | null {
-  let refill: SiloHistoryPoint | null = null;
-  for (let index = 1; index < history.length; index++) {
-    const rise = history[index].fillPercent - history[index - 1].fillPercent;
-    if (rise >= 5) refill = history[index];
+// A refill: the daily median fill rises by at least 5 points from the previous day with readings.
+function latestRefill(daily: SiloDayMedian[]): SiloDayMedian | null {
+  let refill: SiloDayMedian | null = null;
+  for (let index = 1; index < daily.length; index++) {
+    if (daily[index].medianFillPercent - daily[index - 1].medianFillPercent >= 5) refill = daily[index];
   }
   return refill;
 }
 
-function SiloTooltip(props: { active?: boolean; label?: number; payload?: Array<{ name?: string; value?: number; color?: string }>; house?: { startDate: string; startAgeDays: number } | null }) {
+const middayMs = (date: string) => Date.parse(`${date}T12:00:00+02:00`);
+
+type DayRow = { t: number } & Record<string, number | null>;
+
+function SiloTooltip(props: { active?: boolean; label?: number; payload?: Array<{ name?: string; value?: number | null; color?: string; dataKey?: string; payload?: DayRow }>; house?: { startDate: string; startAgeDays: number } | null }) {
   if (!props.active || !props.payload?.length || props.label == null) return null;
   return (
     <div style={{ background: INK, color: "#fff", borderRadius: 6, padding: "7px 9px", fontSize: 10 }}>
-      <div style={{ color: "rgba(255,255,255,0.6)", marginBottom: 3 }}>{dateTimeLabel(props.label, props.house)}</div>
-      {props.payload.filter((item) => item.value != null).map((item) => <div key={item.name} style={{ color: item.color }}><strong>{item.name}: {Math.round(item.value!).toLocaleString("en-ZA")} mm</strong></div>)}
+      <div style={{ color: "rgba(255,255,255,0.6)", marginBottom: 3 }}>{dayLabel(props.label, props.house)}</div>
+      {props.payload.filter((item) => item.value != null).map((item) => {
+        const n = item.payload?.[`${item.dataKey}n`];
+        return <div key={item.name} style={{ color: item.color }}><strong>{item.name}: {Math.round(item.value!).toLocaleString("en-ZA")} mm</strong>{n ? ` (median of ${n} reading${n === 1 ? "" : "s"})` : ""}</div>;
+      })}
     </div>
   );
 }
@@ -67,11 +78,23 @@ function WaterTooltip(props: { active?: boolean; label?: number; payload?: Array
   return <div style={{ background: INK, color: "#fff", borderRadius: 6, padding: "7px 9px", fontSize: 10 }}><div style={{ color: "rgba(255,255,255,0.6)", marginBottom: 3 }}>{dateTimeLabel(props.label, props.house)}</div><strong>{Math.round(value * 10) / 10} L / 30 min</strong></div>;
 }
 
-function buildSiloTimeline(data: SiloLevelsData | null) {
+// One row per calendar day across both silos; a day without readings is null, so the line breaks there.
+function buildDailyTimeline(data: SiloLevelsData | null): DayRow[] {
   const silos = data?.silos ?? [];
-  return silos.flatMap((silo, siloIndex) => silo.history.map((point) => ({ t: new Date(point.time).getTime(), [`silo${siloIndex}`]: point.distanceMm })))
-    .filter((event) => Number.isFinite(event.t))
-    .sort((a, b) => a.t - b.t);
+  const dates = silos.flatMap((silo) => (silo.daily ?? []).map((day) => day.date)).sort();
+  if (!dates.length) return [];
+  const rows: DayRow[] = [];
+  for (let t = middayMs(dates[0]); t <= middayMs(dates[dates.length - 1]); t += DAY_MS) {
+    const date = new Date(t + SAST_OFFSET_MS).toISOString().slice(0, 10);
+    const row: DayRow = { t };
+    silos.forEach((silo, index) => {
+      const day = silo.daily?.find((d) => d.date === date);
+      row[`silo${index}`] = day?.medianMm ?? null;
+      row[`silo${index}n`] = day?.readings ?? null;
+    });
+    rows.push(row);
+  }
+  return rows;
 }
 
 // Keep a [from, to] window inside the data range, preserving its length where possible.
@@ -88,14 +111,14 @@ const panButton: React.CSSProperties = {
 
 function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null; height: number; house?: { startDate: string; startAgeDays: number } | null }) {
   const silos = data?.silos ?? [];
-  const timeline = buildSiloTimeline(data);
+  const timeline = buildDailyTimeline(data);
   const [view, setView] = useState<[number, number] | null>(null); // null = all 30 days
   const plotRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ x: number; window: [number, number] } | null>(null);
   const [dragging, setDragging] = useState(false);
   const first = timeline[0]?.t ?? 0;
   const last = timeline.at(-1)?.t ?? 0;
-  // Every sample stays in the chart; the x-axis window only clips the drawing, so lines run to the edges.
+  // Every day stays in the chart; the x-axis window only clips the drawing, so lines run to the edges.
   const windowMs = clampWindow(view ?? [first, last], first, last);
   const xTicks = Array.from({ length: 5 }, (_, i) => Math.round(windowMs[0] + (i / 4) * (windowMs[1] - windowMs[0])));
   const zoom = (factor: number) => {
@@ -116,8 +139,8 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
     setView(clampWindow([drag.window[0] + shift, drag.window[1] + shift], first, last));
   };
   const endDrag = () => { dragRef.current = null; setDragging(false); };
-  const refillTimes = silos.map((silo) => latestRefill(silo.history));
-  const distances = silos.flatMap((silo) => silo.history.map((point) => point.distanceMm));
+  const refills = silos.map((silo) => latestRefill(silo.daily ?? []));
+  const distances = silos.flatMap((silo) => (silo.daily ?? []).map((day) => day.medianMm));
   const distanceMin = distances.length ? Math.min(...distances) : 1000;
   const distanceMax = distances.length ? Math.max(...distances) : 3800;
   const distancePad = Math.max(150, (distanceMax - distanceMin) * 0.12);
@@ -125,7 +148,7 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
   return (
     <article style={cardStyle}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        <div><div style={{ fontFamily: "var(--font-d)", fontSize: 15, fontWeight: 800, color: INK }}>Radar head space over time</div><div style={{ fontSize: 9.5, color: "var(--t3)", marginTop: 2 }}>Last 30 days · zoom in, then drag the plot to pan · a larger head space means less feed remains</div></div>
+        <div><div style={{ fontFamily: "var(--font-d)", fontSize: 15, fontWeight: 800, color: INK }}>Radar head space over time</div><div style={{ fontSize: 9.5, color: "var(--t3)", marginTop: 2 }}>Last 30 days · one point per day: the median of that day&apos;s readings · zoom in, then drag to pan</div></div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {silos.map((silo, index) => <span key={silo.deviceId} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 9.5, color: "var(--t2)", fontWeight: 700 }}><span style={{ width: 9, height: 3, borderRadius: 2, background: SILO_COLORS[index] }} />Silo {index + 1}</span>)}
         </div>
@@ -139,17 +162,17 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
         <ResponsiveContainer width="100%" height={height}>
           <LineChart data={timeline} margin={{ top: 16, right: 12, bottom: 0, left: 4 }}>
             <CartesianGrid stroke="#E6EBEB" vertical={false} strokeDasharray="3 3" />
-            <XAxis dataKey="t" type="number" scale="time" domain={windowMs} allowDataOverflow ticks={xTicks} tickFormatter={(t) => dateTimeLabel(Number(t), house)} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} minTickGap={54} />
+            <XAxis dataKey="t" type="number" scale="time" domain={windowMs} allowDataOverflow ticks={xTicks} tickFormatter={(t) => dayLabel(Number(t), house)} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} minTickGap={54} />
             <YAxis domain={distanceDomain} reversed tickFormatter={(value) => `${Math.round(value).toLocaleString("en-ZA")}`} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} width={56} label={{ value: "mm", angle: -90, position: "insideLeft", offset: 14, style: { fontSize: 8.5, fill: "#5A6A6C", fontWeight: 700 } }} />
             <Tooltip content={<SiloTooltip house={house} />} cursor={{ stroke: TEAL, strokeOpacity: 0.35 }} />
-            {refillTimes.map((refill, index) => refill && <ReferenceLine key={`${refill.time}-${index}`} x={new Date(refill.time).getTime()} stroke={SILO_COLORS[index]} strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: `S${index + 1} fill`, position: "insideTopRight", fontSize: 8, fill: SILO_COLORS[index] }} />)}
-            {silos.map((silo, index) => <Line key={silo.deviceId} type="monotone" dataKey={`silo${index}`} name={`Silo ${index + 1}`} stroke={SILO_COLORS[index]} strokeWidth={2.2} dot={{ r: 4, fill: SILO_COLORS[index], stroke: "#fff", strokeWidth: 1.5 }} activeDot={{ r: 5 }} connectNulls isAnimationActive={false} />)}
+            {refills.map((refill, index) => refill && <ReferenceLine key={`${refill.date}-${index}`} x={middayMs(refill.date)} stroke={SILO_COLORS[index]} strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: `S${index + 1} fill`, position: "insideTopRight", fontSize: 8, fill: SILO_COLORS[index] }} />)}
+            {silos.map((silo, index) => <Line key={silo.deviceId} type="linear" dataKey={`silo${index}`} name={`Silo ${index + 1}`} stroke={SILO_COLORS[index]} strokeWidth={2.2} dot={{ r: 3.5, fill: SILO_COLORS[index], stroke: "#fff", strokeWidth: 1.5 }} activeDot={{ r: 5 }} connectNulls={false} isAnimationActive={false} />)}
           </LineChart>
         </ResponsiveContainer>
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", margin: "4px 0 8px" }}>
           <span style={{ fontSize: 9.5, color: "var(--t3)" }}>
-            Showing {dateTimeLabel(windowMs[0])} – {dateTimeLabel(windowMs[1])}
+            Showing {dayLabel(windowMs[0])} – {dayLabel(windowMs[1])}
             {data?.validRangeMm && ` · readings under ${data.validRangeMm.min / 10} cm, over ${data.validRangeMm.max / 1000} m or with no echo are left out`}
           </span>
           <div style={{ display: "flex", gap: 4 }}>
@@ -163,10 +186,11 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
       )}
       {silos.length > 0 && <div style={{ borderTop: "1px solid var(--divider)", paddingTop: 7, display: "flex", gap: 14, flexWrap: "wrap" }}>
         {silos.map((silo, index) => {
-          const refill = refillTimes[index];
+          const refill = refills[index];
           const latest = silo.history.at(-1);
           const sampleCount = silo.history.length;
-          return <span key={silo.deviceId} style={{ fontSize: 9.5, color: "var(--t3)" }}><strong style={{ color: SILO_COLORS[index] }}>Silo {index + 1} · {silo.distanceMm.toLocaleString("en-ZA")} mm</strong>{latest ? ` · last sample ${dateTimeLabel(new Date(latest.time).getTime())}` : ""}{` · ${sampleCount} sample${sampleCount === 1 ? "" : "s"}`}{refill ? ` · refill detected ${dateTimeLabel(new Date(refill.time).getTime())}` : sampleCount > 1 ? " · no refill detected" : " · trend unavailable"}</span>;
+          const days = silo.daily?.length ?? 0;
+          return <span key={silo.deviceId} style={{ fontSize: 9.5, color: "var(--t3)" }}><strong style={{ color: SILO_COLORS[index] }}>Silo {index + 1} · {(silo.medianMm ?? silo.distanceMm).toLocaleString("en-ZA")} mm (median, last 24 h)</strong>{latest ? ` · last reading ${dateTimeLabel(new Date(latest.time).getTime())}` : ""}{` · ${sampleCount} reading${sampleCount === 1 ? "" : "s"} on ${days} day${days === 1 ? "" : "s"}`}{refill ? ` · refill detected ${dayLabel(middayMs(refill.date))}` : days > 1 ? " · no refill detected" : " · trend unavailable"}</span>;
         })}
       </div>}
     </article>
