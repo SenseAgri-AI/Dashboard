@@ -19,6 +19,11 @@ const MAX_VALID_DISTANCE_MM = 3500;
 // of midday); the gauges use the median of the last 24 hours of valid readings.
 const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+// Low feed: the latest 5 readings are all past 3,400 mm of head space. Readings over 3.5 m are echo
+// bounces rather than levels, but they only appear when a silo is running low, so they count here;
+// no-echo and under-10 cm readings never count.
+const LOW_DISTANCE_MM = 3400;
+const LOW_CONSECUTIVE = 5;
 const HISTORY_DAYS = 30;
 const HISTORY_HOURS = HISTORY_DAYS * 24;
 const NON_PHYSICAL_DEVICE = /(test|demo|mock|simulator|virtual)/i;
@@ -50,6 +55,24 @@ function validDistance(row: SiloRow): number | null {
   if (distanceMm == null || distanceMm < MIN_VALID_DISTANCE_MM || distanceMm > MAX_VALID_DISTANCE_MM) return null;
   if (toNumber(row.radar_signal_rssi) === 0) return null; // no-echo placeholder
   return distanceMm;
+}
+
+function lowStatus(rows: SiloRow[], deviceId: string) {
+  const readings = rows
+    .filter((row) => String(row.device_id ?? "").trim() === deviceId)
+    .map((row) => ({ t: toTimeMs(row.time), mm: toNumber(row.distance), signal: toNumber(row.radar_signal_rssi) }))
+    .filter((r): r is { t: number; mm: number; signal: number | null } =>
+      r.t != null && r.mm != null && r.mm >= MIN_VALID_DISTANCE_MM && r.signal !== 0)
+    .sort((a, b) => a.t - b.t);
+  let streak = 0;
+  for (let index = readings.length - 1; index >= 0 && readings[index].mm > LOW_DISTANCE_MM; index--) streak++;
+  const low = streak >= LOW_CONSECUTIVE;
+  return {
+    low,
+    lowStreak: streak,
+    lowSince: low ? new Date(readings[readings.length - streak].t).toISOString() : null,
+    lastReadingAt: readings.length ? new Date(readings[readings.length - 1].t).toISOString() : null,
+  };
 }
 
 function fillPercent(distanceMm: number): number {
@@ -149,6 +172,7 @@ export async function GET() {
           updatedAt: new Date(timestamp).toISOString(),
           history,
           daily: dailyMedians(history),
+          ...lowStatus(rows, deviceId),
         };
       });
 
@@ -156,6 +180,7 @@ export async function GET() {
       silos,
       calibration: { fullDistanceMm: FULL_DISTANCE_MM, emptyDistanceMm: EMPTY_DISTANCE_MM },
       validRangeMm: { min: MIN_VALID_DISTANCE_MM, max: MAX_VALID_DISTANCE_MM },
+      low: { distanceMm: LOW_DISTANCE_MM, readings: LOW_CONSECUTIVE },
       updatedAt: silos.length
         ? silos.reduce((latest, silo) => silo.updatedAt > latest ? silo.updatedAt : latest, silos[0].updatedAt)
         : null,

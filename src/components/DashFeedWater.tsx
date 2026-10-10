@@ -141,7 +141,8 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
   const distanceMin = distances.length ? Math.min(...distances) : 1000;
   const distanceMax = distances.length ? Math.max(...distances) : 3800;
   const distancePad = Math.max(150, (distanceMax - distanceMin) * 0.12);
-  const distanceDomain: [number, number] = [Math.max(0, Math.floor((distanceMin - distancePad) / 100) * 100), Math.ceil((distanceMax + distancePad) / 100) * 100];
+  const lowMm = data?.low?.distanceMm ?? null;
+  const distanceDomain: [number, number] = [Math.max(0, Math.floor((distanceMin - distancePad) / 100) * 100), Math.ceil((Math.max(distanceMax, (lowMm ?? 0) + 100) + distancePad) / 100) * 100];
   return (
     <article style={cardStyle}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -162,6 +163,7 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
             <XAxis dataKey="t" type="number" scale="time" domain={windowMs} allowDataOverflow ticks={xTicks} tickFormatter={(t) => dayLabel(Number(t), house)} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} minTickGap={54} />
             <YAxis domain={distanceDomain} reversed tickFormatter={(value) => `${Math.round(value).toLocaleString("en-ZA")}`} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} width={56} label={{ value: "mm", angle: -90, position: "insideLeft", offset: 14, style: { fontSize: 8.5, fill: "#5A6A6C", fontWeight: 700 } }} />
             <Tooltip content={<SiloTooltip house={house} />} cursor={{ stroke: TEAL, strokeOpacity: 0.35 }} />
+            {lowMm != null && <ReferenceLine y={lowMm} stroke="#DC2626" strokeDasharray="5 4" strokeOpacity={0.8} label={{ value: `Low · ${lowMm.toLocaleString("en-ZA")} mm`, position: "insideBottomLeft", fontSize: 8, fill: "#DC2626" }} />}
             {refills.map((refill, index) => refill && <ReferenceLine key={`${refill.date}-${index}`} x={middayMs(refill.date)} stroke={SILO_COLORS[index]} strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: `S${index + 1} fill`, position: "insideTopRight", fontSize: 8, fill: SILO_COLORS[index] }} />)}
             {silos.map((silo, index) => <Line key={silo.deviceId} type="linear" dataKey={`silo${index}`} name={`Silo ${index + 1}`} stroke={SILO_COLORS[index]} strokeWidth={2.2} dot={{ r: 3.5, fill: SILO_COLORS[index], stroke: "#fff", strokeWidth: 1.5 }} activeDot={{ r: 5 }} connectNulls isAnimationActive={false} />)}
           </LineChart>
@@ -187,7 +189,9 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
           const latest = silo.history.at(-1);
           const sampleCount = silo.history.length;
           const days = silo.daily?.length ?? 0;
-          return <span key={silo.deviceId} style={{ fontSize: 9.5, color: "var(--t3)" }}><strong style={{ color: SILO_COLORS[index] }}>Silo {index + 1} · {(silo.medianMm ?? silo.distanceMm).toLocaleString("en-ZA")} mm (median, last 24 h)</strong>{latest ? ` · last reading ${dateTimeLabel(new Date(latest.time).getTime())}` : ""}{` · ${sampleCount} reading${sampleCount === 1 ? "" : "s"} on ${days} day${days === 1 ? "" : "s"}`}{refill ? ` · refill detected ${dayLabel(middayMs(refill.date))}` : days > 1 ? " · no refill detected" : " · trend unavailable"}</span>;
+          return <span key={silo.deviceId} style={{ fontSize: 9.5, color: "var(--t3)" }}>{silo.low && lowMm != null
+            ? <strong style={{ color: "#DC2626" }}>Silo {index + 1} · LOW · last {silo.lowStreak} readings over {lowMm.toLocaleString("en-ZA")} mm</strong>
+            : <strong style={{ color: SILO_COLORS[index] }}>Silo {index + 1} · {(silo.medianMm ?? silo.distanceMm).toLocaleString("en-ZA")} mm (median, last 24 h)</strong>}{latest ? ` · last reading ${dateTimeLabel(new Date(latest.time).getTime())}` : ""}{` · ${sampleCount} reading${sampleCount === 1 ? "" : "s"} on ${days} day${days === 1 ? "" : "s"}`}{refill ? ` · refill detected ${dayLabel(middayMs(refill.date))}` : days > 1 ? " · no refill detected" : " · trend unavailable"}</span>;
         })}
       </div>}
     </article>
