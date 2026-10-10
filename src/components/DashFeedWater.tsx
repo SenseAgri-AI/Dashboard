@@ -13,7 +13,7 @@ const GREEN = "#16A34A";
 const SILO_COLORS = [NAVY, "#2A8E9A"];
 const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_WINDOW_MS = 7 * DAY_MS; // the level plot opens on the latest week; drag to pan through 30 days
+const WEEK_MS = 7 * DAY_MS;
 const MIN_WINDOW_MS = 6 * 60 * 60 * 1000;
 const PLOT_SIDE_PX = 72; // y-axis width + chart margins, excluded when converting a drag to time
 
@@ -89,17 +89,15 @@ const panButton: React.CSSProperties = {
 function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null; height: number; house?: { startDate: string; startAgeDays: number } | null }) {
   const silos = data?.silos ?? [];
   const timeline = buildSiloTimeline(data);
-  const [view, setView] = useState<[number, number] | null>(null); // null = the latest week
+  const [view, setView] = useState<[number, number] | null>(null); // null = all 30 days
   const plotRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ x: number; window: [number, number] } | null>(null);
   const [dragging, setDragging] = useState(false);
   const first = timeline[0]?.t ?? 0;
   const last = timeline.at(-1)?.t ?? 0;
-  const windowMs = clampWindow(view ?? [last - DEFAULT_WINDOW_MS, last], first, last);
-  // Draw only the visible samples plus one either side, so lines run to the plot edges.
-  const lo = timeline.findIndex((event) => event.t >= windowMs[0]);
-  const hi = timeline.findLastIndex((event) => event.t <= windowMs[1]);
-  const visible = lo < 0 || hi < 0 ? timeline : timeline.slice(Math.max(0, lo - 1), Math.min(timeline.length, hi + 2));
+  // Every sample stays in the chart; the x-axis window only clips the drawing, so lines run to the edges.
+  const windowMs = clampWindow(view ?? [first, last], first, last);
+  const xTicks = Array.from({ length: 5 }, (_, i) => Math.round(windowMs[0] + (i / 4) * (windowMs[1] - windowMs[0])));
   const zoom = (factor: number) => {
     const mid = (windowMs[0] + windowMs[1]) / 2, half = ((windowMs[1] - windowMs[0]) * factor) / 2;
     setView(clampWindow([mid - half, mid + half], first, last));
@@ -127,7 +125,7 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
   return (
     <article style={cardStyle}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        <div><div style={{ fontFamily: "var(--font-d)", fontSize: 15, fontWeight: 800, color: INK }}>Radar head space over time</div><div style={{ fontSize: 9.5, color: "var(--t3)", marginTop: 2 }}>Last 30 days · drag the plot to pan · a larger head space means less feed remains</div></div>
+        <div><div style={{ fontFamily: "var(--font-d)", fontSize: 15, fontWeight: 800, color: INK }}>Radar head space over time</div><div style={{ fontSize: 9.5, color: "var(--t3)", marginTop: 2 }}>Last 30 days · zoom in, then drag the plot to pan · a larger head space means less feed remains</div></div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {silos.map((silo, index) => <span key={silo.deviceId} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 9.5, color: "var(--t2)", fontWeight: 700 }}><span style={{ width: 9, height: 3, borderRadius: 2, background: SILO_COLORS[index] }} />Silo {index + 1}</span>)}
         </div>
@@ -139,9 +137,9 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
         <div ref={plotRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag}
           style={{ touchAction: "pan-y", cursor: dragging ? "grabbing" : "grab", userSelect: "none" }}>
         <ResponsiveContainer width="100%" height={height}>
-          <LineChart data={visible} margin={{ top: 16, right: 12, bottom: 0, left: 4 }}>
+          <LineChart data={timeline} margin={{ top: 16, right: 12, bottom: 0, left: 4 }}>
             <CartesianGrid stroke="#E6EBEB" vertical={false} strokeDasharray="3 3" />
-            <XAxis dataKey="t" type="number" scale="time" domain={windowMs} allowDataOverflow tickFormatter={(t) => dateTimeLabel(Number(t), house)} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} minTickGap={54} />
+            <XAxis dataKey="t" type="number" scale="time" domain={windowMs} allowDataOverflow ticks={xTicks} tickFormatter={(t) => dateTimeLabel(Number(t), house)} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} minTickGap={54} />
             <YAxis domain={distanceDomain} reversed tickFormatter={(value) => `${Math.round(value).toLocaleString("en-ZA")}`} tick={{ fontSize: 8.5, fill: "#5A6A6C" }} tickLine={false} axisLine={false} width={56} label={{ value: "mm", angle: -90, position: "insideLeft", offset: 14, style: { fontSize: 8.5, fill: "#5A6A6C", fontWeight: 700 } }} />
             <Tooltip content={<SiloTooltip house={house} />} cursor={{ stroke: TEAL, strokeOpacity: 0.35 }} />
             {refillTimes.map((refill, index) => refill && <ReferenceLine key={`${refill.time}-${index}`} x={new Date(refill.time).getTime()} stroke={SILO_COLORS[index]} strokeDasharray="3 3" strokeOpacity={0.5} label={{ value: `S${index + 1} fill`, position: "insideTopRight", fontSize: 8, fill: SILO_COLORS[index] }} />)}
@@ -154,8 +152,8 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
           <div style={{ display: "flex", gap: 4 }}>
             <button type="button" aria-label="Zoom out" onClick={() => zoom(2)} style={panButton}>−</button>
             <button type="button" aria-label="Zoom in" onClick={() => zoom(0.5)} style={panButton}>+</button>
-            <button type="button" onClick={() => setView(null)} style={panButton}>Latest week</button>
-            <button type="button" onClick={() => setView([first, last])} style={panButton}>All 30 days</button>
+            <button type="button" onClick={() => setView(clampWindow([last - WEEK_MS, last], first, last))} style={panButton}>Latest week</button>
+            <button type="button" onClick={() => setView(null)} style={panButton}>All 30 days</button>
           </div>
         </div>
         </>
