@@ -32,6 +32,8 @@ export interface SiloLevel {
   history: SiloHistoryPoint[];
   daily?: SiloDayMedian[];
   /** True when the latest readings (count in SiloLevelsData.low) are all past the low line. */
+  /** Latest refill day (SAST, YYYY-MM-DD), from /api/silo-levels. */
+  lastRefillDate?: string | null;
   low?: boolean;
   lowStreak?: number;
   lowSince?: string | null;

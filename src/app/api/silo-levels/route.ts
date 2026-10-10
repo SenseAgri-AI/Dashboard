@@ -23,6 +23,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const LOW_DISTANCE_MM = 3400;
 const LOW_CONSECUTIVE = 5;
 const LOW_DISPLAY_PERCENT = 20; // a low silo's gauge stays at 20%
+const REFILL_GAP_MS = 2 * DAY_MS;
 const HISTORY_DAYS = 30;
 const HISTORY_HOURS = HISTORY_DAYS * 24;
 const NON_PHYSICAL_DEVICE = /(test|demo|mock|simulator|virtual)/i;
@@ -107,6 +108,38 @@ function historyForDevice(rows: SiloRow[], deviceId: string) {
   return [...byHalfHour.values()].sort((a, b) => a.time.localeCompare(b.time));
 }
 
+const sastDate = (t: number) => new Date(t + SAST_OFFSET_MS).toISOString().slice(0, 10);
+
+// Latest refill day (SAST). Either the daily median fill rises by 5+ points from the previous day with
+// readings, or kept readings come back after a gap of 2+ days with the silo at least half full (and fuller
+// than before the gap) while its last reading before the gap was over the low line, so a refill happened
+// during the gap. That last reading may be an over-3.5 m bounce, which only appears when a silo is low.
+function lastRefillDate(rows: SiloRow[], deviceId: string, daily: { date: string; medianFillPercent: number }[]): string | null {
+  const dates: string[] = [];
+  for (let index = 1; index < daily.length; index++) {
+    if (daily[index].medianFillPercent - daily[index - 1].medianFillPercent >= 5) dates.push(daily[index].date);
+  }
+  const readings = rows
+    .filter((row) => String(row.device_id ?? "").trim() === deviceId)
+    .map((row) => ({ t: toTimeMs(row.time), mm: toNumber(row.distance), signal: toNumber(row.radar_signal_rssi), kept: validDistance(row) }))
+    .filter((r): r is { t: number; mm: number; signal: number | null; kept: number | null } =>
+      r.t != null && r.mm != null && r.mm >= MIN_VALID_DISTANCE_MM && r.signal !== 0)
+    .sort((a, b) => a.t - b.t);
+  let lastKept: { t: number; mm: number } | null = null;
+  let previousMm: number | null = null;
+  for (const reading of readings) {
+    if (reading.kept != null) {
+      const afterGap = lastKept == null || reading.t - lastKept.t >= REFILL_GAP_MS;
+      const fill = fillPercent(reading.kept);
+      const fuller = lastKept == null || fill - fillPercent(lastKept.mm) >= 5;
+      if (afterGap && fuller && fill >= 50 && previousMm != null && previousMm > LOW_DISTANCE_MM) dates.push(sastDate(reading.t));
+      lastKept = { t: reading.t, mm: reading.kept };
+    }
+    previousMm = reading.mm;
+  }
+  return dates.length ? dates.sort()[dates.length - 1] : null;
+}
+
 function dailyMedians(points: { time: string; distanceMm: number }[]) {
   const byDay = new Map<string, number[]>();
   for (const point of points) {
@@ -170,6 +203,7 @@ export async function GET() {
           updatedAt: new Date(timestamp).toISOString(),
           history,
           daily: dailyMedians(history),
+          lastRefillDate: lastRefillDate(rows, deviceId, dailyMedians(history)),
           ...lowStatus(rows, deviceId),
         };
       });

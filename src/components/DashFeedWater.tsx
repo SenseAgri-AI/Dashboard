@@ -136,7 +136,9 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
     setView(clampWindow([drag.window[0] + shift, drag.window[1] + shift], first, last));
   };
   const endDrag = () => { dragRef.current = null; setDragging(false); };
-  const refills = silos.map((silo) => latestRefill(silo.daily ?? []));
+  const refills = silos.map((silo) => (silo.lastRefillDate !== undefined
+    ? (silo.lastRefillDate ? { date: silo.lastRefillDate } : null)
+    : latestRefill(silo.daily ?? [])));
   const distances = silos.flatMap((silo) => (silo.daily ?? []).map((day) => day.medianMm));
   const distanceMin = distances.length ? Math.min(...distances) : 1000;
   const distanceMax = distances.length ? Math.max(...distances) : 3800;
