@@ -148,7 +148,10 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
         </ResponsiveContainer>
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", margin: "4px 0 8px" }}>
-          <span style={{ fontSize: 9.5, color: "var(--t3)" }}>Showing {dateTimeLabel(windowMs[0])} – {dateTimeLabel(windowMs[1])}</span>
+          <span style={{ fontSize: 9.5, color: "var(--t3)" }}>
+            Showing {dateTimeLabel(windowMs[0])} – {dateTimeLabel(windowMs[1])}
+            {data?.validRangeMm && ` · readings under ${data.validRangeMm.min / 10} cm, over ${data.validRangeMm.max / 1000} m or with no echo are left out`}
+          </span>
           <div style={{ display: "flex", gap: 4 }}>
             <button type="button" aria-label="Zoom out" onClick={() => zoom(2)} style={panButton}>−</button>
             <button type="button" aria-label="Zoom in" onClick={() => zoom(0.5)} style={panButton}>+</button>

@@ -11,7 +11,8 @@ export const runtime = "nodejs";
 const FULL_DISTANCE_MM = 1500;
 const EMPTY_DISTANCE_MM = 3800;
 // Readings outside this band are treated as radar faults and dropped from both the current
-// level and the history: the silo shows its latest reading inside the band.
+// level and the history: the silo shows its latest valid reading. A signal of exactly 0 dB is the
+// sensor's "no echo" placeholder (it arrives with a -3 mm distance), so those are dropped too.
 const MIN_VALID_DISTANCE_MM = 100;
 const MAX_VALID_DISTANCE_MM = 3500;
 const HISTORY_DAYS = 30;
@@ -40,9 +41,11 @@ function toTimeMs(value: SiloRow["time"]): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function validDistance(value: SiloRow["distance"]): number | null {
-  const distanceMm = toNumber(value);
-  return distanceMm != null && distanceMm >= MIN_VALID_DISTANCE_MM && distanceMm <= MAX_VALID_DISTANCE_MM ? distanceMm : null;
+function validDistance(row: SiloRow): number | null {
+  const distanceMm = toNumber(row.distance);
+  if (distanceMm == null || distanceMm < MIN_VALID_DISTANCE_MM || distanceMm > MAX_VALID_DISTANCE_MM) return null;
+  if (toNumber(row.radar_signal_rssi) === 0) return null; // no-echo placeholder
+  return distanceMm;
 }
 
 function fillPercent(distanceMm: number): number {
@@ -56,7 +59,7 @@ function historyForDevice(rows: SiloRow[], deviceId: string) {
 
   for (const row of rows) {
     if (String(row.device_id ?? "").trim() !== deviceId) continue;
-    const distanceMm = validDistance(row.distance);
+    const distanceMm = validDistance(row);
     const timestamp = toTimeMs(row.time);
     if (distanceMm == null || timestamp == null || timestamp < cutoff) continue;
     const bucket = Math.floor(timestamp / (30 * 60 * 1000));
@@ -98,7 +101,7 @@ export async function GET() {
     for (const row of rows) {
       const deviceId = String(row.device_id ?? "").trim();
       if (!deviceId || NON_PHYSICAL_DEVICE.test(deviceId) || latestByDevice.has(deviceId)) continue;
-      if (validDistance(row.distance) == null || toTimeMs(row.time) == null) continue;
+      if (validDistance(row) == null || toTimeMs(row.time) == null) continue;
       latestByDevice.set(deviceId, row);
     }
 

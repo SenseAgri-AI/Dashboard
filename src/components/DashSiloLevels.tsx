@@ -23,6 +23,7 @@ export interface SiloLevel {
 export interface SiloLevelsData {
   silos: SiloLevel[];
   calibration: { fullDistanceMm: number; emptyDistanceMm: number };
+  validRangeMm?: { min: number; max: number };
   updatedAt: string | null;
 }
 
