@@ -1,5 +1,6 @@
 import { isSuperadmin } from "@/lib/admin";
 import AdminClient from "@/components/AdminClient";
+import AdminSiloRaw from "@/components/AdminSiloRaw";
 
 export default async function AdminPage() {
   if (!(await isSuperadmin())) {
@@ -11,5 +12,10 @@ export default async function AdminPage() {
       </main>
     );
   }
-  return <AdminClient />;
+  return (
+    <>
+      <AdminSiloRaw />
+      <AdminClient />
+    </>
+  );
 }
