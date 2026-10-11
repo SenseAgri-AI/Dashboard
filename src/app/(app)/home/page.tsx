@@ -197,7 +197,7 @@ function HouseCard({ house, narrow }: { house: House; narrow: boolean }) {
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)", marginBottom: 3 }}>
-          Hen-day % vs breed standard
+          Hen-day % and hen-housed % vs breed standard
         </div>
         <HouseHdepChart house={house} height={narrow ? 132 : 150} />
       </div>

@@ -5,18 +5,19 @@ import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, Respon
 import { standardHdepForWeek, HEN_STANDARD } from "@/lib/henStandard";
 import { withFlockAge } from "@/lib/flockAge";
 
-// Compact Hen-day % (HDEP) vs breed-standard projection for one house, to end of cycle.
-// Green fill above the standard, red below (like the Analytics section). Actual HDEP is bucketed to
-// flock-weeks and averaged so the line is smooth and renders fast (~40–80 points).
-const TEAL = "#2A8E9A", STD = "#7A5C00", GREEN = "#166534", DANGER = "#B91C1C";
+// Compact Hen-day % (HDEP) and Hen-housed % (HHEP) vs breed-standard projection for one house, to end
+// of cycle. Green fill above the standard, red below (like the Analytics section), for hen-day %. Both
+// series are bucketed to flock-weeks and averaged so the lines are smooth and render fast (~40–80 points).
+// Hen-housed % = eggs against the hens originally housed, so deaths and culls are not taken out.
+const TEAL = "#2A8E9A", NAVY = "#2B3F66", STD = "#7A5C00", GREEN = "#166534", DANGER = "#B91C1C";
 const AXIS = "#3a4d4f", GRID = "rgba(42,142,154,0.14)", PRIMARY = "#002E35";
 const DAY_MS = 86_400_000;
 const FIRST_WEEK = HEN_STANDARD[0].week;                         // 18
 const END_WEEK = HEN_STANDARD[HEN_STANDARD.length - 1].week;     // 95 (end of cycle)
 
-type House = { id: string; name?: string; startDate: string; startAgeDays: number };
-type Row = { time: string; hdep: number | null };
-type Pt = { t: number; actual: number | null; standard: number | null; aboveBand?: [number, number]; belowBand?: [number, number] };
+type House = { id: string; name?: string; startDate: string; startAgeDays: number; startingHens?: number };
+type Row = { time: string; hdep: number | null; eggs: number | null };
+type Pt = { t: number; actual: number | null; hhep: number | null; standard: number | null; aboveBand?: [number, number]; belowBand?: [number, number] };
 
 // UTC ms at the start of a given flock-week for this house.
 const weekToMs = (h: House, week: number) =>
@@ -40,39 +41,42 @@ export default function HouseHdepChart({ house, height = 150 }: { house: House; 
     let alive = true;
     const now = Date.now();
     const q = new URLSearchParams({
-      metrics: "hdep", house: house.id,
+      metrics: "hdep,eggs_total", house: house.id,
       from: `${house.startDate}T00:00:00Z`, to: new Date(now).toISOString(),
     });
     fetch(`/api/analytics/series?${q}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("fetch"))))
-      .then((d: { series?: { time: string; hdep: number | null }[] }) => {
+      .then((d: { series?: { time: string; hdep?: number | null; eggs_total?: number | null }[] }) => {
         if (!alive) return;
-        setRaw((d.series ?? []).map((s) => ({ time: String(s.time), hdep: typeof s.hdep === "number" ? s.hdep : null })));
+        setRaw((d.series ?? []).map((s) => ({
+          time: String(s.time),
+          hdep: typeof s.hdep === "number" ? s.hdep : null,
+          eggs: typeof s.eggs_total === "number" ? s.eggs_total : null,
+        })));
       })
       .catch(() => { if (alive) setErr(true); });
     return () => { alive = false; };
   }, [house.id, house.startDate]);
 
   const pts = useMemo<Pt[]>(() => {
-    // Average actual HDEP into flock-weeks.
+    // Average daily HDEP and HHEP into flock-weeks.
+    const hens = house.startingHens ?? 0;
     const byWeek = new Map<number, number[]>();
+    const hhepByWeek = new Map<number, number[]>();
     for (const r of raw ?? []) {
-      if (r.hdep == null) continue;
       const w = Math.floor(flockWeekAt(house, r.time));
-      const arr = byWeek.get(w) ?? [];
-      arr.push(r.hdep);
-      byWeek.set(w, arr);
+      if (r.hdep != null) byWeek.set(w, [...(byWeek.get(w) ?? []), r.hdep]);
+      if (r.hdep != null && r.eggs != null && hens > 0) hhepByWeek.set(w, [...(hhepByWeek.get(w) ?? []), (r.eggs / hens) * 100]);
     }
-    const avg = (w: number) => {
-      const a = byWeek.get(w);
-      return a && a.length ? Math.round((a.reduce((x, y) => x + y, 0) / a.length) * 10) / 10 : null;
-    };
+    const mean = (a: number[] | undefined) =>
+      a && a.length ? Math.round((a.reduce((x, y) => x + y, 0) / a.length) * 10) / 10 : null;
+    const avg = (w: number) => mean(byWeek.get(w));
     const startWeek = Math.max(FIRST_WEEK, Math.floor(house.startAgeDays / 7));
     const out: Pt[] = [];
     for (let w = startWeek; w <= END_WEEK; w++) {
       const standard = standardHdepForWeek(w);
       const actual = avg(w);
-      const p: Pt = { t: weekToMs(house, w), actual, standard };
+      const p: Pt = { t: weekToMs(house, w), actual, hhep: mean(hhepByWeek.get(w)), standard };
       if (actual != null && standard != null) {
         p.aboveBand = [standard, Math.max(actual, standard)];
         p.belowBand = [Math.min(actual, standard), standard];
@@ -82,8 +86,17 @@ export default function HouseHdepChart({ house, height = 150 }: { house: House; 
     return out;
   }, [raw, house]);
 
+  const legend: [string, string, boolean][] = [["Hen-day", TEAL, false], ["Hen-housed", NAVY, false], ["Breed standard", STD, true]];
   return (
     <div style={{ minWidth: 0 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 12px", fontSize: 10, color: "var(--t2)", marginBottom: 2 }}>
+        {legend.map(([label, color, dashed]) => (
+          <span key={label} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <svg width="16" height="6" aria-hidden><line x1="0" y1="3" x2="16" y2="3" stroke={color} strokeWidth="2" strokeDasharray={dashed ? "4 3" : undefined} /></svg>
+            {label}
+          </span>
+        ))}
+      </div>
       <div style={{ width: "100%", height }}>
         {raw === null && !err ? (
           <Placeholder text="Loading HDEP…" />
@@ -98,14 +111,15 @@ export default function HouseHdepChart({ house, height = 150 }: { house: House; 
               <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tick={{ fontSize: 9, fill: AXIS, fontFamily: "Inter" }} axisLine={false} tickLine={false} width={30} unit="%" />
               <Tooltip labelFormatter={(ms) => withFlockAge(new Date(Number(ms)).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" }), house, Number(ms))}
                 formatter={(value, name) => {
-                  if (name !== "Actual" && name !== "Breed standard") return null;
+                  if (name !== "Hen-day" && name !== "Hen-housed" && name !== "Breed standard") return null;
                   return [value == null ? "—" : `${Math.round(Number(value))}%`, name];
                 }}
                 contentStyle={{ background: PRIMARY, border: `1px solid ${TEAL}`, borderRadius: 0, fontSize: 12, color: "#fff" }} labelStyle={{ color: TEAL }} />
               <Area dataKey="aboveBand" name="above" stroke="none" fill={GREEN} fillOpacity={0.22} legendType="none" isAnimationActive={false} connectNulls={false} />
               <Area dataKey="belowBand" name="below" stroke="none" fill={DANGER} fillOpacity={0.18} legendType="none" isAnimationActive={false} connectNulls={false} />
               <Line dataKey="standard" name="Breed standard" stroke={STD} strokeWidth={1.5} strokeDasharray="5 4" dot={false} connectNulls isAnimationActive={false} />
-              <Line dataKey="actual" name="Actual" stroke={TEAL} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+              <Line dataKey="hhep" name="Hen-housed" stroke={NAVY} strokeWidth={1.75} dot={false} connectNulls isAnimationActive={false} />
+              <Line dataKey="actual" name="Hen-day" stroke={TEAL} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
         )}
