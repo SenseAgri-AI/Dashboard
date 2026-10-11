@@ -3,6 +3,7 @@
 import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip } from "recharts";
 import { thi, thiZone, THI_COMFORT, THI_EXTREME } from "@/lib/thi";
 import { withFlockAge } from "@/lib/flockAge";
+import { SeriesMark, TIP_BOX, TIP_LABEL, TipRow } from "@/components/ChartTooltip";
 
 // Environment sensor tiles (2 per row): a compact trend chart with the NORMAL band shaded (so
 // too-low / too-high is obvious), a threshold line where relevant, time on the x-axis and the
@@ -35,10 +36,10 @@ const yFmt = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.r
 function ChartTip({ active, payload, label, unit, house }: { active?: boolean; payload?: { value: number; name?: string; color?: string; payload?: { timestamp?: string } }[]; label?: string; unit?: string; house?: { startDate: string; startAgeDays: number } | null }) {
   if (!active || !payload?.length) return null;
   return (
-    <div style={{ background: "#002E35", color: "#fff", fontSize: 10, padding: "4px 8px", fontFamily: "Inter,sans-serif" }}>
-      <div style={{ opacity: 0.6, marginBottom: 1 }}>{payload[0]?.payload?.timestamp ? withFlockAge(new Date(payload[0].payload.timestamp).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }), house, new Date(payload[0].payload.timestamp).getTime()) : label}</div>
+    <div style={{ ...TIP_BOX, fontSize: 11, padding: "5px 9px" }}>
+      <div style={TIP_LABEL}>{payload[0]?.payload?.timestamp ? withFlockAge(new Date(payload[0].payload.timestamp).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }), house, new Date(payload[0].payload.timestamp).getTime()) : label}</div>
       {payload.map((p, i) => (
-        <div key={i}><span style={{ color: p.color ?? "#fff" }}>{p.name ? `${p.name}: ` : ""}</span><strong>{Math.round(p.value * 100) / 100}{unit ? ` ${unit}` : ""}</strong></div>
+        <TipRow key={i} mark={p.color ? <SeriesMark color={p.color} /> : undefined} name={p.name ?? ""} value={`${Math.round(p.value * 100) / 100}${unit ? ` ${unit}` : ""}`} />
       ))}
     </div>
   );

@@ -5,6 +5,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import { flockAgeWeeksAt, withFlockAge } from "@/lib/flockAge";
+import { TIP_BOX, TIP_LABEL } from "@/components/ChartTooltip";
 
 // Egg Counting — live per-camera counts (InfluxDB egg_count) + annotated evidence clips (S3).
 // Two Bierman collectors, one camera per A-frame house. Reads the farm-scoped /api/egg-count.
@@ -62,8 +63,8 @@ function ChartTooltip({ active, payload, label, range, houses, cameras }: {
   const timestamp = label ? new Date(label).getTime() : NaN;
   const when = withFlockAge(range === "24h" ? sastDateTime(label) : sast(label, { day: "numeric", month: "short" }), houses[0], timestamp);
   return (
-    <div style={{ background: "#002E35", color: "#fff", fontSize: 11, padding: "6px 10px", fontFamily: "Inter,sans-serif", boxShadow: "0 2px 8px rgba(0,0,0,0.18)" }}>
-      <div style={{ opacity: 0.6, marginBottom: 3 }}>{when}</div>
+    <div style={{ ...TIP_BOX, fontSize: 11 }}>
+      <div style={TIP_LABEL}>{when}</div>
       {payload.map((p, i) => (
         <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color, display: "inline-block" }} />

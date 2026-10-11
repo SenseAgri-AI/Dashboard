@@ -8,6 +8,7 @@ import { chartWindow } from "@/lib/chartWindow";
 import { standardHdepForWeek } from "@/lib/henStandard";
 import { THI_COMFORT, THI_SEVERE, THI_EXTREME } from "@/lib/thi";
 import { withFlockAge } from "@/lib/flockAge";
+import { RECHARTS_TIP, TIP_BOX, TIP_LABEL } from "@/components/ChartTooltip";
 
 // Heat-stress reference bands for the felt-temperature (THI) axis — comfort (< 27.8 °C) stays clear;
 // the stress zones are shaded and only appear once the axis reaches them (ifOverflow="hidden").
@@ -265,7 +266,7 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
           {right && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: right.axisColor, fontFamily: "Inter" }} axisLine={false} tickLine={false} unit={right.unit} width={52} />}
           <Tooltip labelFormatter={(ms) => withFlockAge(labelFormat(Number(ms)), house, Number(ms))}
             formatter={(value, name) => { if (name === "Above standard" || name === "Below standard") return null; if (Array.isArray(value)) return `${value[0]} – ${value[1]}`; return value as number; }}
-            contentStyle={{ background: PRIMARY, border: `1px solid ${TEAL}`, borderRadius: 0, fontSize: 12, color: "#fff" }} labelStyle={{ color: TEAL }} />
+            {...RECHARTS_TIP} />
           <Legend wrapperStyle={{ fontSize: 12, fontWeight: 600 }} />
           {/* schedule windows (behind everything) */}
           {bands.map((b, i) => <ReferenceArea key={`b${i}`} yAxisId="left" x1={b.x1} x2={b.x2} stroke="none" fill={b.color} fillOpacity={0.1} ifOverflow="hidden" />)}
@@ -668,8 +669,8 @@ function AcousticTip({ active, payload, labelFormat }: {
     </div>
   );
   return (
-    <div style={{ background: PRIMARY, border: `1px solid ${TEAL}`, padding: "7px 10px", fontSize: 12, color: "#fff", fontFamily: "Inter", minWidth: 158 }}>
-      <div style={{ color: TEAL, marginBottom: 4 }}>{labelFormat(row.t)}</div>
+    <div style={{ ...TIP_BOX, minWidth: 158 }}>
+      <div style={TIP_LABEL}>{labelFormat(row.t)}</div>
       {line("Noise level", noise)}
       {line("Peak", peak)}
       {line("Baseline", baseline)}

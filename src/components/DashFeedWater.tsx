@@ -5,6 +5,7 @@ import { Area, AreaChart, CartesianGrid, Line, LineChart, ReferenceLine, Respons
 import DashSiloLevels, { type SiloDayMedian, type SiloLevelsData } from "./DashSiloLevels";
 import type { SparklinePoint } from "./DashEnvCol";
 import { withFlockAge } from "@/lib/flockAge";
+import { SeriesMark, TIP_BOX, TIP_LABEL, TipRow } from "@/components/ChartTooltip";
 
 const INK = "#002E35";
 const TEAL = "#2A8E9A";
@@ -62,17 +63,14 @@ type DayRow = { t: number } & Record<string, number | null>;
 function SiloTooltip(props: { active?: boolean; label?: number; payload?: Array<{ name?: string; value?: number | null; color?: string; dataKey?: string; payload?: DayRow }>; house?: { startDate: string; startAgeDays: number } | null }) {
   if (!props.active || !props.payload?.length || props.label == null) return null;
   return (
-    <div style={{ background: INK, color: "#fff", borderRadius: 6, padding: "7px 9px", fontSize: 10 }}>
-      <div style={{ color: "rgba(255,255,255,0.6)", marginBottom: 3 }}>{dayLabel(props.label, props.house)}</div>
+    <div style={TIP_BOX}>
+      <div style={TIP_LABEL}>{dayLabel(props.label, props.house)}</div>
       {props.payload.filter((item) => item.value != null).map((item) => {
         const n = item.payload?.[`${item.dataKey}n`];
         return (
-          <div key={item.name} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ display: "inline-flex", background: "#fff", borderRadius: 3, padding: "2px 3px", flexShrink: 0 }}>
-              <span style={{ width: 12, height: 3, borderRadius: 2, background: item.color }} />
-            </span>
-            <span><strong>{item.name}: {Math.round(item.value!).toLocaleString("en-ZA")} mm</strong>{n ? ` (median of ${n} reading${n === 1 ? "" : "s"})` : ""}</span>
-          </div>
+          <TipRow key={item.name} mark={<SeriesMark color={item.color ?? INK} />}
+            name={`${item.name}${n ? ` · median of ${n} reading${n === 1 ? "" : "s"}` : ""}`}
+            value={`${Math.round(item.value!).toLocaleString("en-ZA")} mm`} />
         );
       })}
     </div>
@@ -82,7 +80,7 @@ function SiloTooltip(props: { active?: boolean; label?: number; payload?: Array<
 function WaterTooltip(props: { active?: boolean; label?: number; payload?: Array<{ value?: number }>; house?: { startDate: string; startAgeDays: number } | null }) {
   const value = props.payload?.[0]?.value;
   if (!props.active || props.label == null || value == null) return null;
-  return <div style={{ background: INK, color: "#fff", borderRadius: 6, padding: "7px 9px", fontSize: 10 }}><div style={{ color: "rgba(255,255,255,0.6)", marginBottom: 3 }}>{dateTimeLabel(props.label, props.house)}</div><strong>{Math.round(value * 10) / 10} L / 30 min</strong></div>;
+  return <div style={TIP_BOX}><div style={TIP_LABEL}>{dateTimeLabel(props.label, props.house)}</div><strong>{Math.round(value * 10) / 10} L / 30 min</strong></div>;
 }
 
 // One row per day that has readings (either silo), holding each silo's median for that day.

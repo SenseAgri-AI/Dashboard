@@ -13,6 +13,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { SeriesMark, TIP_BOX, TIP_INK, TIP_LABEL, TIP_MUTED } from "@/components/ChartTooltip";
 
 export interface DeviceSeries {
   deviceId: string;
@@ -77,15 +78,15 @@ const CustomTooltip = ({
     : [];
 
   return (
-    <div className="bg-[#002E35] border border-[#2A8E9A] px-3 py-2 text-xs min-w-36">
-      <div className="text-[#2A8E9A] font-mono mb-1.5">
+    <div style={{ ...TIP_BOX, minWidth: 144 }}>
+      <div className="font-mono" style={TIP_LABEL}>
         {label ? new Date(label).toLocaleString("en-ZA") : ""}
       </div>
       {consumptionItems.map((p) => (
         <div key={p.dataKey} className="flex items-center gap-2 leading-5">
-          <span className="w-2 h-2 inline-block" style={{ backgroundColor: p.color }} />
-          <span className="text-[#aac8cc] font-mono">{shortId(String(p.dataKey))}</span>
-          <span className="text-white font-bold tabular-nums ml-auto pl-3">
+          <SeriesMark square color={p.color} />
+          <span className="font-mono" style={{ color: TIP_MUTED }}>{shortId(String(p.dataKey))}</span>
+          <span className="font-bold tabular-nums ml-auto pl-3" style={{ color: TIP_INK }}>
             {p.value != null ? Number(p.value).toFixed(0) : "—"} {unit}
           </span>
         </div>
@@ -93,9 +94,9 @@ const CustomTooltip = ({
       {cumulativeItems.map((p) => {
         const baseId = String(p.dataKey).replace("_cum", "");
         return (
-          <div key={p.dataKey} className="flex items-center gap-2 leading-5 mt-1 pt-1 border-t border-[#2A8E9A] border-opacity-30">
-            <span className="text-[#D4AF37] font-mono text-[10px]">↑ {shortId(baseId)}</span>
-            <span className="text-[#D4AF37] font-bold tabular-nums ml-auto pl-3">
+          <div key={p.dataKey} className="flex items-center gap-2 leading-5 mt-1 pt-1 border-t border-[#C2DADB]">
+            <span className="font-mono text-[10px]" style={{ color: TIP_MUTED }}>↑ {shortId(baseId)}</span>
+            <span className="font-bold tabular-nums ml-auto pl-3" style={{ color: TIP_INK }}>
               {p.value != null ? Number(p.value).toLocaleString() : "—"}
             </span>
           </div>

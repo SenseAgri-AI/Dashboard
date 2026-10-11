@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ComposedChart, Area, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { withFlockAge } from "@/lib/flockAge";
+import { TIP_BOX, TIP_LABEL } from "@/components/ChartTooltip";
 
 // Flock-noise welfare card: 24 h noise over a red→green "heat" backdrop (loud/stressed up, calm down),
 // a Calm/Stressed badge from noise-vs-baseline, and spike anomalies surfaced on the plot (tap to hear).
@@ -92,8 +93,8 @@ function NoiseTooltip(props: { active?: boolean; payload?: Array<{ name?: string
   const time = noise?.payload?.t;
   if (time == null) return null;
   return (
-    <div style={{ background: "#002E35", border: `1px solid ${LINE}`, borderRadius: 6, padding: "6px 10px", fontSize: 12, color: "#fff" }}>
-      <div style={{ color: "#8fd0d8", fontWeight: 700, marginBottom: 2 }}>
+    <div style={TIP_BOX}>
+      <div style={TIP_LABEL}>
         {withFlockAge(new Date(time).toLocaleString("en-ZA", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }), props.house, time)}
       </div>
       <div style={{ fontWeight: 800 }}>Noise {dbFmt(Number(noise?.value))}</div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis } from "recharts";
+import { SeriesMark, TIP_BOX, TIP_GOOD, TIP_LABEL, TIP_MUTED, TIP_WARN } from "@/components/ChartTooltip";
 
 // Admin: every silo radar reading (before the dashboard's filters), coloured by radar signal strength —
 // orange for a weaker echo, blue for a stronger one. No-echo placeholders (signal exactly 0 with a
@@ -50,10 +51,14 @@ function RawTip(props: { active?: boolean; payload?: Array<{ payload?: Point }> 
   const p = props.payload?.[0]?.payload;
   if (!props.active || !p) return null;
   return (
-    <div style={{ background: INK, color: "#fff", borderRadius: 6, padding: "7px 9px", fontSize: 11, lineHeight: 1.5 }}>
-      <div style={{ color: "rgba(255,255,255,0.65)" }}>{sast(p.t)} SAST</div>
-      <div><strong>{p.mm.toLocaleString("en-ZA")} mm</strong> · signal {p.signal == null ? "—" : `${p.signal.toFixed(1)} dB`}</div>
-      <div style={{ color: p.status.startsWith("Kept") ? "#9fe0d8" : "#ffc4a8" }}>{p.status}</div>
+    <div style={TIP_BOX}>
+      <div style={TIP_LABEL}>{sast(p.t)} SAST</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <SeriesMark square color={p.noEcho ? NO_ECHO : signalColour(p.signal)} />
+        <strong>{p.mm.toLocaleString("en-ZA")} mm</strong>
+        <span style={{ color: TIP_MUTED }}>· signal {p.signal == null ? "—" : `${p.signal.toFixed(1)} dB`}</span>
+      </div>
+      <div style={{ color: p.status.startsWith("Kept") ? TIP_GOOD : TIP_WARN, fontWeight: 600 }}>{p.status}</div>
     </div>
   );
 }
