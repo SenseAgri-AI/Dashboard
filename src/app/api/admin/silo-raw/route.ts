@@ -8,10 +8,10 @@ export const runtime = "nodejs";
 
 // Superadmin only: every silo radar reading for the caller's farm over the last 30 days, before the
 // dashboard's filters, with the radar signal strength. For checking the sensors; the dashboard's own
-// filtering lives in /api/silo-levels (same 10 cm and 3.5 m limits).
+// filtering lives in /api/silo-levels (same 10 cm and 3.6 m limits).
 const DAYS = 30;
 const MIN_VALID_DISTANCE_MM = 100;
-const MAX_VALID_DISTANCE_MM = 3500;
+const MAX_VALID_DISTANCE_MM = 3600;
 const NON_PHYSICAL_DEVICE = /(test|demo|mock|simulator|virtual)/i;
 
 interface RadarRow {

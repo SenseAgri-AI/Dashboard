@@ -33,7 +33,7 @@ const day = (t: number) => new Date(t).toLocaleDateString("en-ZA", { timeZone: "
 function statusOf(r: Reading, filters: RawData["filters"]): string {
   if (r.signalDb === 0) return "Dropped: no echo";
   if (r.distanceMm < filters.minMm) return "Dropped: under 10 cm";
-  if (r.distanceMm > filters.maxMm) return "Dropped: over 3.5 m";
+  if (r.distanceMm > filters.maxMm) return `Dropped: over ${filters.maxMm / 1000} m`;
   return "Kept on the dashboard";
 }
 
@@ -83,7 +83,7 @@ function SiloRawChart({ index, deviceId, readings, filters }: { index: number; d
               tick={{ fontSize: 9, fill: "#5A6A6C" }} tickLine={false} axisLine={false} width={44} />
             <Tooltip content={<RawTip />} cursor={{ stroke: "#2A8E9A", strokeOpacity: 0.3 }} />
             <ReferenceLine y={filters.maxMm / 1000} stroke="#8a9597" strokeDasharray="4 3"
-              label={{ value: "3.5 m dashboard limit", position: "insideTopLeft", fontSize: 9, fill: "#5A6A6C" }} />
+              label={{ value: `${filters.maxMm / 1000} m dashboard limit`, position: "insideTopLeft", fontSize: 9, fill: "#5A6A6C" }} />
             <ReferenceLine y={filters.minMm / 1000} stroke="#8a9597" strokeDasharray="4 3"
               label={{ value: "10 cm", position: "insideBottomLeft", fontSize: 9, fill: "#5A6A6C" }} />
             <Scatter data={points} shape={<PointShape />} isAnimationActive={false}>

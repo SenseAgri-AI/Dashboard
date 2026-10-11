@@ -192,7 +192,7 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
           const sampleCount = silo.history.length;
           const days = silo.daily?.length ?? 0;
           return <span key={silo.deviceId} style={{ fontSize: 9.5, color: "var(--t3)" }}>{silo.low && lowMm != null
-            ? <strong style={{ color: "#DC2626" }}>Silo {index + 1} · LOW · last {silo.lowStreak} readings over {lowMm.toLocaleString("en-ZA")} mm</strong>
+            ? <strong style={{ color: "#DC2626" }}>Silo {index + 1} · LOW{silo.lowSince ? ` since ${dateTimeLabel(new Date(silo.lowSince).getTime())}` : ""} · stays low until refilled</strong>
             : <strong style={{ color: SILO_COLORS[index] }}>Silo {index + 1} · {(silo.medianMm ?? silo.distanceMm).toLocaleString("en-ZA")} mm (median, last 24 h)</strong>}{latest ? ` · last reading ${dateTimeLabel(new Date(latest.time).getTime())}` : ""}{` · ${sampleCount} reading${sampleCount === 1 ? "" : "s"} on ${days} day${days === 1 ? "" : "s"}`}{refill ? ` · refill detected ${dayLabel(middayMs(refill.date))}` : days > 1 ? " · no refill detected" : " · trend unavailable"}</span>;
         })}
       </div>}

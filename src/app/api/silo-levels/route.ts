@@ -14,14 +14,17 @@ const EMPTY_DISTANCE_MM = 3800;
 // level and the history: the silo shows its latest valid reading. A signal of exactly 0 dB is the
 // sensor's "no echo" placeholder (it arrives with a -3 mm distance), so those are dropped too.
 const MIN_VALID_DISTANCE_MM = 100;
-const MAX_VALID_DISTANCE_MM = 3500;
+const MAX_VALID_DISTANCE_MM = 3600;
 // Smoothing: one value per SAST day, the median of that day's valid readings (12 hours either side
 // of midday); the gauges use the median of the last 24 hours of valid readings.
 const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-// Low feed: the latest 5 kept readings (the ones on the plot) are all past 3,400 mm of head space.
+// Low feed: 4 readings in a row over the 3.6 m cut-off, or 5 kept readings in a row over 3,400 mm.
+// Once low, a silo stays low (shown at 20%) until a kept reading shows it at least half full again.
 const LOW_DISTANCE_MM = 3400;
 const LOW_CONSECUTIVE = 5;
+const LOW_OVER_CUT_CONSECUTIVE = 4;
+const REFILLED_PERCENT = 50;
 const LOW_DISPLAY_PERCENT = 20; // a low silo's gauge stays at 20%
 const REFILL_GAP_MS = 2 * DAY_MS;
 const HISTORY_DAYS = 30;
@@ -58,18 +61,35 @@ function validDistance(row: SiloRow): number | null {
 }
 
 function lowStatus(rows: SiloRow[], deviceId: string) {
+  // Every reading except no-echo and under-10 cm ones, in time order.
   const readings = rows
     .filter((row) => String(row.device_id ?? "").trim() === deviceId)
-    .map((row) => ({ t: toTimeMs(row.time), mm: validDistance(row) }))
-    .filter((r): r is { t: number; mm: number } => r.t != null && r.mm != null)
+    .map((row) => ({ t: toTimeMs(row.time), mm: toNumber(row.distance), signal: toNumber(row.radar_signal_rssi) }))
+    .filter((r): r is { t: number; mm: number; signal: number | null } =>
+      r.t != null && r.mm != null && r.mm >= MIN_VALID_DISTANCE_MM && r.signal !== 0)
     .sort((a, b) => a.t - b.t);
-  let streak = 0;
-  for (let index = readings.length - 1; index >= 0 && readings[index].mm > LOW_DISTANCE_MM; index--) streak++;
-  const low = streak >= LOW_CONSECUTIVE;
+  let low = false;
+  let lowSince: number | null = null;
+  let overCut: number[] = [];   // times of consecutive readings over the cut-off
+  let keptOver: number[] = [];  // times of consecutive kept readings over the low line
+  for (const reading of readings) {
+    const kept = reading.mm <= MAX_VALID_DISTANCE_MM;
+    overCut = kept ? [] : [...overCut, reading.t];
+    if (kept) keptOver = reading.mm > LOW_DISTANCE_MM ? [...keptOver, reading.t] : [];
+    if (!low && (overCut.length >= LOW_OVER_CUT_CONSECUTIVE || keptOver.length >= LOW_CONSECUTIVE)) {
+      low = true;
+      lowSince = (overCut.length >= LOW_OVER_CUT_CONSECUTIVE ? overCut : keptOver)[0];
+    }
+    if (low && kept && fillPercent(reading.mm) >= REFILLED_PERCENT) {
+      low = false;
+      lowSince = null;
+      overCut = [];
+      keptOver = [];
+    }
+  }
   return {
     low,
-    lowStreak: streak,
-    lowSince: low ? new Date(readings[readings.length - streak].t).toISOString() : null,
+    lowSince: lowSince == null ? null : new Date(lowSince).toISOString(),
     lastReadingAt: readings.length ? new Date(readings[readings.length - 1].t).toISOString() : null,
   };
 }
@@ -113,7 +133,7 @@ const sastDate = (t: number) => new Date(t + SAST_OFFSET_MS).toISOString().slice
 // Latest refill day (SAST). Either the daily median fill rises by 5+ points from the previous day with
 // readings, or kept readings come back after a gap of 2+ days with the silo at least half full (and fuller
 // than before the gap) while its last reading before the gap was over the low line, so a refill happened
-// during the gap. That last reading may be an over-3.5 m bounce, which only appears when a silo is low.
+// during the gap. That last reading may be an over-3.6 m bounce, which only appears when a silo is low.
 function lastRefillDate(rows: SiloRow[], deviceId: string, daily: { date: string; medianFillPercent: number }[]): string | null {
   const dates: string[] = [];
   for (let index = 1; index < daily.length; index++) {
@@ -212,7 +232,10 @@ export async function GET() {
       silos,
       calibration: { fullDistanceMm: FULL_DISTANCE_MM, emptyDistanceMm: EMPTY_DISTANCE_MM },
       validRangeMm: { min: MIN_VALID_DISTANCE_MM, max: MAX_VALID_DISTANCE_MM },
-      low: { distanceMm: LOW_DISTANCE_MM, readings: LOW_CONSECUTIVE, displayPercent: LOW_DISPLAY_PERCENT },
+      low: {
+        distanceMm: LOW_DISTANCE_MM, readings: LOW_CONSECUTIVE, overCutReadings: LOW_OVER_CUT_CONSECUTIVE,
+        cutMm: MAX_VALID_DISTANCE_MM, displayPercent: LOW_DISPLAY_PERCENT, refilledPercent: REFILLED_PERCENT,
+      },
       updatedAt: silos.length
         ? silos.reduce((latest, silo) => silo.updatedAt > latest ? silo.updatedAt : latest, silos[0].updatedAt)
         : null,

@@ -34,8 +34,8 @@ export interface SiloLevel {
   /** True when the latest readings (count in SiloLevelsData.low) are all past the low line. */
   /** Latest refill day (SAST, YYYY-MM-DD), from /api/silo-levels. */
   lastRefillDate?: string | null;
+  /** Low (shown at 20%) until refilled; see SiloLevelsData.low for the rule. */
   low?: boolean;
-  lowStreak?: number;
   lowSince?: string | null;
   lastReadingAt?: string | null;
 }
@@ -44,7 +44,7 @@ export interface SiloLevelsData {
   silos: SiloLevel[];
   calibration: { fullDistanceMm: number; emptyDistanceMm: number };
   validRangeMm?: { min: number; max: number };
-  low?: { distanceMm: number; readings: number; displayPercent: number };
+  low?: { distanceMm: number; readings: number; overCutReadings: number; cutMm: number; displayPercent: number; refilledPercent: number };
   updatedAt: string | null;
 }
 
@@ -85,13 +85,13 @@ function RadarIcon() {
   );
 }
 
-function SiloGauge({ silo, index, narrow, lowLine }: { silo: SiloLevel; index: number; narrow: boolean; lowLine: { distanceMm: number; fillPercent: number; readings: number } | null }) {
+function SiloGauge({ silo, index, narrow, lowLine }: { silo: SiloLevel; index: number; narrow: boolean; lowLine: { fillPercent: number } | null }) {
   // The gauge shows the median of the last 24 hours, which steadies the jumpy radar; the latest single reading is
   // shown beneath it. When the latest readings are all past the low line, the silo is shown as low instead.
   const isLow = silo.low === true && lowLine != null;
   const medianPct = Math.max(0, Math.min(100, silo.medianFillPercent ?? silo.fillPercent));
   const pct = isLow ? lowLine.fillPercent : medianPct;
-  const headMm = isLow ? lowLine.distanceMm : silo.medianMm ?? silo.distanceMm;
+  const headMm = silo.medianMm ?? silo.distanceMm;
   // Full usable capacity is drawn at 80% of the vessel so the real radar head
   // space remains visible even when the operational reading is 100% full.
   const visualFillPercent = Math.min(80, pct);
@@ -132,8 +132,8 @@ function SiloGauge({ silo, index, narrow, lowLine }: { silo: SiloLevel; index: n
           <circle cx="140" cy="33" r="4" fill="#08717A" /><path d="M133 40q7-7 14 0" fill="none" stroke="#08717A" strokeWidth="1.5" />
           <path d={`M240 42h10M245 42V${surfaceY}M240 ${surfaceY}h10`} fill="none" stroke="#08717A" strokeWidth="1.5" strokeDasharray="4 3" />
           <rect x="253" y={(42 + surfaceY) / 2 - 18} width="44" height="36" rx="6" fill="#F0FAFA" stroke="#2A8E9A" />
-          <text x="275" y={(42 + surfaceY) / 2 - 2} textAnchor="middle" fill="#08717A" fontSize="11" fontWeight="800">{isLow ? `>${headMm}` : headMm}</text>
-          <text x="275" y={(42 + surfaceY) / 2 + 11} textAnchor="middle" fill="#397D84" fontSize="8" fontWeight="700">mm</text>
+          <text x="275" y={(42 + surfaceY) / 2 - 2} textAnchor="middle" fill="#08717A" fontSize="11" fontWeight="800">{isLow ? "LOW" : headMm}</text>
+          {!isLow && <text x="275" y={(42 + surfaceY) / 2 + 11} textAnchor="middle" fill="#397D84" fontSize="8" fontWeight="700">mm</text>}
         </svg>
 
         <div style={{ minWidth: 0, display: narrow ? "grid" : "block", gridTemplateColumns: narrow ? "1.25fr 1fr 0.8fr" : undefined, gap: narrow ? 10 : undefined, alignItems: "end" }}>
@@ -146,8 +146,8 @@ function SiloGauge({ silo, index, narrow, lowLine }: { silo: SiloLevel; index: n
           </div>
           <div style={{ fontSize: 9.5, lineHeight: 1.5, color: "var(--t3)", marginTop: narrow ? 0 : 13 }}>
             {isLow ? (
-              <><div>Head space</div><strong style={{ color: RED, fontSize: 11 }}>Over {headMm.toLocaleString("en-ZA")} mm</strong>
-              <div style={{ fontSize: 9 }}>Last {silo.lowStreak} readings all past the low line</div></>
+              <><strong style={{ color: RED, fontSize: 11 }}>Running low</strong>
+              <div style={{ fontSize: 9 }}>Stays at {Math.round(lowLine.fillPercent)}% until refilled</div></>
             ) : (
               <><div>Head space · 24-h median</div><strong style={{ color: "var(--t2)", fontSize: 11 }}>{headMm.toLocaleString("en-ZA")} mm</strong>
               {headMm !== silo.distanceMm && <div style={{ fontSize: 9 }}>Latest reading {silo.distanceMm.toLocaleString("en-ZA")} mm</div>}</>
@@ -170,9 +170,8 @@ function SiloGauge({ silo, index, narrow, lowLine }: { silo: SiloLevel; index: n
 export default function DashSiloLevels({ data, narrow = false }: { data: SiloLevelsData | null; narrow?: boolean }) {
   const silos = data?.silos ?? [];
   const cal = data?.calibration;
-  const lowLine = data?.low && cal ? {
-    distanceMm: data.low.distanceMm, readings: data.low.readings, fillPercent: data.low.displayPercent,
-  } : null;
+  const lowLine = data?.low && cal ? { fillPercent: data.low.displayPercent } : null;
+  const low = data?.low;
   return (
     <section aria-label="Silo feed levels">
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
@@ -188,7 +187,7 @@ export default function DashSiloLevels({ data, narrow = false }: { data: SiloLev
           <div><div style={{ color: "var(--t2)", fontSize: 12, fontWeight: 700 }}>No silo radar readings available</div><div style={{ color: "var(--t3)", fontSize: 10.5, marginTop: 5 }}>Waiting for a physical silo sensor to report.</div></div>
         </div>
       )}
-      {silos.length > 0 && data && <div style={{ fontSize: 9.5, color: "var(--t3)", marginTop: 7, textAlign: "right" }}>100% usable fill is calibrated at {data.calibration.fullDistanceMm.toLocaleString("en-ZA")} mm head space.{lowLine && ` A silo shows Low when its last ${lowLine.readings} readings are all over ${lowLine.distanceMm.toLocaleString("en-ZA")} mm.`}</div>}
+      {silos.length > 0 && data && <div style={{ fontSize: 9.5, color: "var(--t3)", marginTop: 7, textAlign: "right" }}>100% usable fill is calibrated at {data.calibration.fullDistanceMm.toLocaleString("en-ZA")} mm head space.{low && ` A silo shows Low (${low.displayPercent}%) after ${low.overCutReadings} readings in a row over ${low.cutMm.toLocaleString("en-ZA")} mm or ${low.readings} over ${low.distanceMm.toLocaleString("en-ZA")} mm, until it is at least ${low.refilledPercent}% full again.`}</div>}
     </section>
   );
 }
