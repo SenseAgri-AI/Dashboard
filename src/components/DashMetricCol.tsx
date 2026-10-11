@@ -1,7 +1,7 @@
 export type DailyEntry = {
   date: string; eggs: number; small: number; medium: number; large: number; xl: number; jumbo: number;
   damaged: number; mortality: number; liveHens: number; avgWeight: number | null; revenue: number;
-  hdep: number | null; feedPulses: number | null; fcr: number | null;
+  hdep: number | null; hhep?: number | null; feedPulses: number | null; fcr: number | null;
 };
 
 export interface ProductionData {
@@ -9,6 +9,7 @@ export interface ProductionData {
   eggs: { total: number; small: number; medium: number; large: number; xl: number; jumbo: number; damaged: number };
   revenue: number;
   hdep: number | null;
+  hhep?: number | null;
   mortality: { today: number; cumulative: number; rate: number | null };
   totalHens: number;
   daily: DailyEntry[];
@@ -86,8 +87,9 @@ function MiniSpark({ values, compact = false }: { values: number[]; compact?: bo
   );
 }
 
-function KpiTile({ label, value, delta, goodUp, values, compact = false }: {
+function KpiTile({ label, value, delta, goodUp, values, compact = false, sub = null }: {
   label: string; value: string | null; delta: number | null; goodUp: boolean; values: number[]; compact?: boolean;
+  sub?: string | null;
 }) {
   return (
     <div style={{ background: "#fff", border: "1px solid rgba(0,0,0,0.07)", borderRadius: 12, boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04)", padding: compact ? "11px 10px" : "13px 15px", display: "flex", flexDirection: "column", gap: 7, minWidth: 0 }}>
@@ -99,6 +101,7 @@ function KpiTile({ label, value, delta, goodUp, values, compact = false }: {
           <Trend delta={delta} goodUp={goodUp} compact={compact} />
         </div>
       </div>
+      {sub && <div style={{ fontSize: compact ? 10.5 : 11.5, color: "var(--t2)", fontWeight: 600, marginTop: -2 }}>{sub}</div>}
     </div>
   );
 }
@@ -152,7 +155,7 @@ export function DashKpiGrid({ production, narrow }: { production: ProductionData
   const daily = production?.daily ?? [];
   const col = (k: keyof DailyEntry): number[] => daily.map((d) => d[k]).filter((v): v is number => typeof v === "number");
 
-  const liveHens = col("liveHens"), hdep = col("hdep"), eggs = col("eggs"), weight = col("avgWeight"), damaged = col("damaged"), rev = col("revenue");
+  const liveHens = col("liveHens"), hdep = col("hdep"), hhep = col("hhep"), eggs = col("eggs"), weight = col("avgWeight"), damaged = col("damaged"), rev = col("revenue");
   const weeklyRev = rev.slice(-7).reduce((a, b) => a + b, 0);
   const weeklyRevSeries = rev.map((_, index) => sum(rev.slice(Math.max(0, index - 6), index + 1)));
   const sizeBars = ([
@@ -175,7 +178,8 @@ export function DashKpiGrid({ production, narrow }: { production: ProductionData
       </div>
       <div style={{ display: "grid", gridTemplateColumns: narrow ? "repeat(2, minmax(0,1fr))" : "repeat(4, minmax(0,1fr))", gap: 10, alignItems: "stretch" }}>
         <KpiTile label="Live hens" value={lastOf(liveHens)?.toLocaleString() ?? null} delta={stockChange(liveHens)} goodUp values={liveHens} compact={narrow} />
-        <KpiTile label="Hen-day %" value={lastOf(hdep) != null ? `${lastOf(hdep)!.toFixed(1)}%` : null} delta={flowChange(hdep)} goodUp values={hdep} compact={narrow} />
+        <KpiTile label="Hen-day %" value={lastOf(hdep) != null ? `${lastOf(hdep)!.toFixed(1)}%` : null} delta={flowChange(hdep)} goodUp values={hdep} compact={narrow}
+          sub={lastOf(hhep) != null ? `Hen-housed ${lastOf(hhep)!.toFixed(1)}%` : null} />
         <KpiTile label="Egg count" value={lastOf(eggs)?.toLocaleString() ?? null} delta={flowChange(eggs)} goodUp values={eggs} compact={narrow} />
         <KpiTile label="Egg weight" value={lastOf(weight) != null ? `${lastOf(weight)!.toFixed(1)} g` : null} delta={flowChange(weight)} goodUp values={weight} compact={narrow} />
 

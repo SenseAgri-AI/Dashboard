@@ -223,6 +223,8 @@ export async function GET(request: Request) {
           avgWeight: v.weightCount > 0 ? Math.round((v.weightSum / v.weightCount) * 10) / 10 : null,
           revenue: Math.round(v.revenue * 100) / 100,
           hdep: TOTAL_HENS > 0 ? Math.round((v.eggs / lh) * 1000) / 10 : null,
+          // Hen-housed %: the same eggs against the hens originally housed (deaths and culls not taken out).
+          hhep: TOTAL_HENS > 0 ? Math.round((v.eggs / TOTAL_HENS) * 1000) / 10 : null,
           feedPulses,
           fcr,
         };
@@ -233,6 +235,7 @@ export async function GET(request: Request) {
       eggs: { total: totalEggs, small, medium, large, xl, jumbo, damaged },
       revenue: Math.round(revenue * 100) / 100,
       hdep: hdep !== null ? Math.round(hdep * 10) / 10 : null,
+      hhep: TOTAL_HENS > 0 ? Math.round((totalEggs / TOTAL_HENS) * 1000) / 10 : null,
       mortality: {
         today: mortality,
         cumulative: cumulativeMortality,
