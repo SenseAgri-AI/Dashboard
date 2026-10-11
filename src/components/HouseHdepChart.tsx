@@ -30,6 +30,39 @@ function flockWeekAt(h: House, iso: string): number {
   return days / 7;
 }
 
+// Tooltip text stays white on the dark box; each line's colour sits on a small white chip beside its
+// name, so dark lines (navy, brown) stay readable.
+const SERIES: { name: string; color: string; dashed: boolean }[] = [
+  { name: "Hen-day", color: TEAL, dashed: false },
+  { name: "Hen-housed", color: NAVY, dashed: false },
+  { name: "Breed standard", color: STD, dashed: true },
+];
+
+function LineChip({ color, dashed }: { color: string; dashed: boolean }) {
+  return (
+    <span style={{ display: "inline-flex", background: "#fff", borderRadius: 3, padding: "2px 3px", flexShrink: 0 }}>
+      <svg width="14" height="6" aria-hidden><line x1="0" y1="3" x2="14" y2="3" stroke={color} strokeWidth="2.5" strokeDasharray={dashed ? "4 2" : undefined} /></svg>
+    </span>
+  );
+}
+
+function HdepTip({ active, payload, label, house }: { active?: boolean; payload?: Array<{ name?: string; value?: number | null }>; label?: number; house: House }) {
+  if (!active || !payload?.length || label == null) return null;
+  const values = new Map(payload.map((p) => [p.name, p.value]));
+  return (
+    <div style={{ background: PRIMARY, border: `1px solid ${TEAL}`, padding: "6px 9px", fontSize: 12, color: "#fff", lineHeight: 1.6 }}>
+      <div style={{ color: "#8fd0d8" }}>{withFlockAge(new Date(Number(label)).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" }), house, Number(label))}</div>
+      {SERIES.filter((s) => values.get(s.name) != null).map((s) => (
+        <div key={s.name} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <LineChip color={s.color} dashed={s.dashed} />
+          <span>{s.name}</span>
+          <strong style={{ marginLeft: "auto", paddingLeft: 10 }}>{Number(values.get(s.name)).toFixed(1)}%</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const fmtDate = (ms: number, house: House) => withFlockAge(new Date(ms).toLocaleDateString("en-ZA", { month: "short", year: "2-digit" }), house, ms, true);
 
 export default function HouseHdepChart({ house, height = 150 }: { house: House; height?: number }) {
@@ -109,12 +142,7 @@ export default function HouseHdepChart({ house, height = 150 }: { house: House; 
               <XAxis dataKey="t" type="number" scale="time" domain={[pts[0]?.t ?? 0, pts[pts.length - 1]?.t ?? 0]}
                 tickFormatter={(ms) => fmtDate(Number(ms), house)} tick={{ fontSize: 9, fill: AXIS, fontFamily: "Inter" }} axisLine={{ stroke: "#d1dada" }} tickLine={false} minTickGap={44} />
               <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tick={{ fontSize: 9, fill: AXIS, fontFamily: "Inter" }} axisLine={false} tickLine={false} width={30} unit="%" />
-              <Tooltip labelFormatter={(ms) => withFlockAge(new Date(Number(ms)).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" }), house, Number(ms))}
-                formatter={(value, name) => {
-                  if (name !== "Hen-day" && name !== "Hen-housed" && name !== "Breed standard") return null;
-                  return [value == null ? "—" : `${Math.round(Number(value))}%`, name];
-                }}
-                contentStyle={{ background: PRIMARY, border: `1px solid ${TEAL}`, borderRadius: 0, fontSize: 12, color: "#fff" }} labelStyle={{ color: TEAL }} />
+              <Tooltip content={<HdepTip house={house} />} cursor={{ stroke: TEAL, strokeOpacity: 0.4 }} />
               <Area dataKey="aboveBand" name="above" stroke="none" fill={GREEN} fillOpacity={0.22} legendType="none" isAnimationActive={false} connectNulls={false} />
               <Area dataKey="belowBand" name="below" stroke="none" fill={DANGER} fillOpacity={0.18} legendType="none" isAnimationActive={false} connectNulls={false} />
               <Line dataKey="standard" name="Breed standard" stroke={STD} strokeWidth={1.5} strokeDasharray="5 4" dot={false} connectNulls isAnimationActive={false} />

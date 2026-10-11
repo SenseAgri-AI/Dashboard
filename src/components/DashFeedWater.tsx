@@ -66,7 +66,14 @@ function SiloTooltip(props: { active?: boolean; label?: number; payload?: Array<
       <div style={{ color: "rgba(255,255,255,0.6)", marginBottom: 3 }}>{dayLabel(props.label, props.house)}</div>
       {props.payload.filter((item) => item.value != null).map((item) => {
         const n = item.payload?.[`${item.dataKey}n`];
-        return <div key={item.name} style={{ color: item.color }}><strong>{item.name}: {Math.round(item.value!).toLocaleString("en-ZA")} mm</strong>{n ? ` (median of ${n} reading${n === 1 ? "" : "s"})` : ""}</div>;
+        return (
+          <div key={item.name} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ display: "inline-flex", background: "#fff", borderRadius: 3, padding: "2px 3px", flexShrink: 0 }}>
+              <span style={{ width: 12, height: 3, borderRadius: 2, background: item.color }} />
+            </span>
+            <span><strong>{item.name}: {Math.round(item.value!).toLocaleString("en-ZA")} mm</strong>{n ? ` (median of ${n} reading${n === 1 ? "" : "s"})` : ""}</span>
+          </div>
+        );
       })}
     </div>
   );
