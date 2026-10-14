@@ -1,0 +1,35 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04-arm
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # ARM runner: ffmpeg-static downloads the linux-arm64 binary during install,
+      # which is what the Graviton server function executes. The image optimizer
+      # Lambda is arm64 as well.
+      - run: npm ci
+      - name: Confirm the ffmpeg binary is linux arm64
+        run: file node_modules/ffmpeg-static/ffmpeg | grep -q 'ARM aarch64'
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: af-south-1
+      - run: npx sst deploy --stage production

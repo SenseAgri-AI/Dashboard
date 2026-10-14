@@ -5,6 +5,11 @@ node_modules/
 .next/
 out/
 
+# SST / OpenNext (generated on deploy)
+.sst/
+.open-next/
+sst-env.d.ts
+
 # Build artifacts
 tsconfig.tsbuildinfo
 *.tsbuildinfo

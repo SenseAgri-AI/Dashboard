@@ -1,0 +1,269 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  One-time GitHub OIDC provider and deploy role for the SenseAgri dashboard.
+  Trusted only for repo SenseAgri-AI/Dashboard on main in the production
+  environment. Does not create the app runtime role; SST does that on deploy.
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Default: SenseAgri-AI
+  GitHubRepo:
+    Type: String
+    Default: Dashboard
+  GitHubBranch:
+    Type: String
+    Default: main
+  GitHubEnvironment:
+    Type: String
+    Default: production
+  CreateOidcProvider:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Set to false when this account already has a GitHub OIDC provider.
+  ExistingOidcProviderArn:
+    Type: String
+    Default: ""
+    Description: Required when CreateOidcProvider is false.
+
+Conditions:
+  ShouldCreateOidc: !Equals [!Ref CreateOidcProvider, "true"]
+
+Rules:
+  ExistingProviderRequired:
+    Assertions:
+      - Assert: !Or
+          - !Equals [!Ref CreateOidcProvider, "true"]
+          - !Not [!Equals [!Ref ExistingOidcProviderArn, ""]]
+        AssertDescription: Set ExistingOidcProviderArn when CreateOidcProvider is false.
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: ShouldCreateOidc
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      # AWS no longer validates this thumbprint for GitHub. CloudFormation still requires one.
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: senseagri-dashboard-github-deploy
+      Description: GitHub Actions deploy role for the SenseAgri dashboard (main + production only).
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - ShouldCreateOidc
+                - !Ref GitHubOidcProvider
+                - !Ref ExistingOidcProviderArn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOrg}/${GitHubRepo}:environment:${GitHubEnvironment}"
+                token.actions.githubusercontent.com:ref: !Sub "refs/heads/${GitHubBranch}"
+                token.actions.githubusercontent.com:repository: !Sub "${GitHubOrg}/${GitHubRepo}"
+      Policies:
+        - PolicyName: senseagri-dashboard-deploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # --- SST bootstrap (state, asset bucket, ECR repo, passphrase) ---
+              - Sid: BootstrapStateBucket
+                Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:DeleteBucket
+                  - s3:GetBucketLocation
+                  - s3:GetBucketPolicy
+                  - s3:PutBucketPolicy
+                  - s3:DeleteBucketPolicy
+                  - s3:PutBucketVersioning
+                  - s3:GetBucketVersioning
+                  - s3:PutBucketNotification
+                  - s3:GetBucketNotification
+                  - s3:PutBucketTagging
+                  - s3:GetBucketTagging
+                  - s3:PutBucketPublicAccessBlock
+                  - s3:GetBucketPublicAccessBlock
+                  - s3:PutEncryptionConfiguration
+                  - s3:GetEncryptionConfiguration
+                  - s3:PutBucketOwnershipControls
+                  - s3:GetBucketOwnershipControls
+                  - s3:ListBucket
+                  - s3:ListBucketVersions
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:DeleteObjectVersion
+                  - s3:AbortMultipartUpload
+                Resource:
+                  - arn:aws:s3:::sst-state-*
+                  - arn:aws:s3:::sst-state-*/*
+                  - arn:aws:s3:::sst-asset-*
+                  - arn:aws:s3:::sst-asset-*/*
+              - Sid: BootstrapEcr
+                Effect: Allow
+                Action:
+                  - ecr:CreateRepository
+                  - ecr:DescribeRepositories
+                  - ecr:DeleteRepository
+                  - ecr:TagResource
+                  - ecr:ListTagsForResource
+                Resource: !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/sst-asset"
+              - Sid: SstParameters
+                Effect: Allow
+                Action:
+                  - ssm:DeleteParameter
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                  - ssm:PutParameter
+                  - ssm:AddTagsToResource
+                  - ssm:ListTagsForResource
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/sst/*"
+              # --- App resources SST creates (Lambda, CloudFront, site bucket, ISR) ---
+              - Sid: S3SiteBuckets
+                Effect: Allow
+                Action: s3:*
+                Resource: "*"
+              - Sid: LambdaDeploy
+                Effect: Allow
+                Action: lambda:*
+                Resource: "*"
+              - Sid: CloudFrontDeploy
+                Effect: Allow
+                Action: cloudfront:*
+                Resource: "*"
+              - Sid: LogsDeploy
+                Effect: Allow
+                Action: logs:*
+                Resource: "*"
+              - Sid: SqsControlPlane
+                Effect: Allow
+                Action:
+                  - sqs:CreateQueue
+                  - sqs:DeleteQueue
+                  - sqs:GetQueueAttributes
+                  - sqs:SetQueueAttributes
+                  - sqs:GetQueueUrl
+                  - sqs:ListQueues
+                  - sqs:TagQueue
+                  - sqs:UntagQueue
+                  - sqs:ListQueueTags
+                Resource: "*"
+              - Sid: DynamoDbControlPlane
+                Effect: Allow
+                Action:
+                  - dynamodb:CreateTable
+                  - dynamodb:DeleteTable
+                  - dynamodb:DescribeTable
+                  - dynamodb:UpdateTable
+                  - dynamodb:DescribeContinuousBackups
+                  - dynamodb:UpdateContinuousBackups
+                  - dynamodb:DescribeTimeToLive
+                  - dynamodb:UpdateTimeToLive
+                  - dynamodb:TagResource
+                  - dynamodb:UntagResource
+                  - dynamodb:ListTagsOfResource
+                  - dynamodb:ListTables
+                Resource: "*"
+              - Sid: IamManageFunctionRoles
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:UpdateRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:ListAttachedRolePolicies
+                  - iam:ListInstanceProfilesForRole
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/*"
+              - Sid: IamPassRoleToLambda
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/*"
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: lambda.amazonaws.com
+              # Describe only. The runbook adds a custom domain with an existing
+              # us-east-1 certificate; this role does not request or delete certs.
+              - Sid: DescribeCertificates
+                Effect: Allow
+                Action:
+                  - acm:DescribeCertificate
+                  - acm:GetCertificate
+                  - acm:ListCertificates
+                Resource: "*"
+              # Farm data stays on the runtime role, not the deploy role.
+              - Sid: DenyFarmBuckets
+                Effect: Deny
+                Action: s3:*
+                Resource:
+                  - arn:aws:s3:::senseagri-dev-silver
+                  - arn:aws:s3:::senseagri-dev-silver/*
+                  - arn:aws:s3:::senseagri-dev-raw
+                  - arn:aws:s3:::senseagri-dev-raw/*
+                  - arn:aws:s3:::senseagri-dev-media-inference
+                  - arn:aws:s3:::senseagri-dev-media-inference/*
+                  - arn:aws:s3:::senseagri-dev-athena-results
+                  - arn:aws:s3:::senseagri-dev-athena-results/*
+                  - arn:aws:s3:::senseagri-dev-gold
+                  - arn:aws:s3:::senseagri-dev-gold/*
+                  - arn:aws:s3:::senseagri-dev-tfstate-*
+                  - arn:aws:s3:::senseagri-dev-tfstate-*/*
+              - Sid: DenyFarmTables
+                Effect: Deny
+                Action: dynamodb:*
+                Resource:
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/senseagri-dev-push-subscriptions"
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/senseagri-dev-push-subscriptions/*"
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/senseagri-dev-alerts"
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/senseagri-dev-alerts/*"
+              - Sid: DenyFarmParameters
+                Effect: Deny
+                Action: ssm:*
+                Resource:
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/senseagri/*"
+              - Sid: DenyStaticKeysAndThisRole
+                Effect: Deny
+                Action:
+                  - iam:CreateUser
+                  - iam:CreateAccessKey
+                  - iam:UpdateAccessKey
+                  - iam:CreateLoginProfile
+                  - iam:UpdateLoginProfile
+                Resource: "*"
+              - Sid: DenyChangingDeployRole
+                Effect: Deny
+                Action: iam:*
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/senseagri-dashboard-github-deploy"
+
+Outputs:
+  DeployRoleArn:
+    Description: Put this in the GitHub repository variable AWS_DEPLOY_ROLE_ARN.
+    Value: !GetAtt DeployRole.Arn
+  OidcProviderArn:
+    Description: GitHub OIDC provider used by the deploy role.
+    Value: !If
+      - ShouldCreateOidc
+      - !Ref GitHubOidcProvider
+      - !Ref ExistingOidcProviderArn

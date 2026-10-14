@@ -24,6 +24,8 @@ signs in with their own email account, has 2FA, and sees only their own farm's d
 - **Google Sheets** — per-farm production log
 - **AWS SSM Parameter Store** — all secrets + per-farm config
 
+Production hosting on AWS (Lambda + CloudFront, af-south-1) is described in [DEPLOY_AWS.md](DEPLOY_AWS.md). Local development is unchanged.
+
 ## Local development
 
 Prerequisites: Node 20+, AWS credentials that can read (and, for `/admin`, write) SSM in
@@ -46,9 +48,10 @@ For pulling data directly (Python / analysis), see [DATA_ACCESS.md](DATA_ACCESS.
   farm). Resolved per request from the logged-in user's org slug — see
   [src/lib/farms.ts](src/lib/farms.ts). New client = new SSM parameter + a Clerk org; no deploy.
 
-There is **no per-tenant AWS role**. Farmers never touch AWS. The app holds one set of AWS
-credentials and reads every farm's config/secrets centrally; isolation is enforced at the app
-layer (Clerk org → `farmId` → scoped queries).
+There is **no per-tenant AWS role**. Farmers never touch AWS. The deployed app runs as one
+Lambda execution role and reads every farm's config centrally; isolation is enforced at the app
+layer (Clerk org → `farmId` → scoped queries). Locally, the AWS SDK uses your `~/.aws` profile.
+Do not put a static `AWS_ACCESS_KEY_ID` on the Lambda.
 
 ## Onboarding a new farm client
 

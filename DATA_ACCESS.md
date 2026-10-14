@@ -15,8 +15,9 @@ need them pasted anywhere — if your AWS CLI is configured, you can pull them o
 
 ## 0. Prerequisites
 
-You need AWS access to the SenseAgri account. The app reads secrets from SSM using
-your local `~/.aws` profile (on Vercel it uses `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`).
+You need AWS access to the SenseAgri account. Analysis uses your local `~/.aws` profile.
+The deployed dashboard uses its Lambda execution role instead of a static key — see
+[DEPLOY_AWS.md](DEPLOY_AWS.md). Do not create another admin access key for the app.
 
 ```bash
 aws configure          # or aws sso login, depending on how the account is set up
