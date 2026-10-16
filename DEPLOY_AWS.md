@@ -1,7 +1,8 @@
 # Deploy the dashboard to AWS
 
 Lambda + CloudFront in **af-south-1** (Cape Town), built with SST v3 and OpenNext.
-GitHub Actions deploys from `main` with OIDC. There is no static AWS access key.
+GitHub Actions deploys only when someone runs the Deploy workflow by hand.
+A merge to `main` runs CI and does not deploy. There is no static AWS access key.
 
 Nothing in this repo has been deployed. Apply the steps below yourself.
 
@@ -45,7 +46,10 @@ Copy the `DeployRoleArn` output.
 
 In GitHub, on `SenseAgri-AI/Dashboard`:
 
-1. Settings → Environments → create **production**. Limit deployment branches to `main`.
+1. Settings → Environments → create **production**.
+   - Limit deployment branches to `main`.
+   - Add required reviewers. The Deploy job waits for one of them before it
+     assumes the AWS role.
 2. Settings → Secrets and variables → Actions → Variables → add repository variable
    `AWS_DEPLOY_ROLE_ARN` = that role ARN. It is a variable, not a secret.
 
@@ -116,8 +120,16 @@ Local `.env.local` still needs the Clerk keys. Local AWS calls use `~/.aws`, not
 
 ## 4. First deploy
 
-Merge to `main`. `.github/workflows/deploy.yml` assumes the role and runs
-`npx sst deploy --stage production`.
+Merge to `main` first. That runs CI only.
+
+Then Actions → **Deploy** → **Run workflow**, with the branch set to `main`.
+GitHub pauses the job until a required reviewer of the **production**
+environment approves it. After approval, the job assumes the deploy role and
+runs `npx sst deploy --stage production`.
+
+A run started from any branch other than `main` is skipped. The deploy role
+would reject it anyway: it trusts only `refs/heads/main` in the production
+environment.
 
 The job runs on `ubuntu-24.04-arm` so `ffmpeg-static` installs its linux-arm64
 binary. The server Lambda is arm64, 1536 MB, 60 second timeout, with Lambda
@@ -126,8 +138,8 @@ response streaming turned on.
 SST prints a `*.cloudfront.net` URL. That is the site. The server function's
 role is created by SST and can only call the resources listed in `sst.config.ts`.
 
-If the workflow fails because a secret is missing, set the secret and re-run
-the Deploy workflow.
+If the workflow fails because a secret is missing, set the secret and run the
+Deploy workflow again. That asks for approval again.
 
 ## 5. Test on the CloudFront URL
 
@@ -154,7 +166,8 @@ The hostname is not in this repo, so it is not wired in `sst.config.ts`.
 1. Lower the DNS TTL.
 2. In **us-east-1**, request an ACM certificate for the hostname and validate
    it. CloudFront only accepts us-east-1 certificates.
-3. Point SST at it without taking over DNS, then deploy again from `main`:
+3. Point SST at it without taking over DNS, merge that change, then run the
+   Deploy workflow on `main` again (a reviewer must approve):
 
    ```ts
    domain: {

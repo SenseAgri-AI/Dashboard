@@ -1,8 +1,8 @@
 name: Deploy
 
+# Manual only. A push or merge to main runs CI and does not deploy.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   id-token: write
@@ -14,6 +14,9 @@ concurrency:
 
 jobs:
   deploy:
+    # The deploy role trusts only refs/heads/main. A dispatch from any other
+    # branch is skipped and does not ask the production-environment reviewers.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04-arm
     environment: production
     steps:
