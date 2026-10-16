@@ -82,12 +82,30 @@ keys. It is denied `s3` on the farm buckets (`senseagri-dev-silver`,
 
 Lambda, S3, CloudWatch Logs, SQS, and DynamoDB are limited to names starting
 with `senseagri-dashboard-` (plus the SST bootstrap buckets `sst-state-*` and
-`sst-asset-*`). CloudFront distribution update, delete, tag, invalidation,
-and alias changes require the resource tag `sst:app=senseagri-dashboard`,
-which SST sets from the app name. The same tag gates CloudFront function and
-key-value store changes. `iam:UpdateAssumeRolePolicy` is not granted: SST
-sets the trust policy to `lambda.amazonaws.com` in `CreateRole`, and IAM
-cannot constrain a later replacement principal.
+`sst-asset-*`). `iam:UpdateAssumeRolePolicy` is not granted: SST sets the
+trust policy to `lambda.amazonaws.com` in `CreateRole`, and IAM cannot
+constrain a later replacement principal.
+
+CloudFront distributions are created with `CreateDistributionWithTags`.
+Pulumi AWS 6.66.2, which SST 3.19.3 vendors, puts the provider default tags
+in that call. `sst:app` is the app name `senseagri-dashboard`. It does not
+call `TagResource` afterwards to attach the first tags. `TagResource` and
+`UntagResource` are allowed only when the distribution already has that
+tag. There is no exception for a missing tag. A `RequestTag`-only allow on
+`*` would let this role tag any untagged distribution and then update or
+delete it. AWS also lists `TagResource` as a permission of
+`CreateDistributionWithTags`, checked before a resource tag exists. That
+check is not granted, for the same reason.
+
+This provider does not tag CloudFront functions or key-value stores. Its
+`CreateFunction` call has no tags field, and the key-value store resource
+model has no tags attribute, so a request-tag condition would reject both
+creates. `sst.config.ts` pins function names to
+`senseagri-dashboard-<stage>-…`. Publish, update, and delete use that
+prefix. AWS does support `aws:ResourceTag` on those function calls, and on
+`UpdateKeyValueStore` and `DeleteKeyValueStore`, but the resources never
+receive `sst:app`, so a tag condition would deny them. The key-value store
+ARN is `key-value-store/<id>`, and AWS assigns that id.
 
 These deploy allows stay on `*`. Everything else is a resource ARN, a name
 prefix, or a tag condition.
@@ -102,21 +120,24 @@ prefix, or a tag condition.
 | `cloudfront:Get*` | Read. Distribution, cache-policy, function, key-value store, and origin-access-control IDs are assigned by AWS. |
 | `cloudfront:List*` | List APIs have no resource, or the ID is assigned by AWS. Includes `ListTagsForResource`. |
 | `cloudfront:Describe*` | Read. `DescribeFunction` and `DescribeKeyValueStore`. Same ID limitation. |
-| `cloudfront:CreateDistribution` | No distribution ARN yet. `aws:RequestTag/sst:app` must be `senseagri-dashboard`. |
-| `cloudfront:CreateFunction` | No function ARN yet. Same request tag. |
-| `cloudfront:CreateKeyValueStore` | No store ARN yet. Same request tag. |
-| `cloudfront:TagResource` | Applied while those creates are in flight, before a resource tag exists. Same request tag. Later distribution tag changes require `aws:ResourceTag/sst:app` and are not on `*`. A deny blocks retagging a resource that already has a different `sst:app`. |
-| `cloudfront:CreateCachePolicy` | Cache policies do not support `aws:RequestTag` or `aws:ResourceTag`. Update and delete are `cache-policy/*`, still any cache policy in the account, because the ID is assigned by AWS. |
-| `cloudfront:CreateOriginAccessControl` | No tag condition, and SST does not send tags. Delete is `origin-access-control/*`. |
+| `cloudfront:CreateDistribution` | No distribution ARN yet. `aws:RequestTag/sst:app` must be `senseagri-dashboard`. `TagResource` is not included. |
+| `cloudfront:CreateFunction` | No resource type. This provider does not send tags, so a request-tag condition would reject the create. Later calls are `function/senseagri-dashboard-*`. |
+| `cloudfront:CreateKeyValueStore` | No resource type. This provider does not send tags. |
+| `cloudfront:CreateCachePolicy` | No resource type, and cache policies do not support tag conditions. |
+| `cloudfront:CreateOriginAccessControl` | No resource type. SST does not send tags. |
 | `logs:DescribeLogGroups` | Account-level describe. Create and write are limited to `/aws/lambda/senseagri-dashboard-*`. |
 | `sqs:ListQueues` | No resource. Create and update are limited to `senseagri-dashboard-*`. |
 | `dynamodb:ListTables` | No resource. Create and update are limited to `table/senseagri-dashboard-*`. |
 | `acm:DescribeCertificate`, `acm:GetCertificate`, `acm:ListCertificates` | Read-only. Certificate ARNs are not a name prefix. This role cannot request or delete a certificate. |
 
-Router key writes are `cloudfront-keyvaluestore:DescribeKeyValueStore`,
-`ListKeys`, and `UpdateKeys` on `key-value-store/*`. That API has no tag
-condition. The store ID is assigned by AWS, so the resource is every key
-value store in the account, not `*`.
+These are not `*`, and they also cannot be limited to a name prefix or a tag:
+
+| Action | Resource | Why it stays this wide |
+|---|---|---|
+| `cloudfront:UpdateCachePolicy`, `cloudfront:DeleteCachePolicy` | `cache-policy/*` | No tag condition. The ARN is `cache-policy/<id>` and AWS assigns the id. The policy name is not in the ARN. |
+| `cloudfront:DeleteOriginAccessControl` | `origin-access-control/*` | No tag condition. SST does not send tags. The ARN id is assigned by AWS. The Name field is not in the ARN. |
+| `cloudfront:UpdateKeyValueStore`, `cloudfront:DeleteKeyValueStore` | `key-value-store/*` | AWS supports `aws:ResourceTag` here, but this provider never tags the store, so requiring `sst:app` would deny the call. The ARN is `key-value-store/<id>`, not the name SST sets. |
+| `cloudfront-keyvaluestore:DescribeKeyValueStore`, `ListKeys`, `UpdateKeys` | `key-value-store/*` | Data-plane API. No tag condition. Same store id, not the name. |
 
 The boundary is the ceiling for the Lambda roles, not the deploy role. It
 allows the farm calls in the table at the bottom of this file, the OpenNext

@@ -54,6 +54,13 @@ export default $config({
       }
       return value;
     };
+    // Pulumi AWS 6.66.2 does not tag CloudFront functions. Pin the name so
+    // publish, update, and delete can use the senseagri-dashboard- prefix.
+    // The distribution is tagged inside CreateDistributionWithTags instead.
+    $transform(aws.cloudfront.Function, (args, _opts, name) => {
+      const slug = name.replace(/[^A-Za-z0-9]/g, "").slice(-20).toLowerCase();
+      args.name = awsName(slug);
+    });
     const scopeFunction = (functionSuffix: string, roleSuffix: string) => {
       return (args: {
         name?: string;

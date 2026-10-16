@@ -370,22 +370,24 @@ Resources:
                   - cloudfront:List*
                   - cloudfront:Describe*
                 Resource: "*"
-              # Create has no ARN yet. SST sets default tag sst:app to the
-              # app name in sst.config.ts (senseagri-dashboard). TagResource
-              # is in this statement because CreateDistributionWithTags,
-              # CreateFunction, and CreateKeyValueStore authorize it before
-              # the resource tag exists.
-              - Sid: CloudFrontCreateTagged
+              # Pulumi AWS 6.66.2 (vendored by SST 3.19.3) calls
+              # CreateDistributionWithTags and puts provider default tags in
+              # that request. sst:app is senseagri-dashboard. It does not call
+              # TagResource afterwards to attach the first tags.
+              # TagResource is intentionally not in this statement. AWS also
+              # lists it as a permission of CreateDistributionWithTags, checked
+              # before a resource tag exists. Granting it on * with only
+              # aws:RequestTag would let this role tag any untagged
+              # distribution, function, or key-value store and then change it.
+              - Sid: CloudFrontCreateDistribution
                 Effect: Allow
-                Action:
-                  - cloudfront:CreateDistribution
-                  - cloudfront:CreateFunction
-                  - cloudfront:CreateKeyValueStore
-                  - cloudfront:TagResource
+                Action: cloudfront:CreateDistribution
                 Resource: "*"
                 Condition:
                   StringEquals:
                     "aws:RequestTag/sst:app": senseagri-dashboard
+              # Tag and untag only a distribution that already has our tag.
+              # No Null exception: a missing sst:app tag does not match.
               - Sid: CloudFrontDistributionWrite
                 Effect: Allow
                 Action:
@@ -399,28 +401,40 @@ Resources:
                 Condition:
                   StringEquals:
                     "aws:ResourceTag/sst:app": senseagri-dashboard
+              # This provider's CreateFunction call has no tags field, and the
+              # resource schema does not support tags, so aws:RequestTag would
+              # reject the create. CreateFunction has no resource type.
+              # sst.config.ts pins the name to senseagri-dashboard-*.
+              - Sid: CloudFrontCreateFunction
+                Effect: Allow
+                Action: cloudfront:CreateFunction
+                Resource: "*"
               - Sid: CloudFrontFunctionWrite
                 Effect: Allow
                 Action:
                   - cloudfront:UpdateFunction
                   - cloudfront:PublishFunction
                   - cloudfront:DeleteFunction
-                Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:function/*"
-                Condition:
-                  StringEquals:
-                    "aws:ResourceTag/sst:app": senseagri-dashboard
+                Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:function/senseagri-dashboard-*"
+              # CreateKeyValueStore has no resource type. This provider does
+              # not send tags (the resource model has no tags attribute), so
+              # a request-tag condition would reject the create.
+              - Sid: CloudFrontCreateKeyValueStore
+                Effect: Allow
+                Action: cloudfront:CreateKeyValueStore
+                Resource: "*"
+              # The key-value store ARN uses the store ID AWS assigns, not the
+              # name SST sets. The data-plane API has no tag condition, and
+              # this provider does not tag the store. Update and delete of the
+              # control-plane store are the same ARN shape.
               - Sid: CloudFrontKeyValueStoreWrite
                 Effect: Allow
                 Action:
                   - cloudfront:UpdateKeyValueStore
                   - cloudfront:DeleteKeyValueStore
                 Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:key-value-store/*"
-                Condition:
-                  StringEquals:
-                    "aws:ResourceTag/sst:app": senseagri-dashboard
-              # Cache policies do not support aws:RequestTag or aws:ResourceTag.
-              # Create has no resource. Update and delete can name the
-              # cache-policy ARN, but the ID is assigned by AWS.
+              # Cache policies do not support tag conditions. The ARN is
+              # cache-policy/<id> and the id is assigned by AWS, not the name.
               - Sid: CloudFrontCreateCachePolicy
                 Effect: Allow
                 Action: cloudfront:CreateCachePolicy
@@ -432,7 +446,8 @@ Resources:
                   - cloudfront:DeleteCachePolicy
                 Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:cache-policy/*"
               # Origin access controls do not support tag conditions. SST's
-              # control does not send tags. Create has no resource.
+              # control does not send tags. The ARN id is assigned by AWS
+              # (the Name field is not part of the ARN). Create has no resource.
               - Sid: CloudFrontCreateOriginAccessControl
                 Effect: Allow
                 Action: cloudfront:CreateOriginAccessControl
@@ -441,23 +456,7 @@ Resources:
                 Effect: Allow
                 Action: cloudfront:DeleteOriginAccessControl
                 Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:origin-access-control/*"
-              # Do not retag a distribution, function, or store that already
-              # belongs to another app. Create still works: the tag is absent
-              # on a resource that does not exist yet, so this deny does not match.
-              - Sid: DenyRetagOtherCloudFront
-                Effect: Deny
-                Action:
-                  - cloudfront:TagResource
-                  - cloudfront:UntagResource
-                Resource: "*"
-                Condition:
-                  StringNotEquals:
-                    "aws:ResourceTag/sst:app": senseagri-dashboard
-                  "Null":
-                    "aws:ResourceTag/sst:app": "false"
-              # Router key writes use the key-value store data plane, which
-              # is a different IAM prefix and has no tag condition. The store
-              # ID is assigned by AWS.
+              # Router key writes. Same store-id ARN, no tag condition.
               - Sid: CloudFrontKvData
                 Effect: Allow
                 Action:
