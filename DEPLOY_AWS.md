@@ -48,21 +48,64 @@ In GitHub, on `SenseAgri-AI/Dashboard`:
 
 1. Settings → Environments → create **production**.
    - Limit deployment branches to `main`.
-   - Add required reviewers. The Deploy job waits for one of them before it
-     assumes the AWS role.
+   - Required reviewers must be set on this environment. The Deploy workflow
+     uses `environment: production`, and GitHub will not run the job until one
+     of those reviewers approves it. Do not leave the environment without
+     required reviewers.
 2. Settings → Secrets and variables → Actions → Variables → add repository variable
    `AWS_DEPLOY_ROLE_ARN` = that role ARN. It is a variable, not a secret.
 
-The deploy role can create the Lambda, CloudFront, and S3 resources SST needs.
-S3 is allowed on `*` because SST picks the site bucket name at deploy time, then
-denied on the farm buckets listed in the template (`senseagri-dev-silver`,
+The same stack creates the managed policy
+`senseagri-dashboard-permissions-boundary`. Apply this stack before
+`sst deploy`. SST attaches that policy as the permissions boundary on every
+Lambda role it creates (`$transform` in `sst.config.ts`, and again on each
+function's role). The deploy role can create or change a role only when all
+of these are true:
+
+- The role name starts with `senseagri-dashboard-`. `sst.config.ts` pins the
+  function and role names to `senseagri-dashboard-<stage>-…`. SST's own
+  generated names are truncated and would be rejected.
+- The role's permissions boundary is that policy (`iam:PermissionsBoundary`
+  on `CreateRole`, `PutRolePolicy`, `DeleteRolePolicy`, `AttachRolePolicy`,
+  `DetachRolePolicy`, and `PutRolePermissionsBoundary`).
+- The only managed policy it can attach is `AWSLambdaBasicExecutionRole`
+  (`iam:PolicyARN`).
+- `iam:PassRole` is that same name prefix, and only to `lambda.amazonaws.com`.
+
+The deploy role's own name matches the prefix. An explicit deny stops it
+editing itself or the boundary policy. It also cannot mint IAM user access
+keys. It is denied `s3` on the farm buckets (`senseagri-dev-silver`,
 `senseagri-dev-raw`, `senseagri-dev-media-inference`,
 `senseagri-dev-athena-results`, `senseagri-dev-gold`, and
-`senseagri-dev-tfstate-*`). It is also denied `dynamodb` on the push and alerts
-tables, and `ssm` on `/senseagri/*`. It cannot mint IAM user access keys or
-edit itself. It can still call other Lambdas in the account. That is the deploy
-role, not the role the app runs as. After the first deploy you can narrow the
-S3 allow to the bucket SST created.
+`senseagri-dev-tfstate-*`), `dynamodb` on the push and alerts tables, and
+`ssm` on `/senseagri/*`.
+
+Lambda, S3, CloudWatch Logs, SQS, and DynamoDB are limited to names starting
+with `senseagri-dashboard-` (plus the SST bootstrap buckets `sst-state-*` and
+`sst-asset-*`). These deploy actions stay on `*` because AWS does not support
+a resource ARN, or the ARN has no name we can prefix:
+
+| Action | Why it stays on `*` |
+|---|---|
+| `s3:ListAllMyBuckets` | No bucket resource. |
+| `lambda:ListFunctions`, `lambda:GetAccountSettings`, `lambda:ListEventSourceMappings` | No resource. |
+| `lambda:GetEventSourceMapping`, `lambda:DeleteEventSourceMapping` | Mapping ARNs are `event-source-mapping/<uuid>`. |
+| `lambda:CreateEventSourceMapping`, `lambda:UpdateEventSourceMapping` | Same UUID ARN. `lambda:FunctionArn` limits them to `function:senseagri-dashboard-*`. |
+| `cloudfront:*` | Distribution, cache-policy, and origin-access-control IDs are assigned by AWS. Create and list actions do not support resource-level permissions. |
+| `logs:DescribeLogGroups` | Account-level describe. Create and write are limited to `/aws/lambda/senseagri-dashboard-*`. |
+| `sqs:ListQueues` | No resource. Create and update are limited to `senseagri-dashboard-*`. |
+| `dynamodb:ListTables` | No resource. Create and update are limited to `table/senseagri-dashboard-*`. |
+| `acm:DescribeCertificate`, `acm:GetCertificate`, `acm:ListCertificates` | Read-only, so a later custom domain can use an existing us-east-1 certificate. This role cannot request or delete a certificate. |
+
+The boundary is the ceiling for the Lambda roles, not the deploy role. It
+allows the farm calls in the table at the bottom of this file, the OpenNext
+cache bucket, the revalidation queue, and the revalidation table. It does not
+allow IAM. Two of its actions stay on `*`: `kms:Decrypt` only when SSM in
+af-south-1 calls KMS (the key id is not in this repo), and
+`cloudfront:CreateInvalidation` (distribution IDs are assigned by AWS). The
+server role's identity policy is still the tighter grant. The boundary also
+covers the image optimizer, the ISR revalidator, and the revalidation seeder,
+which have their own roles.
 
 ## 2. Set secrets
 
@@ -123,9 +166,10 @@ Local `.env.local` still needs the Clerk keys. Local AWS calls use `~/.aws`, not
 Merge to `main` first. That runs CI only.
 
 Then Actions → **Deploy** → **Run workflow**, with the branch set to `main`.
-GitHub pauses the job until a required reviewer of the **production**
-environment approves it. After approval, the job assumes the deploy role and
-runs `npx sst deploy --stage production`.
+Required reviewers must already be set on the **production** environment.
+GitHub pauses the job until one of them approves it. An environment with no
+required reviewers does not gate the deploy. After approval, the job assumes
+the deploy role and runs `npx sst deploy --stage production`.
 
 A run started from any branch other than `main` is skipped. The deploy role
 would reject it anyway: it trusts only `refs/heads/main` in the production
@@ -136,7 +180,9 @@ binary. The server Lambda is arm64, 1536 MB, 60 second timeout, with Lambda
 response streaming turned on.
 
 SST prints a `*.cloudfront.net` URL. That is the site. The server function's
-role is created by SST and can only call the resources listed in `sst.config.ts`.
+role is created by SST, carries the permissions boundary, and can only call
+the resources listed in `sst.config.ts` plus the cache bucket, revalidation
+queue, revalidation table, and CloudFront invalidation that OpenNext adds.
 
 If the workflow fails because a secret is missing, set the secret and run the
 Deploy workflow again. That asks for approval again.
@@ -198,9 +244,11 @@ stops working the moment this key is gone.
 
 ## What the app role can do
 
-SST attaches this to the **server** function only. Image optimization and ISR
-get their own roles, limited to the cache bucket and the revalidation table
-SST creates.
+SST attaches this identity policy to the **server** function. Image
+optimization, the ISR revalidator, and the revalidation seeder get their own
+roles. Those roles are capped by the same permissions boundary. Their grants
+are the cache bucket, the revalidation queue, and the revalidation table,
+all named under `senseagri-dashboard-`.
 
 | Call | Resource |
 |---|---|

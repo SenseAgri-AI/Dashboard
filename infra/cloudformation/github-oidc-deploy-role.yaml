@@ -1,8 +1,10 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  One-time GitHub OIDC provider and deploy role for the SenseAgri dashboard.
-  Trusted only for repo SenseAgri-AI/Dashboard on main in the production
-  environment. Does not create the app runtime role; SST does that on deploy.
+  One-time GitHub OIDC provider, deploy role, and Lambda permissions boundary
+  for the SenseAgri dashboard. Trusted only for repo SenseAgri-AI/Dashboard
+  on main in the production environment. SST creates the runtime roles on
+  deploy and must attach the boundary. The boundary name is
+  senseagri-dashboard-permissions-boundary; sst.config.ts uses that name.
 
 Parameters:
   GitHubOrg:
@@ -39,6 +41,181 @@ Rules:
         AssertDescription: Set ExistingOidcProviderArn when CreateOidcProvider is false.
 
 Resources:
+  # Ceiling for every Lambda role SST creates. An identity policy can grant
+  # less than this, never more. No IAM. The two Resource "*" entries are
+  # called out in the runbook: KMS keys used by SSM have no fixed ARN here,
+  # and CloudFront distribution IDs are assigned by AWS.
+  DashboardPermissionsBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: senseagri-dashboard-permissions-boundary
+      Description: Maximum permissions for SenseAgri dashboard Lambda roles.
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: FunctionLogs
+            Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource:
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/senseagri-dashboard-*"
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/senseagri-dashboard-*:*"
+          - Sid: ReadDevParameters
+            Effect: Allow
+            Action:
+              - ssm:GetParameter
+              - ssm:GetParameters
+              - ssm:GetParametersByPath
+            Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/senseagri/dev/*"
+          - Sid: FarmConfig
+            Effect: Allow
+            Action:
+              - ssm:GetParameter
+              - ssm:GetParameters
+              - ssm:GetParametersByPath
+            Resource:
+              - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/senseagri/farms"
+              - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/senseagri/farms/*"
+          - Sid: WriteFarmConfig
+            Effect: Allow
+            Action: ssm:PutParameter
+            Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/senseagri/farms/*"
+          - Sid: LinkedSstSecrets
+            Effect: Allow
+            Action:
+              - ssm:GetParameter
+              - ssm:GetParameters
+            Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/sst/*"
+          - Sid: DecryptSsmSecureStrings
+            Effect: Allow
+            Action: kms:Decrypt
+            Resource: "*"
+            Condition:
+              StringEquals:
+                kms:ViaService: !Sub "ssm.${AWS::Region}.amazonaws.com"
+          - Sid: AthenaWorkgroup
+            Effect: Allow
+            Action:
+              - athena:StartQueryExecution
+              - athena:GetQueryExecution
+              - athena:GetQueryResults
+            Resource: !Sub "arn:aws:athena:${AWS::Region}:${AWS::AccountId}:workgroup/senseagri"
+          - Sid: GlueSilverTables
+            Effect: Allow
+            Action:
+              - glue:GetDatabase
+              - glue:GetTable
+              - glue:GetPartition
+              - glue:GetPartitions
+              - glue:BatchGetPartition
+            Resource:
+              - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog"
+              - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/senseagri_silver"
+              - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/senseagri_silver/aligned_hourly"
+              - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/senseagri_silver/meters_hourly"
+          - Sid: SilverRead
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetBucketLocation
+              - s3:GetObject
+            Resource:
+              - arn:aws:s3:::senseagri-dev-silver
+              - arn:aws:s3:::senseagri-dev-silver/*
+          - Sid: AthenaResults
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetBucketLocation
+              - s3:GetObject
+              - s3:PutObject
+              - s3:AbortMultipartUpload
+            Resource:
+              - arn:aws:s3:::senseagri-dev-athena-results
+              - arn:aws:s3:::senseagri-dev-athena-results/*
+          - Sid: MediaList
+            Effect: Allow
+            Action: s3:ListBucket
+            Resource: arn:aws:s3:::senseagri-dev-media-inference
+            Condition:
+              StringLike:
+                s3:prefix:
+                  - clips/*
+                  - events/audio/*
+          - Sid: MediaRead
+            Effect: Allow
+            Action: s3:GetObject
+            Resource:
+              - arn:aws:s3:::senseagri-dev-media-inference/clips/*
+              - arn:aws:s3:::senseagri-dev-media-inference/events/audio/*
+          - Sid: RawEventsList
+            Effect: Allow
+            Action: s3:ListBucket
+            Resource: arn:aws:s3:::senseagri-dev-raw
+            Condition:
+              StringLike:
+                s3:prefix:
+                  - raw/events/*
+          - Sid: RawEventsRead
+            Effect: Allow
+            Action: s3:GetObject
+            Resource: arn:aws:s3:::senseagri-dev-raw/raw/events/*
+          - Sid: PushSubscriptions
+            Effect: Allow
+            Action:
+              - dynamodb:PutItem
+              - dynamodb:DeleteItem
+              - dynamodb:Query
+            Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/senseagri-dev-push-subscriptions"
+          - Sid: AlertsQuery
+            Effect: Allow
+            Action: dynamodb:Query
+            Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/senseagri-dev-alerts"
+          # OpenNext cache bucket, image-optimizer reads, and ISR. SST names
+          # these resources senseagri-dashboard-<stage>-...
+          - Sid: SiteBuckets
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:ListBucket
+            Resource:
+              - arn:aws:s3:::senseagri-dashboard-*
+              - arn:aws:s3:::senseagri-dashboard-*/*
+          - Sid: RevalidationQueue
+            Effect: Allow
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:ChangeMessageVisibility
+              - sqs:GetQueueAttributes
+              - sqs:GetQueueUrl
+            Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:senseagri-dashboard-*"
+          - Sid: RevalidationTable
+            Effect: Allow
+            Action:
+              - dynamodb:BatchGetItem
+              - dynamodb:GetItem
+              - dynamodb:Query
+              - dynamodb:Scan
+              - dynamodb:ConditionCheckItem
+              - dynamodb:BatchWriteItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:DescribeTable
+            Resource:
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/senseagri-dashboard-*"
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/senseagri-dashboard-*/index/*"
+          - Sid: InvalidateThisAppsDistributions
+            Effect: Allow
+            Action: cloudfront:CreateInvalidation
+            Resource: "*"
+
   GitHubOidcProvider:
     Type: AWS::IAM::OIDCProvider
     Condition: ShouldCreateOidc
@@ -133,23 +310,67 @@ Resources:
                 Resource:
                   - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/sst/*"
               # --- App resources SST creates (Lambda, CloudFront, site bucket, ISR) ---
-              - Sid: S3SiteBuckets
+              # Bucket APIs support resource-level permissions. ListAllMyBuckets
+              # does not: it has no bucket ARN.
+              - Sid: S3AppBuckets
                 Effect: Allow
                 Action: s3:*
+                Resource:
+                  - arn:aws:s3:::senseagri-dashboard-*
+                  - arn:aws:s3:::senseagri-dashboard-*/*
+              - Sid: S3ListAllBuckets
+                Effect: Allow
+                Action: s3:ListAllMyBuckets
                 Resource: "*"
-              - Sid: LambdaDeploy
+              # Function ARNs use the name SST sets in sst.config.ts. Versions
+              # and aliases are the ":*" form. Event source mapping ARNs are
+              # UUIDs (event-source-mapping/<uuid>) and cannot carry this prefix.
+              # ListFunctions, GetAccountSettings, and ListEventSourceMappings
+              # do not support resource-level permissions.
+              - Sid: LambdaAppFunctions
                 Effect: Allow
                 Action: lambda:*
+                Resource:
+                  - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:senseagri-dashboard-*"
+                  - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:senseagri-dashboard-*:*"
+              - Sid: LambdaEventSourceMappingWrite
+                Effect: Allow
+                Action:
+                  - lambda:CreateEventSourceMapping
+                  - lambda:UpdateEventSourceMapping
                 Resource: "*"
+                Condition:
+                  StringLike:
+                    lambda:FunctionArn: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:senseagri-dashboard-*"
+              - Sid: LambdaListAndMappingIds
+                Effect: Allow
+                Action:
+                  - lambda:GetEventSourceMapping
+                  - lambda:DeleteEventSourceMapping
+                  - lambda:ListEventSourceMappings
+                  - lambda:ListFunctions
+                  - lambda:GetAccountSettings
+                Resource: "*"
+              # Distribution, cache-policy, and origin-access-control IDs are
+              # assigned by AWS and are not a name prefix. CreateDistribution,
+              # CreateCachePolicy, CreateOriginAccessControl, CreateFunction,
+              # and the List* actions do not support resource-level permissions.
               - Sid: CloudFrontDeploy
                 Effect: Allow
                 Action: cloudfront:*
                 Resource: "*"
-              - Sid: LogsDeploy
+              - Sid: LogsAppGroups
                 Effect: Allow
                 Action: logs:*
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/senseagri-dashboard-*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/senseagri-dashboard-*:*"
+              # DescribeLogGroups is account-wide and has no log-group resource.
+              - Sid: LogsDescribeGroups
+                Effect: Allow
+                Action: logs:DescribeLogGroups
                 Resource: "*"
-              - Sid: SqsControlPlane
+              - Sid: SqsAppQueues
                 Effect: Allow
                 Action:
                   - sqs:CreateQueue
@@ -157,12 +378,16 @@ Resources:
                   - sqs:GetQueueAttributes
                   - sqs:SetQueueAttributes
                   - sqs:GetQueueUrl
-                  - sqs:ListQueues
                   - sqs:TagQueue
                   - sqs:UntagQueue
                   - sqs:ListQueueTags
+                Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:senseagri-dashboard-*"
+              # ListQueues does not support resource-level permissions.
+              - Sid: SqsListQueues
+                Effect: Allow
+                Action: sqs:ListQueues
                 Resource: "*"
-              - Sid: DynamoDbControlPlane
+              - Sid: DynamoAppTables
                 Effect: Allow
                 Action:
                   - dynamodb:CreateTable
@@ -176,31 +401,71 @@ Resources:
                   - dynamodb:TagResource
                   - dynamodb:UntagResource
                   - dynamodb:ListTagsOfResource
-                  - dynamodb:ListTables
+                Resource:
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/senseagri-dashboard-*"
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/senseagri-dashboard-*/index/*"
+              # ListTables does not support resource-level permissions.
+              - Sid: DynamoListTables
+                Effect: Allow
+                Action: dynamodb:ListTables
                 Resource: "*"
-              - Sid: IamManageFunctionRoles
+              # Reads, tags, delete, and trust-policy updates. These APIs do
+              # not accept iam:PermissionsBoundary. The name prefix is the limit.
+              # senseagri-dashboard-github-deploy matches the prefix; the deny
+              # below overrides this allow.
+              - Sid: IamReadAndDeleteAppRoles
                 Effect: Allow
                 Action:
-                  - iam:CreateRole
-                  - iam:DeleteRole
                   - iam:GetRole
-                  - iam:TagRole
-                  - iam:UntagRole
-                  - iam:UpdateRole
-                  - iam:UpdateAssumeRolePolicy
-                  - iam:PutRolePolicy
                   - iam:GetRolePolicy
-                  - iam:DeleteRolePolicy
                   - iam:ListRolePolicies
-                  - iam:AttachRolePolicy
-                  - iam:DetachRolePolicy
                   - iam:ListAttachedRolePolicies
                   - iam:ListInstanceProfilesForRole
-                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/*"
+                  - iam:ListRoleTags
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:DeleteRole
+                  - iam:UpdateRole
+                  - iam:UpdateAssumeRolePolicy
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/senseagri-dashboard-*"
+              - Sid: IamCreateRoleWithBoundary
+                Effect: Allow
+                Action: iam:CreateRole
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/senseagri-dashboard-*"
+                Condition:
+                  StringEquals:
+                    iam:PermissionsBoundary: !Ref DashboardPermissionsBoundary
+              - Sid: IamPutRolePolicyWithBoundary
+                Effect: Allow
+                Action:
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/senseagri-dashboard-*"
+                Condition:
+                  StringEquals:
+                    iam:PermissionsBoundary: !Ref DashboardPermissionsBoundary
+              - Sid: IamAttachOnlyLambdaBasic
+                Effect: Allow
+                Action:
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/senseagri-dashboard-*"
+                Condition:
+                  StringEquals:
+                    iam:PermissionsBoundary: !Ref DashboardPermissionsBoundary
+                  ArnEquals:
+                    iam:PolicyARN: arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+              - Sid: IamSetPermissionsBoundary
+                Effect: Allow
+                Action: iam:PutRolePermissionsBoundary
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/senseagri-dashboard-*"
+                Condition:
+                  StringEquals:
+                    iam:PermissionsBoundary: !Ref DashboardPermissionsBoundary
               - Sid: IamPassRoleToLambda
                 Effect: Allow
                 Action: iam:PassRole
-                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/*"
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/senseagri-dashboard-*"
                 Condition:
                   StringEquals:
                     iam:PassedToService: lambda.amazonaws.com
@@ -256,11 +521,25 @@ Resources:
                 Effect: Deny
                 Action: iam:*
                 Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/senseagri-dashboard-github-deploy"
+              - Sid: DenyEditingBoundary
+                Effect: Deny
+                Action:
+                  - iam:CreatePolicyVersion
+                  - iam:DeletePolicy
+                  - iam:DeletePolicyVersion
+                  - iam:SetDefaultPolicyVersion
+                  - iam:DeleteRolePermissionsBoundary
+                Resource:
+                  - !Ref DashboardPermissionsBoundary
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/senseagri-dashboard-*"
 
 Outputs:
   DeployRoleArn:
     Description: Put this in the GitHub repository variable AWS_DEPLOY_ROLE_ARN.
     Value: !GetAtt DeployRole.Arn
+  PermissionsBoundaryArn:
+    Description: SST attaches this to every Lambda role it creates.
+    Value: !Ref DashboardPermissionsBoundary
   OidcProviderArn:
     Description: GitHub OIDC provider used by the deploy role.
     Value: !If

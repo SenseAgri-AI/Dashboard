@@ -3,8 +3,9 @@
 // SenseAgri dashboard on Lambda + CloudFront in Cape Town.
 //
 // IAM for the server function is created here (least privilege for the resources
-// the app actually calls). GitHub OIDC and the deploy role live in
-// infra/cloudformation/github-oidc-deploy-role.yaml — this file does not create them.
+// the app actually calls). GitHub OIDC, the deploy role, and the permissions
+// boundary live in infra/cloudformation/github-oidc-deploy-role.yaml. The
+// boundary policy name must stay senseagri-dashboard-permissions-boundary.
 //
 // Do not set AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY. The AWS SDK then uses the
 // Lambda execution role. Those env vars are reserved on Lambda anyway.
@@ -32,6 +33,47 @@ export default $config({
   },
   async run() {
     const { accountId } = await aws.getCallerIdentity({});
+
+    // The deploy role refuses to create a role unless this boundary is set.
+    const boundaryArn = `arn:aws:iam::${accountId}:policy/senseagri-dashboard-permissions-boundary`;
+    $transform(aws.iam.Role, (args) => {
+      args.permissionsBoundary = boundaryArn;
+    });
+
+    // SST's generated names are truncated and do not keep the
+    // senseagri-dashboard- prefix the deploy role allows. Pin the function
+    // and role names. Lambda names also fix the log group path.
+    const stagePrefix = `senseagri-dashboard-${$app.stage}`;
+    const awsName = (suffix: string) => {
+      const value = `${stagePrefix}-${suffix}`;
+      if (value.length > 64) {
+        throw new Error(`AWS name is longer than 64 characters: ${value}`);
+      }
+      return value;
+    };
+    const scopeFunction = (functionSuffix: string, roleSuffix: string) => {
+      return (args: {
+        name?: string;
+        transform?: {
+          role?: (
+            roleArgs: { name?: string; permissionsBoundary?: string },
+            opts: unknown,
+            name: string,
+          ) => void;
+        };
+      }) => {
+        args.name = awsName(functionSuffix);
+        const previous = args.transform?.role;
+        args.transform = {
+          ...args.transform,
+          role: (roleArgs, opts, name) => {
+            if (typeof previous === "function") previous(roleArgs, opts, name);
+            roleArgs.name = awsName(roleSuffix);
+            roleArgs.permissionsBoundary = boundaryArn;
+          },
+        };
+      };
+    };
 
     const clerkPublishableKey = new sst.Secret("ClerkPublishableKey");
     const clerkSecretKey = new sst.Secret("ClerkSecretKey");
@@ -186,6 +228,12 @@ export default $config({
           resources: [table(alertsTable)],
         },
       ],
+      transform: {
+        server: scopeFunction("server", "server-role"),
+        imageOptimizer: scopeFunction("image", "image-role"),
+        revalidationEventsSubscriber: scopeFunction("revalidate", "revalidate-role"),
+        revalidationSeeder: scopeFunction("seed", "seed-role"),
+      },
     });
   },
 });
