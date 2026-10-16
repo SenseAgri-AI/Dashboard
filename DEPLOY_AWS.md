@@ -48,10 +48,10 @@ In GitHub, on `SenseAgri-AI/Dashboard`:
 
 1. Settings → Environments → create **production**.
    - Limit deployment branches to `main`.
-   - Required reviewers must be set on this environment. The Deploy workflow
-     uses `environment: production`, and GitHub will not run the job until one
-     of those reviewers approves it. Do not leave the environment without
-     required reviewers.
+   - Enable required reviewers and add at least one person before any deploy.
+     The Deploy workflow uses `environment: production`. GitHub runs that job
+     with no approval when the environment has no required reviewers. Section 4
+     is the same gate, in deploy order.
 2. Settings → Secrets and variables → Actions → Variables → add repository variable
    `AWS_DEPLOY_ROLE_ARN` = that role ARN. It is a variable, not a secret.
 
@@ -94,8 +94,9 @@ call `TagResource` afterwards to attach the first tags. `TagResource` and
 tag. There is no exception for a missing tag. A `RequestTag`-only allow on
 `*` would let this role tag any untagged distribution and then update or
 delete it. AWS also lists `TagResource` as a permission of
-`CreateDistributionWithTags`, checked before a resource tag exists. That
-check is not granted, for the same reason.
+`CreateDistributionWithTags`, checked on the new distribution before
+`aws:ResourceTag` exists. That check is not granted. The first deploy is the
+bootstrap in section 4. Do not loosen `TagResource` to make the check pass.
 
 This provider does not tag CloudFront functions or key-value stores. Its
 `CreateFunction` call has no tags field, and the key-value store resource
@@ -205,13 +206,66 @@ Local `.env.local` still needs the Clerk keys. Local AWS calls use `~/.aws`, not
 
 ## 4. First deploy
 
+### Required reviewers, before any deploy
+
+GitHub → `SenseAgri-AI/Dashboard` → Settings → Environments → **production**.
+
+Enable required reviewers and add at least one person. Limit deployment
+branches to `main`.
+
+Do this before the bootstrap below and before every GitHub deploy. The Deploy
+workflow uses `environment: production`. With required reviewers set, GitHub
+pauses the job until one of them approves it. With none set, GitHub runs the
+job as soon as the workflow starts.
+
+### One-time bootstrap: the CloudFront distribution
+
+`CreateDistributionWithTags` also checks `cloudfront:TagResource` on the
+distribution being created. The OIDC role allows `TagResource` and
+`UntagResource` only when that distribution already has
+`aws:ResourceTag/sst:app` = `senseagri-dashboard`. A new distribution has no
+tag, so the condition cannot match. The first `sst deploy` run as the OIDC
+role will likely return AccessDenied on `cloudfront:TagResource`.
+
+Do not loosen `TagResource`. Do not grant it on `*` with only
+`aws:RequestTag`. That would let the role tag any untagged CloudFront
+distribution and then update or delete it.
+
+Create the distribution once with a principal that may tag a new resource.
+Later deploys use the OIDC role.
+
+1. An admin runs the first deploy with short-lived credentials, for example
+   IAM Identity Center (SSO). Use a checkout of `main`, the same account, region
+   `af-south-1`, and stage `production`. Do not use a long-lived access key,
+   and do not use the GitHub OIDC role for this run. Sections 1 and 2 are
+   already done, so the permissions boundary and the SST secrets exist.
+
+   ```bash
+   export AWS_REGION=af-south-1
+   npx sst deploy --stage production
+   ```
+
+   SST writes the `production` state from this run. Later GitHub deploys
+   update that same state.
+
+2. Or an admin creates the distribution manually and tags it
+   `sst:app=senseagri-dashboard`, then adopts it into that same `production`
+   SST state. A distribution that exists only in the console is not the one
+   SST updates. SST would still call `CreateDistributionWithTags` for its own
+   resource, and the OIDC role would fail the same `TagResource` check.
+
+After the distribution has `sst:app=senseagri-dashboard`, GitHub Actions and
+the OIDC role are how every later deploy runs. That role can update and delete
+that distribution. It still cannot tag a distribution that has no `sst:app` tag.
+
+### Later deploys
+
 Merge to `main` first. That runs CI only.
 
 Then Actions → **Deploy** → **Run workflow**, with the branch set to `main`.
-Required reviewers must already be set on the **production** environment.
-GitHub pauses the job until one of them approves it. An environment with no
-required reviewers does not gate the deploy. After approval, the job assumes
-the deploy role and runs `npx sst deploy --stage production`.
+GitHub pauses the job until a required reviewer of **production** approves it.
+After approval, the job assumes the deploy role and runs
+`npx sst deploy --stage production`.
 
 A run started from any branch other than `main` is skipped. The deploy role
 would reject it anyway: it trusts only `refs/heads/main` in the production
@@ -313,6 +367,7 @@ alerts table and, for a night-disturbance clip, the raw events prefix.
 
 ## If the first deploy complains
 
+- **AccessDenied on `cloudfront:TagResource` while creating the distribution** — expected when the OIDC role runs the first `sst deploy`. Use the one-time bootstrap in section 4. Do not loosen `TagResource`.
 - **OIDC provider already exists** — redeploy the stack with `CreateOidcProvider=false`.
 - **Athena `AccessDenied` on GetQueryExecution** — the workgroup resource scope may be too tight for that API. Say so before widening it to `*`.
 - **SSM decrypt fails** — the SecureString is probably a customer-managed key whose key policy does not trust the new role. `kms:Decrypt` in `sst.config.ts` is limited to calls that come from SSM.
