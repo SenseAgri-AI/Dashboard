@@ -333,32 +333,138 @@ Resources:
                 Resource:
                   - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:senseagri-dashboard-*"
                   - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:senseagri-dashboard-*:*"
-              - Sid: LambdaEventSourceMappingWrite
+              # Create has no mapping ARN yet. lambda:FunctionArn is the limit.
+              - Sid: LambdaCreateEventSourceMapping
                 Effect: Allow
-                Action:
-                  - lambda:CreateEventSourceMapping
-                  - lambda:UpdateEventSourceMapping
+                Action: lambda:CreateEventSourceMapping
                 Resource: "*"
                 Condition:
                   StringLike:
                     lambda:FunctionArn: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:senseagri-dashboard-*"
-              - Sid: LambdaListAndMappingIds
+              # Get, delete, and update take an event-source-mapping ARN.
+              # The UUID is not a name prefix. lambda:FunctionArn keeps them
+              # on this app's functions. List stays on * below.
+              - Sid: LambdaEventSourceMappings
                 Effect: Allow
                 Action:
                   - lambda:GetEventSourceMapping
                   - lambda:DeleteEventSourceMapping
+                  - lambda:UpdateEventSourceMapping
+                Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:event-source-mapping:*"
+                Condition:
+                  StringLike:
+                    lambda:FunctionArn: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:senseagri-dashboard-*"
+              - Sid: LambdaList
+                Effect: Allow
+                Action:
                   - lambda:ListEventSourceMappings
                   - lambda:ListFunctions
                   - lambda:GetAccountSettings
                 Resource: "*"
-              # Distribution, cache-policy, and origin-access-control IDs are
-              # assigned by AWS and are not a name prefix. CreateDistribution,
-              # CreateCachePolicy, CreateOriginAccessControl, CreateFunction,
-              # and the List* actions do not support resource-level permissions.
-              - Sid: CloudFrontDeploy
+              # Reads and lists. IDs are assigned by AWS, and the list APIs
+              # have no resource, so these stay on *.
+              - Sid: CloudFrontRead
                 Effect: Allow
-                Action: cloudfront:*
+                Action:
+                  - cloudfront:Get*
+                  - cloudfront:List*
+                  - cloudfront:Describe*
                 Resource: "*"
+              # Create has no ARN yet. SST sets default tag sst:app to the
+              # app name in sst.config.ts (senseagri-dashboard). TagResource
+              # is in this statement because CreateDistributionWithTags,
+              # CreateFunction, and CreateKeyValueStore authorize it before
+              # the resource tag exists.
+              - Sid: CloudFrontCreateTagged
+                Effect: Allow
+                Action:
+                  - cloudfront:CreateDistribution
+                  - cloudfront:CreateFunction
+                  - cloudfront:CreateKeyValueStore
+                  - cloudfront:TagResource
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    "aws:RequestTag/sst:app": senseagri-dashboard
+              - Sid: CloudFrontDistributionWrite
+                Effect: Allow
+                Action:
+                  - cloudfront:UpdateDistribution
+                  - cloudfront:DeleteDistribution
+                  - cloudfront:TagResource
+                  - cloudfront:UntagResource
+                  - cloudfront:CreateInvalidation
+                  - cloudfront:AssociateAlias
+                Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/*"
+                Condition:
+                  StringEquals:
+                    "aws:ResourceTag/sst:app": senseagri-dashboard
+              - Sid: CloudFrontFunctionWrite
+                Effect: Allow
+                Action:
+                  - cloudfront:UpdateFunction
+                  - cloudfront:PublishFunction
+                  - cloudfront:DeleteFunction
+                Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:function/*"
+                Condition:
+                  StringEquals:
+                    "aws:ResourceTag/sst:app": senseagri-dashboard
+              - Sid: CloudFrontKeyValueStoreWrite
+                Effect: Allow
+                Action:
+                  - cloudfront:UpdateKeyValueStore
+                  - cloudfront:DeleteKeyValueStore
+                Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:key-value-store/*"
+                Condition:
+                  StringEquals:
+                    "aws:ResourceTag/sst:app": senseagri-dashboard
+              # Cache policies do not support aws:RequestTag or aws:ResourceTag.
+              # Create has no resource. Update and delete can name the
+              # cache-policy ARN, but the ID is assigned by AWS.
+              - Sid: CloudFrontCreateCachePolicy
+                Effect: Allow
+                Action: cloudfront:CreateCachePolicy
+                Resource: "*"
+              - Sid: CloudFrontCachePolicyWrite
+                Effect: Allow
+                Action:
+                  - cloudfront:UpdateCachePolicy
+                  - cloudfront:DeleteCachePolicy
+                Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:cache-policy/*"
+              # Origin access controls do not support tag conditions. SST's
+              # control does not send tags. Create has no resource.
+              - Sid: CloudFrontCreateOriginAccessControl
+                Effect: Allow
+                Action: cloudfront:CreateOriginAccessControl
+                Resource: "*"
+              - Sid: CloudFrontDeleteOriginAccessControl
+                Effect: Allow
+                Action: cloudfront:DeleteOriginAccessControl
+                Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:origin-access-control/*"
+              # Do not retag a distribution, function, or store that already
+              # belongs to another app. Create still works: the tag is absent
+              # on a resource that does not exist yet, so this deny does not match.
+              - Sid: DenyRetagOtherCloudFront
+                Effect: Deny
+                Action:
+                  - cloudfront:TagResource
+                  - cloudfront:UntagResource
+                Resource: "*"
+                Condition:
+                  StringNotEquals:
+                    "aws:ResourceTag/sst:app": senseagri-dashboard
+                  "Null":
+                    "aws:ResourceTag/sst:app": "false"
+              # Router key writes use the key-value store data plane, which
+              # is a different IAM prefix and has no tag condition. The store
+              # ID is assigned by AWS.
+              - Sid: CloudFrontKvData
+                Effect: Allow
+                Action:
+                  - cloudfront-keyvaluestore:DescribeKeyValueStore
+                  - cloudfront-keyvaluestore:ListKeys
+                  - cloudfront-keyvaluestore:UpdateKeys
+                Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:key-value-store/*"
               - Sid: LogsAppGroups
                 Effect: Allow
                 Action: logs:*
@@ -409,10 +515,15 @@ Resources:
                 Effect: Allow
                 Action: dynamodb:ListTables
                 Resource: "*"
-              # Reads, tags, delete, and trust-policy updates. These APIs do
-              # not accept iam:PermissionsBoundary. The name prefix is the limit.
+              # Reads, tags, and delete. These APIs do not accept
+              # iam:PermissionsBoundary. The name prefix is the limit.
               # senseagri-dashboard-github-deploy matches the prefix; the deny
               # below overrides this allow.
+              # UpdateAssumeRolePolicy is not granted. SST 3.19 sets the trust
+              # policy in CreateRole to lambda.amazonaws.com and does not change
+              # it (Pulumi calls UpdateAssumeRolePolicy only if that document
+              # changes). IAM has no condition that can limit the replacement
+              # principal, so the action would let this role trust any caller.
               - Sid: IamReadAndDeleteAppRoles
                 Effect: Allow
                 Action:
@@ -426,7 +537,6 @@ Resources:
                   - iam:UntagRole
                   - iam:DeleteRole
                   - iam:UpdateRole
-                  - iam:UpdateAssumeRolePolicy
                 Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/senseagri-dashboard-*"
               - Sid: IamCreateRoleWithBoundary
                 Effect: Allow

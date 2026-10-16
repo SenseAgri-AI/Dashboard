@@ -82,20 +82,41 @@ keys. It is denied `s3` on the farm buckets (`senseagri-dev-silver`,
 
 Lambda, S3, CloudWatch Logs, SQS, and DynamoDB are limited to names starting
 with `senseagri-dashboard-` (plus the SST bootstrap buckets `sst-state-*` and
-`sst-asset-*`). These deploy actions stay on `*` because AWS does not support
-a resource ARN, or the ARN has no name we can prefix:
+`sst-asset-*`). CloudFront distribution update, delete, tag, invalidation,
+and alias changes require the resource tag `sst:app=senseagri-dashboard`,
+which SST sets from the app name. The same tag gates CloudFront function and
+key-value store changes. `iam:UpdateAssumeRolePolicy` is not granted: SST
+sets the trust policy to `lambda.amazonaws.com` in `CreateRole`, and IAM
+cannot constrain a later replacement principal.
+
+These deploy allows stay on `*`. Everything else is a resource ARN, a name
+prefix, or a tag condition.
 
 | Action | Why it stays on `*` |
 |---|---|
 | `s3:ListAllMyBuckets` | No bucket resource. |
-| `lambda:ListFunctions`, `lambda:GetAccountSettings`, `lambda:ListEventSourceMappings` | No resource. |
-| `lambda:GetEventSourceMapping`, `lambda:DeleteEventSourceMapping` | Mapping ARNs are `event-source-mapping/<uuid>`. |
-| `lambda:CreateEventSourceMapping`, `lambda:UpdateEventSourceMapping` | Same UUID ARN. `lambda:FunctionArn` limits them to `function:senseagri-dashboard-*`. |
-| `cloudfront:*` | Distribution, cache-policy, and origin-access-control IDs are assigned by AWS. Create and list actions do not support resource-level permissions. |
+| `lambda:ListFunctions` | No resource. |
+| `lambda:GetAccountSettings` | No resource. |
+| `lambda:ListEventSourceMappings` | No resource. Get, delete, and update use `event-source-mapping/*` plus `lambda:FunctionArn` on `function:senseagri-dashboard-*`. |
+| `lambda:CreateEventSourceMapping` | No mapping ARN yet. `lambda:FunctionArn` must be `function:senseagri-dashboard-*`. |
+| `cloudfront:Get*` | Read. Distribution, cache-policy, function, key-value store, and origin-access-control IDs are assigned by AWS. |
+| `cloudfront:List*` | List APIs have no resource, or the ID is assigned by AWS. Includes `ListTagsForResource`. |
+| `cloudfront:Describe*` | Read. `DescribeFunction` and `DescribeKeyValueStore`. Same ID limitation. |
+| `cloudfront:CreateDistribution` | No distribution ARN yet. `aws:RequestTag/sst:app` must be `senseagri-dashboard`. |
+| `cloudfront:CreateFunction` | No function ARN yet. Same request tag. |
+| `cloudfront:CreateKeyValueStore` | No store ARN yet. Same request tag. |
+| `cloudfront:TagResource` | Applied while those creates are in flight, before a resource tag exists. Same request tag. Later distribution tag changes require `aws:ResourceTag/sst:app` and are not on `*`. A deny blocks retagging a resource that already has a different `sst:app`. |
+| `cloudfront:CreateCachePolicy` | Cache policies do not support `aws:RequestTag` or `aws:ResourceTag`. Update and delete are `cache-policy/*`, still any cache policy in the account, because the ID is assigned by AWS. |
+| `cloudfront:CreateOriginAccessControl` | No tag condition, and SST does not send tags. Delete is `origin-access-control/*`. |
 | `logs:DescribeLogGroups` | Account-level describe. Create and write are limited to `/aws/lambda/senseagri-dashboard-*`. |
 | `sqs:ListQueues` | No resource. Create and update are limited to `senseagri-dashboard-*`. |
 | `dynamodb:ListTables` | No resource. Create and update are limited to `table/senseagri-dashboard-*`. |
-| `acm:DescribeCertificate`, `acm:GetCertificate`, `acm:ListCertificates` | Read-only, so a later custom domain can use an existing us-east-1 certificate. This role cannot request or delete a certificate. |
+| `acm:DescribeCertificate`, `acm:GetCertificate`, `acm:ListCertificates` | Read-only. Certificate ARNs are not a name prefix. This role cannot request or delete a certificate. |
+
+Router key writes are `cloudfront-keyvaluestore:DescribeKeyValueStore`,
+`ListKeys`, and `UpdateKeys` on `key-value-store/*`. That API has no tag
+condition. The store ID is assigned by AWS, so the resource is every key
+value store in the account, not `*`.
 
 The boundary is the ceiling for the Lambda roles, not the deploy role. It
 allows the farm calls in the table at the bottom of this file, the OpenNext

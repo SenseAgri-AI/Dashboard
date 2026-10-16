@@ -23,6 +23,9 @@ const SERVER_ARCHITECTURE = "arm64" as const;
 export default $config({
   app(input) {
     return {
+      // The deploy role's CloudFront conditions require the default tag
+      // sst:app to equal this name. SST sets that tag. Do not rename it
+      // without updating infra/cloudformation/github-oidc-deploy-role.yaml.
       name: "senseagri-dashboard",
       removal: input?.stage === "production" ? "retain" : "remove",
       home: "aws",
