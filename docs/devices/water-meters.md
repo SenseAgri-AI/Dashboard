@@ -44,5 +44,5 @@ The devices were installed around 13 April 2026. Data before installation is not
 ## Related references
 
 - `../calculations/water-deviation-alerts.md`
-- `../../DATA_ACCESS.md` for access examples; note its app-usage statement is older than the current silver reader
+- `../../DATA_ACCESS.md` for Influx access examples. The dashboard total is `fetchMetersDaily` in `src/lib/silverSource.ts`, not a single meter id
 - Platform `pipeline/meters_to_silver.py`
