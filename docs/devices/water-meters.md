@@ -1,6 +1,6 @@
 # Water meters
 
-Last reviewed: 2026-09-27.
+Last reviewed: 2026-10-29.
 
 ## Physical setup
 
@@ -11,7 +11,9 @@ Last reviewed: 2026-09-27.
 | Water Meter 1 | `24e124136f451854` | `water_l_wm1` | 10 L per pulse |
 | Water Meter 2 | `24e124136f456303` | `water_l_wm2` | 10 L per pulse |
 
-The platform meter pipeline currently carries this mapping. The platform device registry has conflicting role/enabled metadata and needs physical verification before it is treated as authoritative for these two assignments.
+Dylan confirmed on 2026-10-29 that these two meters are the ones in use. The platform registry lists both as `water_meter`, `enabled: true`, which matches the meter pipeline (see platform PR 28).
+
+The house's other two EM300s, `24e124136f458449` and `24e124136f452271`, are feed (auger) meters. They are installed but unreliable, so their data is not used. The registry marks them `feed_meter`, `enabled: false`. The pipeline still writes `feed_pulses_auger1` and `feed_pulses_auger2`, and those columns should be treated as unreliable.
 
 ## How to interpret readings
 
