@@ -14,7 +14,7 @@ Use this map before adding a query. Status labels mean:
 | Silo radar | InfluxDB `sensors` / `EM411-RDL` | Raw S3 exists; dashboard historical contract is incomplete | Platform LNX ingestion | Implemented hot path; historical work needs verification |
 | Egg production and mortality | Google DailyLog | Athena aligned silver data | Sheet ingestion/silver pipeline | Implemented |
 | Push subscriptions | Application database | Same application database | Dashboard API | Implemented |
-| Alert evaluations | Dashboard rules/API and platform scheduled jobs, depending on alert | Alert-specific | Both repositories | Verify the owner in each alert specification |
+| Alert evaluations | DynamoDB `senseagri-dev-alerts` (`ALERTS_TABLE`) read by `/api/alerts` | Same table | Platform hourly notifier writes the rows. Dashboard `src/lib/alerts.ts` only maps them. Legacy fallback: `src/lib/legacyAlertReader.ts` when that farm has no notifier heartbeat and `ALERTS_REQUIRE_SHARED` is not `true` | Reader implemented. Which path is live depends on the heartbeat and the Vercel env var; this repo does not show that |
 
 ## Choosing a source
 

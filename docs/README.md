@@ -27,19 +27,23 @@ Repository agents must also follow [`AGENTS.md`](../AGENTS.md).
 
 ## Alerts
 
-- **[alerts-spec.md](../alerts-spec.md)** — the full alert catalogue. Each alert's fire condition, the
-  message the farmer gets, and its detection logic. Built (v1) so far: **power/connectivity**,
-  **daily-log overdue**, **night disturbance**, **poor flock sleep**. Climate/ventilation/production
-  rules are specced but not yet built.
+- **[alerts-spec.md](../alerts-spec.md)** — the alert catalogue (fire condition, farmer message, detection notes).
 
-  The alerts run in [`src/lib/alerts.ts`](../src/lib/alerts.ts) (pure rule functions) and
-  [`/api/alerts`](../src/app/api/alerts/route.ts) (farm-scoped data fetch + evaluation). Rules are pure
-  so they're easy to reason about and to hand to the platform, which owns the WhatsApp/Twilio send.
+  Rules run in the **senseagri-platform hourly notifier**, which writes DynamoDB `senseagri-dev-alerts`.
+  The dashboard reads that table in [`/api/alerts`](../src/app/api/alerts/route.ts).
+  [`src/lib/alerts.ts`](../src/lib/alerts.ts) only maps a stored row (`storedAlert`). It does not evaluate rules.
+  If the farm has no notifier heartbeat and `ALERTS_REQUIRE_SHARED` is not `true`, the route falls back to
+  [`src/lib/legacyAlertReader.ts`](../src/lib/legacyAlertReader.ts) / [`src/lib/legacyAlerts.ts`](../src/lib/legacyAlerts.ts).
+  That fallback includes **power/connectivity**, **daily-log overdue**, **heat stress**, **night disturbance**,
+  and **poor flock sleep**. Ventilation and production rules in the spec are not implemented in this repo.
+  Water-deviation alerts are an approved design ([calculations/water-deviation-alerts.md](calculations/water-deviation-alerts.md)),
+  not a dashboard rule, and this repo does not show whether the platform notifier runs them.
+  Outbound delivery in this repo is **push** ([`src/lib/push.ts`](../src/lib/push.ts)). WhatsApp is planned and not live.
 
 ## Features
 
 - **[flock-night-rest-score.md](flock-night-rest-score.md)** — the flock **sleep score** (0–100): the
-  dark-period window, the −32 dBFS disruption line, the four-component formula, the score bands, the
+  dark-period window, the −32 dBFS disruption line, the six-factor formula, the score bands, the
   dashboard tile, the poor-sleep alert, and the validation.
 
 ## Conventions
