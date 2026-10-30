@@ -74,7 +74,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Failed to prepare clip for playback" }, { status: 500 });
   }
 
-  const total = (await fs.stat(outPath)).size;
+  // Runtime file under os.tmpdir(), not a project path. Without the ignore, Next traces the whole repo into the function.
+  const total = (await fs.stat(/*turbopackIgnore: true*/ outPath)).size;
   const headers: Record<string, string> = {
     "Content-Type": "video/mp4",
     "Accept-Ranges": "bytes",
@@ -90,7 +91,7 @@ export async function GET(req: NextRequest) {
       return new Response(null, { status: 416, headers: { ...headers, "Content-Range": `bytes */${total}` } });
     }
     const len = end - start + 1;
-    const fh = await fs.open(outPath, "r");
+    const fh = await fs.open(/*turbopackIgnore: true*/ outPath, "r");
     try {
       const buf = Buffer.alloc(len);
       await fh.read(buf, 0, len, start);
@@ -103,6 +104,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const buf = await fs.readFile(outPath);
+  const buf = await fs.readFile(/*turbopackIgnore: true*/ outPath);
   return new Response(buf, { status: 200, headers: { ...headers, "Content-Length": String(total) } });
 }
