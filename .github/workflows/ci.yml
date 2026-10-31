@@ -46,12 +46,5 @@ jobs:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2kucGxhY2Vob2xkZXIuY29tJA
           CLERK_SECRET_KEY: sk_test_placeholder
 
-      # TODO: Remove continue-on-error once the Next.js upgrade lands (separate PR).
-      # `npm audit --audit-level=high` still exits non-zero on next@16.2.4 (critical)
-      # and on the nested postcss and sharp copies. npm reports the fix for all
-      # three as installing next@16.4.3, which is outside this repo's pinned next.
-      # In-range advisories are already applied in the lockfile. This step stays
-      # visible and non-blocking so CI can go green until that upgrade.
       - name: Audit
-        continue-on-error: true
         run: npm audit --audit-level=high

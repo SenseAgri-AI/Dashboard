@@ -11,7 +11,7 @@ Status check name: `ci`.
 - `npm run typecheck` — `tsc --noEmit`
 - `npm run test` — `node --test tests/*.mjs`
 - `npm run build` — production build with placeholder Clerk keys, not production secrets
-- `npm audit --audit-level=high` — temporarily non-blocking. The remaining high and critical findings are `next@16.2.4` and the nested `postcss` and `sharp` copies, which npm only clears by installing a newer Next.js. That upgrade is a separate pull request. See the TODO in `.github/workflows/ci.yml`.
+- `npm audit --audit-level=high` — fails the check when a high or critical advisory is present. Next.js is `16.4.3`. Moderate `minimatch` findings in the ESLint toolchain remain and do not fail this threshold.
 
 Node.js is pinned to 22 LTS (`engines` in `package.json` and `.nvmrc`).
 
