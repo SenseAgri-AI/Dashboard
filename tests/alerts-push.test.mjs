@@ -7,12 +7,12 @@ import ts from 'typescript';
 function load(file, mocks = {}, globals = {}) {
   const source = fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const module = { exports: {} };
-  vm.runInNewContext(js, { module, exports: module.exports, require: (name) => {
+  const loaded = { exports: {} };
+  vm.runInNewContext(js, { module: loaded, exports: loaded.exports, require: (name) => {
     if (!(name in mocks)) throw Error(`Unexpected import ${name}`);
     return mocks[name];
   }, process, Buffer, URL, Date, setTimeout, clearTimeout, console: { error() {} }, ...globals });
-  return module.exports;
+  return loaded.exports;
 }
 const presentation = load('src/lib/alerts.ts');
 const validation = load('src/lib/pushValidation.ts');

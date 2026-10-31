@@ -6,9 +6,9 @@ import ts from 'typescript';
 
 const source = fs.readFileSync(new URL('../src/lib/chartWindow.ts', import.meta.url), 'utf8');
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-const module = { exports: {} };
-vm.runInNewContext(js, { module, exports: module.exports });
-const { chartWindow } = module.exports;
+const loaded = { exports: {} };
+vm.runInNewContext(js, { module: loaded, exports: loaded.exports });
+const { chartWindow } = loaded.exports;
 
 test('zoom excludes the annual spike from scale input and reset restores it', () => {
   const rows = [{ t: 1, breakages: 160 }, { t: 2, breakages: 0.9 }, { t: 3, breakages: 1.2 }, { t: 4, breakages: 0.8 }];
