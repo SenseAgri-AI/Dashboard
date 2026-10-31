@@ -4,6 +4,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      next:
+        patterns:
+          - next
+          - eslint-config-next
   - package-ecosystem: github-actions
     directory: /
     schedule:
