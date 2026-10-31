@@ -1,0 +1,5 @@
+# Last matching pattern wins. These paths cover request handlers, shared
+# data access, and the behavior docs that those handlers must follow.
+/src/app/api/ @DylanGeldenhuys
+/src/lib/ @DylanGeldenhuys
+/docs/ @DylanGeldenhuys

@@ -2,11 +2,16 @@
   "name": "senseagri-dashboard",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.mjs",
     "test:alerts": "node --test tests/alerts-push.test.mjs"
   },
   "dependencies": {

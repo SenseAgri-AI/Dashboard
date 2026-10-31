@@ -10,6 +10,7 @@ the code links back to it.
 - **[Product invariants](PRODUCT_INVARIANTS.md)** — behavior and data meanings that must survive feature work.
 - **[Data sources](DATA_SOURCES.md)** — where each dataset lives, which repository owns it, and how to choose a source.
 - **[Handover template](HANDOVER_TEMPLATE.md)** — required context when work moves to a fresh agent or session.
+- **[Engineering standards](ENGINEERING_STANDARDS.md)** — required CI checks, review, and pull-request size.
 
 Repository agents must also follow [`AGENTS.md`](../AGENTS.md).
 
