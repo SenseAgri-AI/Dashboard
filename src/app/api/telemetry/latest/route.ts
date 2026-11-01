@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryInflux } from "@/lib/influxdb";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
+import { checkTelemetryParams, LATEST_FIELDS } from "@/lib/telemetryParams";
+import { farmOwnsDevice } from "@/lib/telemetryOwnership";
 
 export async function GET(req: NextRequest) {
   let farm;
@@ -14,19 +16,17 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const deviceId = searchParams.get("device_id");
-  const deviceType = searchParams.get("device_type");
-
-  if (!deviceId || !deviceType) {
-    return NextResponse.json({ error: "device_id and device_type required" }, { status: 400 });
+  const params = checkTelemetryParams(
+    { deviceId: searchParams.get("device_id"), deviceType: searchParams.get("device_type") },
+    false,
+  );
+  if (!params.ok) return NextResponse.json({ error: params.error }, { status: params.status });
+  const { deviceId, deviceType } = params;
+  if (!(await farmOwnsDevice(farm, deviceId, deviceType))) {
+    return NextResponse.json({ error: "Device not found for this farm" }, { status: 404 });
   }
 
-  let selectFields: string;
-  if (deviceType === "AM308-1") {
-    selectFields = "time, temperature, humidity, co2, tvoc, pressure, pm2_5, pm10, light_level, battery";
-  } else {
-    selectFields = "time, temperature, humidity, battery, pulse_total, pulse_conv, pulse_unit_conv";
-  }
+  const selectFields = LATEST_FIELDS[deviceType];
 
   const rows = await queryInflux(`
     SELECT ${selectFields}
