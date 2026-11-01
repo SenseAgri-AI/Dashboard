@@ -94,6 +94,8 @@ export type DayOutlook = { label: string; dayMax: number | null; nightMin: numbe
 export type VentView = {
   insideNow: { tempC: number; rhPct: number | null; feltC: number | null; chillEstC: number | null; co2: number | null; at: number } | null;
   outsideNow: number | null;
+  /** Time of the newest inside temperature, even when too old for "now" (so a stale sensor can say how old). */
+  insideLastAt: number | null;
   today: PeriodRow | null;     // current or next daylight period
   tonight: PeriodRow | null;   // the night after it (inside = the previous night, measured)
   outlook: DayOutlook[];       // next 3 days, starting today
@@ -306,7 +308,7 @@ export function buildVentilation(input: VentInput): VentView {
 
   const order: Record<Prompt["level"], number> = { act: 0, plan: 1 };
   prompts.sort((a, b) => order[a.level] - order[b.level]);
-  return { insideNow, outsideNow, today, tonight, outlook, prompts, hasForecast: hours.length > 0 };
+  return { insideNow, outsideNow, insideLastAt: last?.t ?? null, today, tonight, outlook, prompts, hasForecast: hours.length > 0 };
 }
 
 /** Parse an Open-Meteo `/v1/forecast` response requested with `timeformat=unixtime`. */

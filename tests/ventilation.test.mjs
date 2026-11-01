@@ -65,6 +65,9 @@ test('inside now: felt temperature and the chill estimate (felt − 3 °C)', () 
   // stale inside (> 90 min) is not shown as "now"
   const stale = inside(calmInside).filter((x) => x.t < NOW - 2 * H);
   assert.equal(view(outside(sine(14, 24)), stale).insideNow, null);
+  // ...but the page can still say how old the last reading is
+  assert.equal(view(outside(sine(14, 24)), stale).insideLastAt, stale.at(-1).t);
+  assert.equal(view(outside(sine(14, 24)), []).insideLastAt, null);
 });
 
 test('hot afternoon: fans before the heat, only while heat is still ahead', () => {

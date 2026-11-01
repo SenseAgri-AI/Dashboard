@@ -79,7 +79,7 @@ export default function VentilationView({ data, now, narrow = false }: { data: V
             <Stat label="Chill estimate" value={v.insideNow.chillEstC != null ? `≈${fmt(v.insideNow.chillEstC)}` : "–"} sub={`feels (≤ actual) − ${t.chillOffsetC} °C, rough`} />
             <Stat label="CO₂" value={v.insideNow.co2 != null ? `${v.insideNow.co2.toLocaleString("en-ZA")}` : "–"} sub="ppm" />
           </div>
-        ) : <div style={{ fontSize: 13, color: MUTED }}>No recent inside reading (last 90 min).</div>}
+        ) : <InsideStale lastAt={v.insideLastAt} now={now} offset={data.offsetHours} />}
       </section>
 
       {/* Today & tonight */}
@@ -108,6 +108,18 @@ export default function VentilationView({ data, now, narrow = false }: { data: V
       )}
 
       <TempChart data={data} now={now} narrow={narrow} />
+    </div>
+  );
+}
+
+// Story: when the climate sensor stops, show how old the last reading is so I don't trust old numbers.
+function InsideStale({ lastAt, now, offset }: { lastAt: number | null; now: number; offset: number }) {
+  const h = lastAt != null ? (now - lastAt) / H : null;
+  const age = h == null ? null : h < 36 ? `${Math.max(2, Math.round(h))} h ago` : `${Math.round(h / 24)} days ago`;
+  return (
+    <div style={{ fontSize: 13, color: "var(--warn)", background: "var(--warn-bg)", borderRadius: 8, padding: "8px 10px" }}>
+      {lastAt == null ? "No inside readings in the last 8 days." : `No inside reading since ${h! >= 20 ? `${new Date(lastAt + offset * H).toLocaleDateString("en-ZA", { timeZone: "UTC", day: "numeric", month: "short" })} ` : ""}${localHHMM(lastAt, offset)} (${age}).`}
+      {" "}Check the climate sensor and gateway power. The numbers below may be old.
     </div>
   );
 }
