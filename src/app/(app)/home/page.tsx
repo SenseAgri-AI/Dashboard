@@ -19,6 +19,10 @@ type Production = {
 } | null;
 type Health = { health: number; word: string; label: "good" | "normal" | "warning" | "danger" } | null;
 
+/** "2026-10-31" → "31 Oct" (the log date the egg count is from). */
+const shortDate = (d?: string | null) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d)
+  ? new Date(`${d}T00:00:00Z`).toLocaleDateString("en-ZA", { timeZone: "UTC", day: "numeric", month: "short" }) : "—");
+
 const todayInSast = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Johannesburg" }).format(new Date());
 
 function flockWeeks(startDate: string, startAgeDays: number): number | null {
@@ -123,7 +127,7 @@ export default function HomePage() {
         <div style={{ padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
           <Stat label="Houses" value={String(houses.length)} />
           <Stat label="Live hens" value={prod ? prod.totalHens.toLocaleString() : "—"} />
-          <Stat label={`Eggs (${prod?.date ?? "—"})`} value={prod ? prod.eggs.total.toLocaleString() : "—"} />
+          <Stat label={`Eggs (${shortDate(prod?.date)})`} value={prod ? prod.eggs.total.toLocaleString() : "—"} />
           <Stat label="Hen-day %" value={prod?.hdep != null ? `${prod.hdep}%` : "—"} />
           <Stat label="Mortality rate" value={prod?.mortality.rate != null ? `${prod.mortality.rate}%` : "—"} />
         </div>
