@@ -24,4 +24,4 @@ Constants (`src/lib/feedSanity.ts`, tested in `tests/feed-sanity.test.mjs`): typ
 
 If the delivery list fails to load, the table says "Couldn't load deliveries, so don't re-enter them yet" with a
 **Try again** link, and "Loading deliveries…" while it loads. It used to say "No deliveries logged yet",
-which could lead a farmer to log the same delivery twice.
+which could lead a farmer to log the same delivery twice. The same empty row (`src/components/ListEmptyRow.tsx`) is used by the Events tab and the Daily log page, where a false "No entries yet" could cause duplicate egg and mortality entries.

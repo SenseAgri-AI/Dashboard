@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import ListEmptyRow, { type LoadState } from "./ListEmptyRow";
 import { deliveryWarning, intakeBetweenDeliveries, parseFeedWeightKg, LAYER_INTAKE_G } from "@/lib/feedSanity";
 import HouseSelect, { houseLabel } from "@/components/HouseSelect";
 
@@ -38,7 +39,7 @@ export default function FeedTab() {
 
   // As a farmer, when the list fails to load I want to be told, not shown "No deliveries logged yet",
   // so I don't log the same delivery twice.
-  const [loadState, setLoadState] = useState<"loading" | "ok" | "error">("loading");
+  const [loadState, setLoadState] = useState<LoadState>("loading");
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/feed");
@@ -173,13 +174,7 @@ export default function FeedTab() {
                   </td>
                 </tr>
               ))}
-              {recent.length === 0 && (
-                <tr><td colSpan={12} style={{ padding: "20px 12px", color: loadState === "error" ? "var(--warn)" : "var(--t3)", textAlign: "center" }}>
-                  {loadState === "loading" ? "Loading deliveries…"
-                    : loadState === "error" ? <>Couldn&apos;t load deliveries, so don&apos;t re-enter them yet. <button onClick={() => { setLoadState("loading"); load(); }} style={{ background: "transparent", border: "none", color: "var(--teal, #2A8E9A)", fontWeight: 700, cursor: "pointer", padding: 0 }}>Try again</button></>
-                    : "No deliveries logged yet."}
-                </td></tr>
-              )}
+              {recent.length === 0 && <ListEmptyRow state={loadState} colSpan={12} what="deliveries" empty="No deliveries logged yet." onRetry={() => { setLoadState("loading"); load(); }} />}
             </tbody>
           </table>
         </div>
