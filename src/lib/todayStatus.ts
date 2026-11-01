@@ -31,6 +31,12 @@ export type TodayThresholds = {
    *  previous `baselineDays`. Red: the last 7 logged days total at least `weekMin` and at least
    *  `weekFactor` × the prior weekly rate (mean of the `priorWeeks` weeks before). */
   mortality: { minDeaths: number; dayFactor: number; baselineDays: number; weekMin: number; weekFactor: number; priorWeeks: number };
+  /** Water use against the flock's own recent normal (daily litres from the silver meter table).
+   *  Farm: amber when each of the last `amberDays` complete days is below `frac` × the median of the
+   *  `baselineDays` days before them (needs `minBaselineDays` valid days and a median of at least
+   *  `minBaselineL`); red after `redDays`. Line: one meter's latest day is below `lineFrac` × its own
+   *  median while the other meter is at least `otherFrac` × its median (one drinker line, not the flock). */
+  waterDrop: { frac: number; amberDays: number; redDays: number; baselineDays: number; minBaselineDays: number; minBaselineL: number; lineFrac: number; otherFrac: number; minLineBaselineL: number; maxAgeDays: number };
   /** Farm alert ids (prefix) that may raise the Birds line. Night-disturbance is deliberately excluded. */
   birdsAlertTypes: string[];
 };
@@ -59,6 +65,9 @@ export const DEFAULT_TODAY_THRESHOLDS: TodayThresholds = {
   hdepDrop: { pts: 5, amberDays: 2, redDays: 3, baselineDays: 7, minBaselineDays: 3, plausibleMinPct: 20, plausibleMaxPct: 100 },
   // Backtest: day rule 2 days a year; week rule 1 episode. Few real events to validate against.
   mortality: { minDeaths: 3, dayFactor: 2, baselineDays: 7, weekMin: 7, weekFactor: 2, priorWeeks: 4 },
+  // Backtest (Apr–Oct 2026, docs/water-use-check.md): farm rule 10 amber / 5 red days, nearly all in
+  // the 9–23 Oct drop; the line rule fired twice, incl. the 17 Sep day Meter 1 read 0 L. PROVISIONAL.
+  waterDrop: { frac: 0.7, amberDays: 2, redDays: 3, baselineDays: 14, minBaselineDays: 10, minBaselineL: 300, lineFrac: 0.3, otherFrac: 0.7, minLineBaselineL: 100, maxAgeDays: 2 },
   // night_disturbance fired 17 times in 7 weeks; only the 2-night poor-sleep rule affects Birds.
   birdsAlertTypes: ["sleep_decline"],
 };
@@ -145,6 +154,8 @@ export type DailyRow = { date: string; eggs: number; hdep: number | null; mortal
 export type FarmAlert = { id: string; category: string; severity: "info" | "warning" | "danger"; title: string };
 export type SiloState = { name: string; low: boolean };
 export type WaterMeterFreshness = { name: string; lastMs: number | null | undefined };
+/** One complete day of water use per meter (litres). null = that meter had too few hourly rows. */
+export type WaterDay = { date: string; meters: (number | null)[] };
 export type SeriesPoint = { time: string; value: number };
 /** Home attention-list items (src/lib/attention.ts) folded into the card. */
 export type ExtraItem = { id: string; severity: "info" | "warning" | "danger"; title: string; detail: string };
@@ -156,6 +167,10 @@ export type TodayInput = {
   lastLogDate?: string | null;
   /** Latest-hour climate averages + 24 h temperature and CO₂ series (30-min buckets). undefined = failed. */
   climate?: { temperatureC: number | null; humidityPct: number | null; co2Series: SeriesPoint[]; tempSeries?: SeriesPoint[] };
+  /** Daily litres per water meter, oldest first, complete days only. undefined = failed / not loaded. */
+  waterDays?: WaterDay[];
+  /** Names matching `WaterDay.meters`, e.g. ["Meter 1", "Meter 2"]. */
+  waterMeterNames?: string[];
   /** undefined = freshness endpoint failed. */
   climateLastMs?: number | null;
   /** Last reading per silo radar; lastMs undefined = that check failed. */
@@ -328,9 +343,69 @@ export function climateLine(input: TodayInput, t: TodayThresholds): TodayLine {
   return withAlerts({ ...base, rag, text: parts.join(" · "), action }, alerts, "Cool the house now");
 }
 
-/** Story: when a water line fails, tell me which A-frame. Shown only on a problem. */
-export function waterLine(input: TodayInput): TodayLine {
-  const line: TodayLine = { key: "water", label: "Water", rag: "green", text: "", action: "" };
+const litres = (l: number) => `${Math.round(l).toLocaleString("en-ZA")} L`;
+
+/** Median of up to `n` valid values before index `i` (null when fewer than `min`). */
+function baselineBefore(vals: (number | null)[], i: number, n: number, min: number): number | null {
+  const v = vals.slice(Math.max(0, i - n), Math.max(0, i)).filter((x): x is number => x != null && Number.isFinite(x));
+  return v.length >= min ? median(v) : null;
+}
+
+/** Water use against the flock's own normal. Pure; `null` = nothing unusual or not enough data. */
+export function waterUseCheck(days: WaterDay[] | undefined, now: number, t: TodayThresholds = DEFAULT_TODAY_THRESHOLDS,
+  names: string[] = [], offsetHours = 2): { rag: Rag; text: string; action: string } | null {
+  const w = t.waterDrop;
+  const rows = (days ?? []).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.date)).sort((a, b) => a.date.localeCompare(b.date));
+  if (!rows.length) return null;
+  const age = daysSinceLog(rows[rows.length - 1].date, now, offsetHours);
+  if (age == null || age > w.maxAgeDays) return null; // old data: the Sensors line covers it, never a "drop"
+  const total = rows.map((d) => (d.meters.length && d.meters.every((m) => m != null) ? d.meters.reduce<number>((a, m) => a + (m ?? 0), 0) : null));
+  const last = rows.length - 1;
+
+  // Farm: a run of low days, each against the same baseline from before the run.
+  let run = 0;
+  let runBase: number | null = null;
+  for (let k = 1; k <= Math.min(w.redDays, rows.length); k++) {
+    const b = baselineBefore(total, rows.length - k, w.baselineDays, w.minBaselineDays);
+    if (b == null || b < w.minBaselineL) break;
+    const win = total.slice(rows.length - k);
+    if (win.every((v) => v != null && v < w.frac * b)) { run = k; runBase = b; } else break;
+  }
+  if (run >= w.amberDays && runBase != null) {
+    const win = total.slice(rows.length - run) as number[];
+    const avg = win.reduce((a, v) => a + v, 0) / win.length;
+    const pct = Math.round((1 - avg / runBase) * 100);
+    return {
+      rag: run >= w.redDays ? "red" : "amber",
+      text: `Down ${pct}% on usual for ${run} days: ${litres(avg)}/day vs ~${litres(runBase)}`,
+      action: "Early warning: check drinkers, pressure and the birds",
+    };
+  }
+
+  // One line: a meter far below its own normal while the other is normal.
+  const n = rows[last].meters.length;
+  for (let m = 0; m < n && n >= 2; m++) {
+    const vals = rows.map((d) => d.meters[m] ?? null);
+    const v = vals[last];
+    const b = baselineBefore(vals, last, w.baselineDays, w.minBaselineDays);
+    if (v == null || b == null || b < w.minLineBaselineL || !(v < w.lineFrac * b)) continue;
+    const othersOk = rows[last].meters.every((o, j) => {
+      if (j === m) return true;
+      const ob = baselineBefore(rows.map((d) => d.meters[j] ?? null), last, w.baselineDays, w.minBaselineDays);
+      return o != null && ob != null && o >= w.otherFrac * ob;
+    });
+    if (!othersOk) continue;
+    const name = names[m] || `Meter ${m + 1}`;
+    return { rag: "amber", text: `${name} used ${litres(v)} on ${rows[last].date.slice(5)} vs ~${litres(b)} usual; the other line was normal`, action: "Early warning: check that drinker line and pressure" };
+  }
+  return null;
+}
+
+/** Story: when the birds drink much less than their own normal, or one drinker line goes quiet, tell me
+ *  early so I check drinkers, pressure and the birds. Also a firing platform water alert. Shown only on a problem. */
+export function waterLine(input: TodayInput, t: TodayThresholds = DEFAULT_TODAY_THRESHOLDS): TodayLine {
+  const use = waterUseCheck(input.waterDays, input.now, t, input.waterMeterNames, input.offsetHours ?? 2);
+  const line: TodayLine = use ? { key: "water", label: "Water", ...use } : { key: "water", label: "Water", rag: "green", text: "", action: "" };
   return withAlerts(line, alertsFor(input.alerts, "water"), "Check water supply and pressure");
 }
 
@@ -369,7 +444,7 @@ export type TodayResult = {
 export function buildToday(input: TodayInput, overrides?: unknown): TodayResult {
   const t = mergeThresholds(overrides);
   const always = [birdsLine(input, t), climateLine(input, t)].filter((l) => l.rag !== "unknown");
-  const onProblem = [waterLine(input), siloLine(input), dataLine(input, t)].filter((l) => needsYou(l.rag));
+  const onProblem = [waterLine(input, t), siloLine(input), dataLine(input, t)].filter((l) => needsYou(l.rag));
   const extras: TodayLine[] = (input.extras ?? [])
     .filter((e) => e.severity !== "info" && e.id !== "daily-log") // the Birds line already nudges the log
     .map((e) => ({ key: `extra:${e.id}`, label: "Farm", rag: e.severity === "danger" ? "red" : "amber", text: e.title, action: e.detail }));
@@ -378,7 +453,7 @@ export function buildToday(input: TodayInput, overrides?: unknown): TodayResult 
   const someChecksFailed = input.daily === undefined || input.climate === undefined || input.silos === undefined
     || input.alerts === undefined || input.climateLastMs === undefined
     || input.siloRadars === undefined || input.siloRadars.some((r) => r.lastMs === undefined)
-    || input.waterMeters === undefined || input.waterMeters.some((m) => m.lastMs === undefined);
+    || input.waterMeters === undefined || input.waterDays === undefined || input.waterMeters.some((m) => m.lastMs === undefined);
   const headline = problems === 0 ? (someChecksFailed ? "Nothing flagged" : "All good")
     : `${problems} ${problems === 1 ? "thing needs" : "things need"} you today`;
   return { headline, problems, lines, someChecksFailed };

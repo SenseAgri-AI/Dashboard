@@ -28,7 +28,7 @@ const co2 = (...vals) => vals.map((v, i) => ({ time: iso(30 * (vals.length - 1 -
 const base = (extra = {}) => ({ now: NOW, daily: [...week, day('2026-10-30', 92, 1)], lastLogDate: '2026-10-30',
   climate: { temperatureC: 24, humidityPct: 60, co2Series: co2(600, 650, 700) },
   climateLastMs: min(3), siloRadars: [{ name: 'Silo 1', lastMs: min(120) }, { name: 'Silo 2', lastMs: min(200) }],
-  waterMeters: [{ name: 'A-frame 1', lastMs: min(20) }, { name: 'A-frame 2', lastMs: min(20) }],
+  waterMeters: [{ name: 'A-frame 1', lastMs: min(20) }, { name: 'A-frame 2', lastMs: min(20) }], waterDays: [],
   silos: [{ name: 'Silo 1', low: false }], alerts: [], extras: [], ...extra });
 const today = (extra) => T.buildToday(base(extra));
 const line = (r, key) => r.lines.find((l) => l.key === key);
@@ -244,4 +244,62 @@ test('alerts raise a line but never lower it; info alerts and info extras stay q
   assert.equal(hot.rag, 'red');
   const extra = today({ extras: [{ id: 'new_rule', severity: 'warning', title: 'Something', detail: 'Do this' }] });
   assert.equal(line(extra, 'extra:new_rule').action, 'Do this');
+});
+
+// ── Water use vs the flock's own normal ──────────────────────────────────────
+// NOW = 31 Oct 12:00 SAST, so the latest complete UTC day is 30 Oct.
+const wdays = (vals) => vals.map((m, i) => ({ date: new Date(Date.parse('2026-10-30T00:00:00Z') - (vals.length - 1 - i) * 86_400_000).toISOString().slice(0, 10), meters: m }));
+const normal = Array.from({ length: 14 }, () => [500, 500]);
+const water = (tail, extra = {}) => line(today({ waterDays: wdays([...normal, ...tail]), waterMeterNames: ['Meter 1', 'Meter 2'], ...extra }), 'water');
+
+test('water: normal use shows no line', () => {
+  assert.equal(water([[480, 520], [450, 500]]), undefined);
+});
+
+test('water: one low day is not enough for the farm rule', () => {
+  assert.equal(water([[500, 500], [300, 300]]), undefined);
+});
+
+test('water: two low days -> amber early warning with litres and baseline', () => {
+  const l = water([[300, 300], [320, 280]]);
+  assert.equal(l.rag, 'amber');
+  assert.match(l.text, /Down 40% on usual for 2 days: 600 L\/day vs ~1[\s ]?000 L/);
+  assert.match(l.action, /^Early warning/);
+});
+
+test('water: three low days -> red', () => {
+  assert.equal(water([[300, 300], [300, 300], [300, 300]]).rag, 'red');
+});
+
+test('water: one line quiet while the other is normal -> amber naming the meter', () => {
+  const l = water([[500, 500], [0, 520]]);
+  assert.equal(l.rag, 'amber');
+  assert.match(l.text, /^Meter 1 used 0 L on 10-30 vs ~500 L usual/);
+});
+
+test('water: both lines low on one day is not a single-line problem', () => {
+  assert.equal(water([[500, 500], [100, 100]]), undefined);
+});
+
+test('water: a gap is never read as zero, and old data never fires', () => {
+  assert.equal(water([[300, 300], [null, 300]]), undefined);
+  const old = wdays([...normal, [300, 300], [300, 300]]).map((d) => ({ ...d, date: d.date.replace('2026-10', '2026-09') }));
+  assert.equal(line(today({ waterDays: old }), 'water'), undefined);
+});
+
+test('water: too little baseline or a tiny baseline does not fire', () => {
+  assert.equal(line(today({ waterDays: wdays([[500, 500], [500, 500], [100, 100], [100, 100]]) }), 'water'), undefined);
+  assert.equal(line(today({ waterDays: wdays([...Array.from({ length: 14 }, () => [100, 100]), [20, 20], [20, 20]]) }), 'water'), undefined);
+});
+
+test('water: failed load shows the footer, never a line', () => {
+  const r = today({ waterDays: undefined });
+  assert.equal(r.someChecksFailed, true);
+  assert.equal(line(r, 'water'), undefined);
+});
+
+test('water: a platform water alert still wins over a farm drop', () => {
+  const l = water([[300, 300], [300, 300]], { alerts: [{ id: 'water_x', category: 'water', severity: 'danger', title: 'A-frame 2 no flow' }] });
+  assert.equal(l.rag, 'red');
+  assert.equal(l.text, 'A-frame 2 no flow');
 });

@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { buildToday, type DailyRow, type ExtraItem, type FarmAlert, type Rag, type SeriesPoint, type SiloState, type TodayResult, type TodayThresholds } from "@/lib/todayStatus";
+import { buildToday, type DailyRow, type ExtraItem, type FarmAlert, type Rag, type SeriesPoint, type SiloState, type TodayResult, type TodayThresholds, type WaterDay } from "@/lib/todayStatus";
 
 // "Today" card — a headline, two always-on lines (Birds, Climate) and lines that appear only on a
 // problem (Water, Feed silo, Sensors). One footer when any check failed to load. Rules and the user
 // story behind each line: lib/todayStatus.ts and docs/today-card.md. Reuses /api/alerts and
-// /api/silo-levels plus the production + climate data Home already loads; /api/freshness is the
-// only new endpoint (last-reading times).
+// /api/silo-levels plus the production + climate data Home already loads; /api/freshness (last-reading times)
+// and /api/water-use (daily litres per meter) are the card's own endpoints.
 
 export type TodayClimate = { temperatureC: number | null; humidityPct: number | null; co2Series: SeriesPoint[]; tempSeries: SeriesPoint[] };
 type FreshnessResponse = {
@@ -42,15 +42,17 @@ export default function TodayCard({ ready, daily, lastLogDate, climate, extras, 
   const [silos, setSilos] = useState<SiloState[] | undefined>(undefined);
   const [fresh, setFresh] = useState<FreshnessResponse | null>(null);
   const [now, setNow] = useState<number | null>(null);
+  const [water, setWater] = useState<{ days: WaterDay[]; names: string[] } | undefined>(undefined);
 
   useEffect(() => {
     const json = (url: string) => fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))));
-    Promise.allSettled([json("/api/alerts"), json("/api/silo-levels"), json("/api/freshness")]).then(([a, s, f]) => {
+    Promise.allSettled([json("/api/alerts"), json("/api/silo-levels"), json("/api/freshness"), json("/api/water-use")]).then(([a, s, f, w]) => {
       if (a.status === "fulfilled" && Array.isArray(a.value.alerts)) setAlerts({ list: a.value.alerts, stale: a.value.stale === true });
       if (s.status === "fulfilled" && Array.isArray(s.value.silos)) {
         setSilos(s.value.silos.map((x: { low?: boolean }, i: number) => ({ name: `Silo ${i + 1}`, low: x.low === true })));
       }
       if (f.status === "fulfilled" && f.value.streams) setFresh(f.value);
+      if (w.status === "fulfilled" && Array.isArray(w.value.days)) setWater({ days: w.value.days, names: Array.isArray(w.value.names) ? w.value.names : [] });
       setNow(Date.now());
     });
   }, []);
@@ -61,6 +63,7 @@ export default function TodayCard({ ready, daily, lastLogDate, climate, extras, 
     climateLastMs: fresh ? ms(fresh.streams.climate) : undefined, // omitted key = that query failed
     siloRadars: fresh?.silos?.map((r) => ({ name: r.name, lastMs: ms(r.lastSeen) })),
     waterMeters: fresh?.water.map((m) => ({ name: m.name, lastMs: ms(m.lastSeen) })),
+    waterDays: water?.days, waterMeterNames: water?.names,
     offsetHours: fresh?.timezoneOffset ?? 2,
   }, fresh?.thresholds);
 

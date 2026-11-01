@@ -177,3 +177,23 @@ export async function fetchMetersDaily(
     };
   });
 }
+
+/** Complete UTC days of water use per meter, for the Today card's water check. A meter's day is null
+ *  unless it has at least `minHours` hourly rows (a telemetry gap is never read as "no water"). Days
+ *  are UTC (00:00–24:00 = 02:00–02:00 SAST), which barely matters because hens drink little at night. */
+export async function fetchWaterDaily(
+  farmId: string, houseId: string, from: string, to: string, minHours = 22,
+): Promise<{ date: string; meters: (number | null)[] }[]> {
+  if (!ID_RE.test(farmId) || !ID_RE.test(houseId)) throw new Error("Invalid farm/house id");
+  if (!ISO_RE.test(from) || !ISO_RE.test(to)) throw new Error("Invalid date range");
+  const sql = `SELECT date_trunc('day', bucket_start) AS t,
+      sum(water_l_wm1), count(water_l_wm1), sum(water_l_wm2), count(water_l_wm2)
+    FROM ${DATABASE}.${METERS_TABLE}
+    WHERE farm_id = '${farmId}' AND house_id = '${houseId}'
+      AND year BETWEEN ${new Date(from).getUTCFullYear()} AND ${new Date(to).getUTCFullYear()}
+      AND bucket_start >= timestamp '${toAthenaTs(from)}' AND bucket_start < timestamp '${toAthenaTs(to)}'
+    GROUP BY 1 ORDER BY 1`;
+  const rows = await runAthenaRaw(sql);
+  const day = (sum: string | undefined, n: string | undefined) => ((toNum(n) ?? 0) >= minHours ? toNum(sum) : null);
+  return rows.map((c) => ({ date: athenaTsToIso(c[0] ?? "").slice(0, 10), meters: [day(c[1], c[2]), day(c[3], c[4])] }));
+}
