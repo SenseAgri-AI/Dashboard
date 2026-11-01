@@ -6,7 +6,7 @@ import { mergeThresholds } from "@/lib/todayStatus";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// Last-reading time per data stream for the Home freshness badges. Read-only, farm-scoped.
+// Last-reading time per farmer-facing data stream (climate, water meters, silo) for the Home Today card. Read-only, farm-scoped.
 // A failed query returns `undefined` for that stream ("couldn't check"), never "stale".
 const LOOKBACK = "interval '7 days'";
 const DEVICE_ID = /^[0-9a-f]{16}$/i;
@@ -43,18 +43,17 @@ export async function GET() {
   const meters = waterMetersFor(farm);
   const ids = meters.map((m) => `'${m.deviceId}'`).join(", ");
 
-  const [climate, silo, audio, eggCamera, water] = await Promise.allSettled([
+  // Only streams the farmer is told about. Sound and the egg camera are SenseAgri ops checks.
+  const [climate, silo, water] = await Promise.allSettled([
     lastTime(`SELECT MAX(time) AS last FROM sensors WHERE farm_id = '${f}' AND device_type = 'AM308-1' AND time > now() - ${LOOKBACK}`),
     lastTime(`SELECT MAX(time) AS last FROM sensors WHERE farm_id = '${f}' AND device_type = 'EM411-RDL' AND time > now() - ${LOOKBACK}`),
-    lastTime(`SELECT MAX(time) AS last FROM audio_noise WHERE farm_id = '${f}' AND time > now() - ${LOOKBACK}`),
-    lastTime(`SELECT MAX(time) AS last FROM egg_count WHERE farm_id = '${f}' AND time > now() - ${LOOKBACK}`),
     meters.length
       ? queryInflux<{ device_id: unknown; last: unknown }>(`SELECT device_id, MAX(time) AS last FROM sensors WHERE farm_id = '${f}' AND device_id IN (${ids}) AND pulse_total IS NOT NULL AND time > now() - ${LOOKBACK} GROUP BY device_id`)
       : Promise.resolve([]),
   ]);
   const val = (r: PromiseSettledResult<number | null>) => (r.status === "fulfilled" ? r.value : undefined);
   const iso = (ms: number | null | undefined) => (ms === undefined ? undefined : ms === null ? null : new Date(ms).toISOString());
-  for (const [k, r] of Object.entries({ climate, silo, audio, eggCamera, water })) {
+  for (const [k, r] of Object.entries({ climate, silo, water })) {
     if (r.status === "rejected") console.error(`freshness: ${k} query failed`);
   }
   const waterRows = water.status === "fulfilled" ? water.value : null;
@@ -63,8 +62,6 @@ export async function GET() {
     streams: {
       climate: iso(val(climate)),
       silo: iso(val(silo)),
-      audio: iso(val(audio)),
-      eggCamera: iso(val(eggCamera)),
     },
     // `lastSeen: undefined` (omitted in JSON) = couldn't check; `null` = no reading in 7 days.
     water: meters.map((m) => {

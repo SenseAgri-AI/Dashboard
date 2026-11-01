@@ -1,18 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  buildToday, streamFreshness, logFreshness, mergeThresholds,
-  type DailyRow, type FarmAlert, type Freshness, type Rag, type SiloState, type TodayLine, type TodayThresholds,
-} from "@/lib/todayStatus";
+import { buildToday, type DailyRow, type ExtraItem, type FarmAlert, type Rag, type SeriesPoint, type SiloState, type TodayResult, type TodayThresholds } from "@/lib/todayStatus";
 
-// "Today in 30 seconds" — one glanceable line per area, plus a freshness badge per data stream.
-// Reuses /api/alerts, /api/silo-levels and the production + climate data Home already loads; the
-// only new endpoint is /api/freshness (last-reading times). All rules live in lib/todayStatus.ts.
+// "Today" card — a headline, two always-on lines (Birds, Climate) and lines that appear only on a
+// problem (Water, Feed silo, Sensors). One footer when any check failed to load. Rules and the user
+// story behind each line: lib/todayStatus.ts and docs/today-card.md. Reuses /api/alerts and
+// /api/silo-levels plus the production + climate data Home already loads; /api/freshness is the
+// only new endpoint (last-reading times).
 
-export type TodayClimate = { temperatureC: number | null; humidityPct: number | null; co2Ppm: number | null };
+export type TodayClimate = { temperatureC: number | null; humidityPct: number | null; co2Series: SeriesPoint[] };
 type FreshnessResponse = {
-  streams: Partial<Record<"climate" | "silo" | "audio" | "eggCamera", string | null>>;
+  streams: { climate?: string | null; silo?: string | null };
   water: { name: string; lastSeen?: string | null }[];
   thresholds: TodayThresholds;
   timezoneOffset: number;
@@ -27,13 +26,15 @@ const RAG_STYLE: Record<Rag, { dot: string; text: string; bg: string; word: stri
 
 const ms = (iso: string | null | undefined) => (iso === undefined ? undefined : iso === null ? null : Date.parse(iso));
 
-export default function TodayCard({ ready, daily, lastLogDate, climate, narrow }: {
+export default function TodayCard({ ready, daily, lastLogDate, climate, extras, narrow }: {
   /** Home has finished loading production + climate (success or failure). */
   ready: boolean;
-  /** undefined while loading or on failure; Home passes DailyLog rows from /api/production. */
+  /** undefined = failed to load. Home passes DailyLog rows from /api/production. */
   daily?: DailyRow[];
   lastLogDate?: string | null;
   climate?: TodayClimate;
+  /** Home attention-list items (lib/attention.ts). */
+  extras?: ExtraItem[];
   narrow: boolean;
 }) {
   const [alerts, setAlerts] = useState<{ list?: FarmAlert[]; stale?: boolean }>({});
@@ -53,72 +54,52 @@ export default function TodayCard({ ready, daily, lastLogDate, climate, narrow }
     });
   }, []);
 
-  const t = fresh?.thresholds ?? mergeThresholds();
-  const offset = fresh?.timezoneOffset ?? 2;
-  const at = ready ? now : null;
-  const freshness: Freshness[] = at == null ? [] : [
-    streamFreshness("climate", "Climate", ms(fresh?.streams.climate), at, t),
-    ...(fresh?.water.length
-      ? [worstWater(fresh.water.map((m) => streamFreshness("water", "Water", ms(m.lastSeen), at, t)))]
-      : [streamFreshness("water", "Water", undefined, at, t)]),
-    streamFreshness("silo", "Silo", ms(fresh?.streams.silo), at, t),
-    streamFreshness("audio", "Sound", ms(fresh?.streams.audio), at, t),
-    logFreshness(daily === undefined ? undefined : lastLogDate ?? null, at, t, offset),
-    streamFreshness("eggCamera", "Egg camera", ms(fresh?.streams.eggCamera), at, t),
-  ];
-  const lines: TodayLine[] | null = at == null ? null : buildToday({
-    now: at, daily, lastLogDate, climate, silos, alerts: alerts.list, alertsStale: alerts.stale, freshness,
+  const result: TodayResult | null = !ready || now == null ? null : buildToday({
+    now, daily, lastLogDate, climate, silos, extras,
+    alerts: alerts.list, alertsStale: alerts.stale,
+    climateLastMs: fresh ? ms(fresh.streams.climate) : undefined, // omitted key = that query failed
+    siloLastMs: fresh ? ms(fresh.streams.silo) : undefined,
     waterMeters: fresh?.water.map((m) => ({ name: m.name, lastMs: ms(m.lastSeen) })),
-  }, t);
+    offsetHours: fresh?.timezoneOffset ?? 2,
+  }, fresh?.thresholds);
+
+  const headColor = !result ? "var(--t3)" : result.problems === 0 ? RAG_STYLE.green.text
+    : result.lines.some((l) => l.rag === "red") ? RAG_STYLE.red.text : RAG_STYLE.amber.text;
 
   return (
-    <section className="sa-panel" style={{ padding: 0 }} aria-label="Today in 30 seconds">
-      <div className="sa-panel-hd sa-panel-hd--production">Today in 30 seconds</div>
+    <section className="sa-panel" style={{ padding: 0, display: "flex", flexDirection: "column" }} aria-label="Today">
+      <div className="sa-panel-hd sa-panel-hd--production">Today</div>
       <div style={{ padding: narrow ? "8px 10px 10px" : "10px 14px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
-        {!lines && <div style={{ color: "var(--t3)", fontSize: 13, padding: 6 }}>Checking the farm…</div>}
-        {lines?.map((l) => <Line key={l.key} line={l} narrow={narrow} />)}
-        {freshness.length > 0 && (
-          <div aria-label="Data freshness" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
-            {freshness.map((f) => <Badge key={f.stream} f={f} />)}
-          </div>
+        <div role="status" style={{ fontFamily: "var(--font-d)", fontSize: narrow ? 18 : 20, fontWeight: 800, color: headColor, padding: "2px 2px 4px" }}>
+          {result ? result.headline : "Checking the farm…"}
+        </div>
+        {result?.lines.map((l) => <Line key={l.key} rag={l.rag} label={l.label} text={l.text} action={l.action} narrow={narrow} />)}
+        {result?.someChecksFailed && (
+          <div style={{ fontSize: 12, color: "var(--t3)", padding: "2px 2px 0" }}>Some checks didn&apos;t load — try again later.</div>
         )}
       </div>
     </section>
   );
 }
 
-function worstWater(list: Freshness[]): Freshness {
-  const rank: Record<Rag, number> = { unknown: 0, green: 1, amber: 2, red: 3 };
-  return list.reduce((a, b) => (rank[b.rag] > rank[a.rag] ? b : a));
-}
-
-function Line({ line, narrow }: { line: TodayLine; narrow: boolean }) {
-  const s = RAG_STYLE[line.rag];
+function Line({ rag, label, text, action, narrow }: { rag: Rag; label: string; text: string; action: string; narrow: boolean }) {
+  const s = RAG_STYLE[rag];
+  const quiet = rag === "green";
   return (
-    <div style={{ display: "grid", gridTemplateColumns: narrow ? "12px 1fr" : "12px 92px minmax(0,1fr) auto", alignItems: "center", columnGap: 10, rowGap: 2, background: s.bg, padding: "9px 10px", minHeight: 44 }}>
-      <span aria-label={s.word} title={s.word} style={{ width: 12, height: 12, borderRadius: 6, background: s.dot, gridRow: narrow ? "span 2" : undefined }} />
+    <div style={{ display: "grid", gridTemplateColumns: narrow ? "12px 1fr" : "12px 84px minmax(0,1fr) auto", alignItems: "center", columnGap: 10, rowGap: 2, background: s.bg, padding: "9px 10px", minHeight: 44 }}>
+      <span aria-label={s.word} title={s.word} style={{ width: 12, height: 12, borderRadius: 6, background: s.dot, gridRow: narrow && !quiet ? "span 2" : undefined }} />
       {narrow ? (
         <>
-          <div style={{ fontSize: 13.5, minWidth: 0 }}><strong style={{ color: "var(--t1)" }}>{line.label}</strong> <span style={{ color: s.text }}>{line.text}</span></div>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: s.text }}>{line.action}</div>
+          <div style={{ fontSize: 13.5, minWidth: 0 }}><strong style={{ color: "var(--t1)" }}>{label}</strong> <span style={{ color: s.text }}>{text}</span></div>
+          {!quiet && <div style={{ fontSize: 12.5, fontWeight: 700, color: s.text }}>{action}</div>}
         </>
       ) : (
         <>
-          <strong style={{ fontSize: 13.5, color: "var(--t1)" }}>{line.label}</strong>
-          <span style={{ fontSize: 13.5, color: s.text, minWidth: 0 }}>{line.text}</span>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: s.text, textAlign: "right" }}>{line.action}</span>
+          <strong style={{ fontSize: 13.5, color: "var(--t1)" }}>{label}</strong>
+          <span style={{ fontSize: 13.5, color: s.text, minWidth: 0 }}>{text}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: s.text, textAlign: "right" }}>{quiet ? "" : action}</span>
         </>
       )}
     </div>
-  );
-}
-
-function Badge({ f }: { f: Freshness }) {
-  const s = RAG_STYLE[f.rag];
-  return (
-    <span title={`${f.label}: ${f.text}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, border: `1px solid ${s.dot}55`, background: s.bg, color: s.text, fontSize: 11, fontWeight: 600, padding: "3px 8px", borderRadius: 999 }}>
-      <span style={{ width: 7, height: 7, borderRadius: 4, background: s.dot }} />
-      {f.label} · {f.text}
-    </span>
   );
 }

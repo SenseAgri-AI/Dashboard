@@ -35,7 +35,7 @@ function flockWeekAt(h: House, iso: string): number {
 const SERIES: { name: string; color: string; dashed: boolean }[] = [
   { name: "Hen-day", color: TEAL, dashed: false },
   { name: "Hen-housed", color: NAVY, dashed: false },
-  { name: "Breed standard", color: STD, dashed: true },
+  { name: "Typical layer curve (not breed-specific)", color: STD, dashed: true },
 ];
 
 function HdepTip({ active, payload, label, house }: { active?: boolean; payload?: Array<{ name?: string; value?: number | null }>; label?: number; house: House }) {
@@ -107,7 +107,7 @@ export default function HouseHdepChart({ house, height = 150 }: { house: House; 
     return out;
   }, [raw, house]);
 
-  const legend: [string, string, boolean][] = [["Hen-day", TEAL, false], ["Hen-housed", NAVY, false], ["Breed standard", STD, true]];
+  const legend: [string, string, boolean][] = [["Hen-day", TEAL, false], ["Hen-housed", NAVY, false], ["Typical layer curve (not breed-specific)", STD, true]];
   return (
     <div style={{ minWidth: 0 }}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 12px", fontSize: 10, color: "var(--t2)", marginBottom: 2 }}>
@@ -133,7 +133,7 @@ export default function HouseHdepChart({ house, height = 150 }: { house: House; 
               <Tooltip content={<HdepTip house={house} />} cursor={{ stroke: TEAL, strokeOpacity: 0.4 }} />
               <Area dataKey="aboveBand" name="above" stroke="none" fill={GREEN} fillOpacity={0.22} legendType="none" isAnimationActive={false} connectNulls={false} />
               <Area dataKey="belowBand" name="below" stroke="none" fill={DANGER} fillOpacity={0.18} legendType="none" isAnimationActive={false} connectNulls={false} />
-              <Line dataKey="standard" name="Breed standard" stroke={STD} strokeWidth={1.5} strokeDasharray="5 4" dot={false} connectNulls isAnimationActive={false} />
+              <Line dataKey="standard" name="Typical layer curve (not breed-specific)" stroke={STD} strokeWidth={1.5} strokeDasharray="5 4" dot={false} connectNulls isAnimationActive={false} />
               <Line dataKey="hhep" name="Hen-housed" stroke={NAVY} strokeWidth={1.75} dot={false} connectNulls isAnimationActive={false} />
               <Line dataKey="actual" name="Hen-day" stroke={TEAL} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
             </ComposedChart>

@@ -20,13 +20,19 @@ const T = load('src/lib/todayStatus.ts', { './thi': thi, './legacyAlerts': legac
 
 const NOW = Date.parse('2026-10-31T10:00:00Z'); // 12:00 SAST
 const min = (m) => NOW - m * 60_000;
+const iso = (m) => new Date(min(m)).toISOString();
 const plain = (v) => JSON.parse(JSON.stringify(v));
 const day = (date, hdep, mortality) => ({ date, eggs: 4000, hdep, mortality });
 const week = ['2026-10-23', '2026-10-24', '2026-10-25', '2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29'].map((d) => day(d, 92, 1));
+const co2 = (...vals) => vals.map((v, i) => ({ time: iso(30 * (vals.length - 1 - i)), value: v })); // last value = now
 const base = (extra = {}) => ({ now: NOW, daily: [...week, day('2026-10-30', 92, 1)], lastLogDate: '2026-10-30',
-  climate: { temperatureC: 24, humidityPct: 60, co2Ppm: 600 }, waterMeters: [{ name: 'A-frame 1', lastMs: min(20) }, { name: 'A-frame 2', lastMs: min(20) }],
-  silos: [{ name: 'Silo 1', low: false }], alerts: [], freshness: [], ...extra });
-const line = (lines, key) => lines.find((l) => l.key === key);
+  climate: { temperatureC: 24, humidityPct: 60, co2Series: co2(600, 650, 700) },
+  climateLastMs: min(3), siloLastMs: min(120),
+  waterMeters: [{ name: 'A-frame 1', lastMs: min(20) }, { name: 'A-frame 2', lastMs: min(20) }],
+  silos: [{ name: 'Silo 1', low: false }], alerts: [], extras: [], ...extra });
+const today = (extra) => T.buildToday(base(extra));
+const line = (r, key) => r.lines.find((l) => l.key === key);
+const keys = (r) => plain(r.lines.map((l) => l.key));
 
 test('defaults reuse the existing alert windows', () => {
   const d = T.DEFAULT_TODAY_THRESHOLDS;
@@ -34,121 +40,135 @@ test('defaults reuse the existing alert windows', () => {
   assert.equal(d.logStaleDays.red, legacy.LOG_OVERDUE_DAYS);
   assert.equal(d.feltTempC.amber, thi.THI_SEVERE);
   assert.equal(d.feltTempC.red, thi.THI_EXTREME);
+  assert.equal(d.co2Sustained.ppm, 1400);
 });
 
 test('farm overrides merge deeply and ignore junk values', () => {
-  const t = T.mergeThresholds({ staleMinutes: { climate: { amber: 30 } }, co2Ppm: { red: 'x' }, hdepDropPts: { amber: -1 }, extra: 5 });
+  const t = T.mergeThresholds({ staleMinutes: { climate: { amber: 30 } }, co2Sustained: { ppm: 'x' }, hdepDropPts: { amber: -1 }, extra: 5 });
   assert.equal(t.staleMinutes.climate.amber, 30);
   assert.equal(t.staleMinutes.climate.red, 60);
-  assert.equal(t.co2Ppm.red, 1400);
+  assert.equal(t.co2Sustained.ppm, 1400);
   assert.equal(t.hdepDropPts.amber, 3);
   assert.equal('extra' in t, false);
   assert.deepEqual(plain(T.mergeThresholds(undefined)), plain(T.DEFAULT_TODAY_THRESHOLDS));
 });
 
-test('stream freshness: green, amber, red, missing and failed check', () => {
-  const f = (m) => T.streamFreshness('climate', 'Climate', m, NOW);
-  assert.equal(f(min(5)).rag, 'green');
-  assert.equal(f(min(5)).text, 'last reading 5 min ago');
-  assert.equal(f(min(15)).rag, 'green'); // boundary: stale only beyond the window
-  assert.equal(f(min(16)).rag, 'amber');
-  assert.equal(f(min(61)).rag, 'red');
-  assert.equal(f(min(180)).text, 'last reading 3 h ago');
-  assert.equal(f(null).rag, 'red');
-  assert.equal(f(undefined).rag, 'unknown'); // a failed query is never shown as stale
+test('quiet farm: "All good" with only Birds and Climate', () => {
+  const r = today();
+  assert.equal(r.headline, 'All good');
+  assert.equal(r.problems, 0);
+  assert.equal(r.someChecksFailed, false);
+  assert.deepEqual(keys(r), ['birds', 'climate']);
+  assert.equal(line(r, 'birds').text, 'Lay 92% · 1 death');
+  assert.equal(line(r, 'climate').text, 'Feels 22.8°C');
 });
 
-test('daily-log freshness uses farm-local days', () => {
-  assert.equal(T.logFreshness('2026-10-31', NOW).text, 'logged today');
-  assert.equal(T.logFreshness('2026-10-30', NOW).rag, 'green');
-  assert.equal(T.logFreshness('2026-10-28', NOW).rag, 'amber'); // 3 days > 2
-  assert.equal(T.logFreshness('2026-10-25', NOW).rag, 'red');   // 6 days > 5
-  assert.equal(T.logFreshness(null, NOW).rag, 'red');
-  assert.equal(T.logFreshness(undefined, NOW).rag, 'unknown');
-  // 23:30 UTC on the 30th is already the 31st in SAST
-  assert.equal(T.daysSinceLog('2026-10-31', Date.parse('2026-10-30T23:30:00Z')), 0);
+test('headline counts problems', () => {
+  const r = today({ silos: [{ name: 'Silo 2', low: true }], daily: [...week, day('2026-10-30', 85, 1)] });
+  assert.equal(r.problems, 2);
+  assert.equal(r.headline, '2 things need you today');
+  assert.equal(today({ silos: [{ name: 'Silo 2', low: true }] }).headline, '1 thing needs you today');
 });
 
-test('all quiet gives five green lines', () => {
-  const lines = T.buildToday(base());
-  assert.deepEqual(plain(lines.map((l) => l.key)), ['birds', 'climate', 'water', 'silo', 'data']);
-  for (const l of lines) assert.equal(l.rag, 'green', `${l.key}: ${l.text}`);
-  assert.equal(line(lines, 'birds').text, 'Lay 92% · 1 death');
+test('a failed check gives one footer flag, never a grey line or "All good"', () => {
+  const r = today({ silos: undefined, alerts: undefined, daily: undefined });
+  assert.equal(r.someChecksFailed, true);
+  assert.equal(r.headline, 'Nothing flagged');
+  assert.deepEqual(keys(r), ['climate']); // Birds hidden when the log failed to load
+  assert.ok(r.lines.every((l) => l.rag !== 'unknown'));
+  assert.equal(today({ waterMeters: [{ name: 'A-frame 1', lastMs: undefined }] }).someChecksFailed, true);
+  assert.equal(today({ climateLastMs: undefined }).someChecksFailed, true);
 });
 
 test('birds: hen-day drop vs recent median', () => {
-  assert.equal(line(T.buildToday(base({ daily: [...week, day('2026-10-30', 88, 1)] })), 'birds').rag, 'amber');
-  const red = line(T.buildToday(base({ daily: [...week, day('2026-10-30', 85, 1)] })), 'birds');
+  assert.equal(line(today({ daily: [...week, day('2026-10-30', 88, 1)] }), 'birds').rag, 'amber');
+  const red = line(today({ daily: [...week, day('2026-10-30', 85, 1)] }), 'birds');
   assert.equal(red.rag, 'red');
   assert.match(red.text, /down 7 pts/);
-  // too little history: no comparison
-  assert.equal(line(T.buildToday(base({ daily: [day('2026-10-29', 92, 1), day('2026-10-30', 80, 1)] })), 'birds').rag, 'green');
+  assert.equal(line(today({ daily: [day('2026-10-29', 92, 1), day('2026-10-30', 80, 1)] }), 'birds').rag, 'green'); // too little history
 });
 
 test('birds: deaths vs usual, with a minimum count', () => {
-  assert.equal(line(T.buildToday(base({ daily: [...week, day('2026-10-30', 92, 2)] })), 'birds').rag, 'green'); // below minDeaths
-  assert.equal(line(T.buildToday(base({ daily: [...week, day('2026-10-30', 92, 3)] })), 'birds').rag, 'red');  // 3x usual of 1
+  assert.equal(line(today({ daily: [...week, day('2026-10-30', 92, 2)] }), 'birds').rag, 'green');
+  assert.equal(line(today({ daily: [...week, day('2026-10-30', 92, 3)] }), 'birds').rag, 'red');
   const zeroWeek = week.map((d) => ({ ...d, mortality: 0 }));
-  assert.equal(line(T.buildToday(base({ daily: [...zeroWeek, day('2026-10-30', 92, 1)] })), 'birds').rag, 'green');
+  assert.equal(line(today({ daily: [...zeroWeek, day('2026-10-30', 92, 1)] }), 'birds').rag, 'green');
   const twoWeek = week.map((d) => ({ ...d, mortality: 2 }));
-  const amber = line(T.buildToday(base({ daily: [...twoWeek, day('2026-10-30', 92, 4)] })), 'birds');
+  const amber = line(today({ daily: [...twoWeek, day('2026-10-30', 92, 4)] }), 'birds');
   assert.equal(amber.rag, 'amber');
   assert.match(amber.text, /usual 2/);
 });
 
-test('birds: stale log and failed load', () => {
-  const stale = line(T.buildToday(base({ lastLogDate: '2026-10-27' })), 'birds');
-  assert.equal(stale.rag, 'amber');
-  assert.equal(stale.action, 'Fill in the daily log');
-  assert.equal(line(T.buildToday(base({ daily: undefined })), 'birds').rag, 'unknown');
-  assert.equal(line(T.buildToday(base({ daily: [], lastLogDate: null })), 'birds').rag, 'amber');
+test('birds: missing-log nudge lives in the Birds line', () => {
+  const nudge = line(today({ lastLogDate: '2026-10-27' }), 'birds');
+  assert.equal(nudge.rag, 'amber');
+  assert.match(nudge.text, /log missing 4 days/);
+  assert.equal(nudge.action, 'Fill in the daily log');
+  assert.equal(line(today({ lastLogDate: '2026-10-24' }), 'birds').rag, 'red');
+  const empty = line(today({ daily: [], lastLogDate: null }), 'birds');
+  assert.equal(empty.text, 'No daily log yet');
+  // the Home attention "daily-log" item and the notifier's log alert are not repeated
+  const r = today({ lastLogDate: '2026-10-27', extras: [{ id: 'daily-log', severity: 'warning', title: 'Daily log not up to date', detail: '' }],
+    alerts: [{ id: 'egg_log_overdue#1', category: 'reminder', severity: 'warning', title: 'Fill in the daily log' }] });
+  assert.deepEqual(keys(r), ['birds', 'climate']);
+  assert.equal(r.problems, 1);
 });
 
-test('climate: felt temperature and CO2 bands', () => {
-  const c = (climate) => line(T.buildToday(base({ climate })), 'climate');
-  assert.equal(c({ temperatureC: 31, humidityPct: 70, co2Ppm: 600 }).rag, 'amber'); // feels ~29.5
-  assert.equal(c({ temperatureC: 32, humidityPct: 70, co2Ppm: 600 }).rag, 'red');
-  const co2 = c({ temperatureC: 22, humidityPct: 60, co2Ppm: 1500 });
-  assert.equal(co2.rag, 'red');
-  assert.equal(co2.action, 'Check fans and inlets now');
-  assert.equal(c({ temperatureC: null, humidityPct: null, co2Ppm: null }).rag, 'unknown');
-  assert.equal(c({ temperatureC: 6553.5, humidityPct: 60, co2Ppm: null }).rag, 'unknown'); // EM300 junk
-  assert.equal(c(undefined).rag, 'unknown');
+test('daily-log freshness uses farm-local days', () => {
+  assert.equal(T.logFreshness('2026-10-31', NOW).text, 'logged today');
+  assert.equal(T.logFreshness('2026-10-28', NOW).rag, 'amber');
+  assert.equal(T.logFreshness('2026-10-25', NOW).rag, 'red');
+  assert.equal(T.logFreshness(undefined, NOW).rag, 'unknown');
+  assert.equal(T.daysSinceLog('2026-10-31', Date.parse('2026-10-30T23:30:00Z')), 0);
 });
 
-test('alerts escalate their line and never downgrade it', () => {
-  const lines = T.buildToday(base({ alerts: [
-    { id: 'water_zero_3h#1', category: 'water', severity: 'danger', title: 'Possible water problem — A-frame 1' },
-    { id: 'heat_stress#1', category: 'climate', severity: 'info', title: 'fyi' },
-    { id: 'power_outage#1', category: 'power', severity: 'danger', title: 'Power / network down' },
-  ] }));
-  assert.equal(line(lines, 'water').rag, 'red');
-  assert.equal(line(lines, 'water').text, 'Possible water problem — A-frame 1');
-  assert.equal(line(lines, 'climate').rag, 'green');
-  assert.equal(line(lines, 'data').rag, 'red');
+test('climate: felt temperature bands', () => {
+  const c = (temperatureC, humidityPct) => line(today({ climate: { temperatureC, humidityPct, co2Series: [] } }), 'climate');
+  assert.equal(c(31, 70).rag, 'amber'); // feels ~29.5
+  assert.equal(c(32, 70).rag, 'red');
+  assert.equal(c(6553.5, 60), undefined); // EM300 junk: no line, never a fake value
 });
 
-test('water: per-meter freshness, no meters, failed checks', () => {
-  const w = (extra) => line(T.buildToday(base(extra)), 'water');
-  const stale = w({ waterMeters: [{ name: 'A-frame 1', lastMs: min(10) }, { name: 'A-frame 2', lastMs: min(400) }] });
+test('climate: CO2 only when sustained at or above 1400 ppm', () => {
+  const t = T.DEFAULT_TODAY_THRESHOLDS;
+  assert.equal(T.co2Sustained(co2(1500, 1450, 1420), NOW, t), 1420);
+  assert.equal(T.co2Sustained(co2(1500, 1300, 1500), NOW, t), null); // dipped below
+  assert.equal(T.co2Sustained(co2(1500), NOW, t), null);             // not enough coverage
+  assert.equal(T.co2Sustained(co2(1000, 1000, 1000), NOW, t), null);
+  const shown = line(today({ climate: { temperatureC: 22, humidityPct: 60, co2Series: co2(1500, 1450, 1420) } }), 'climate');
+  assert.equal(shown.rag, 'red');
+  assert.match(shown.text, /CO₂ 1[,\s ]?420 ppm for 60\+ min/);
+  assert.equal(shown.action, 'Check fans and inlets now');
+  const brief = line(today({ climate: { temperatureC: 22, humidityPct: 60, co2Series: co2(700, 700, 1600) } }), 'climate');
+  assert.equal(brief.rag, 'green');
+  assert.doesNotMatch(brief.text, /CO₂/);
+});
+
+test('water, silo and sensors appear only on a problem', () => {
+  const water = today({ alerts: [{ id: 'water_zero_3h#1', category: 'water', severity: 'danger', title: 'Possible water problem — A-frame 1' }] });
+  assert.equal(line(water, 'water').rag, 'red');
+  assert.equal(line(water, 'water').text, 'Possible water problem — A-frame 1');
+  const silo = line(today({ silos: [{ name: 'Silo 1', low: false }, { name: 'Silo 2', low: true }] }), 'silo');
+  assert.equal(silo.text, 'Silo 2 running low');
+  assert.doesNotMatch(silo.text, /%|day/);
+  const stale = line(today({ waterMeters: [{ name: 'A-frame 1', lastMs: min(10) }, { name: 'A-frame 2', lastMs: min(400) }] }), 'data');
   assert.equal(stale.rag, 'red');
-  assert.match(stale.text, /^A-frame 2: last reading 7 h ago$/);
-  assert.equal(w({ waterMeters: [] }).rag, 'unknown');
-  assert.equal(w({ alerts: undefined }).rag, 'unknown'); // can't say "no problems" without the alert feed
+  assert.equal(stale.text, 'Water (A-frame 2): no data for 7 h');
+  assert.equal(line(today({ climateLastMs: min(16) }), 'data').rag, 'amber');
+  assert.equal(line(today({ siloLastMs: min(36 * 60) }), 'data'), undefined); // sparse radar: long window
+  assert.equal(line(today({ siloLastMs: null }), 'data').text, 'Silo: no data this week');
+  assert.equal(line(today({ alertsStale: true }), 'data').text, 'Farm alerts are delayed');
+  const power = today({ alerts: [{ id: 'power_outage#1', category: 'power', severity: 'danger', title: 'Power / network down' }] });
+  assert.equal(line(power, 'data').rag, 'red');
 });
 
-test('silo: running low only, never a percentage or days left', () => {
-  const s = line(T.buildToday(base({ silos: [{ name: 'Silo 1', low: false }, { name: 'Silo 2', low: true }] })), 'silo');
-  assert.equal(s.rag, 'amber');
-  assert.equal(s.text, 'Silo 2 running low');
-  assert.doesNotMatch(s.text, /%|day/);
-  assert.equal(line(T.buildToday(base({ silos: undefined })), 'silo').rag, 'unknown');
-});
-
-test('data health summarises stale streams and delayed alert checks', () => {
-  const freshness = [T.streamFreshness('climate', 'Climate', min(5), NOW), T.streamFreshness('eggCamera', 'Egg camera', min(3000), NOW)];
-  const d = line(T.buildToday(base({ freshness })), 'data');
-  assert.equal(d.rag, 'amber');
-  assert.equal(d.text, 'Egg camera 2 days old');
-  assert.equal(line(T.buildToday(base({ alertsStale: true })), 'data').rag, 'amber');
+test('alerts raise a line but never lower it; info alerts and info extras stay quiet', () => {
+  const r = today({ alerts: [{ id: 'heat_stress#1', category: 'climate', severity: 'info', title: 'fyi' }],
+    extras: [{ id: 'schedules', severity: 'info', title: 'Check schedules', detail: '' }] });
+  assert.equal(r.headline, 'All good');
+  const hot = line(today({ climate: { temperatureC: 32, humidityPct: 70, co2Series: [] },
+    alerts: [{ id: 'heat_stress#1', category: 'climate', severity: 'warning', title: 'Heat stress' }] }), 'climate');
+  assert.equal(hot.rag, 'red');
+  const extra = today({ extras: [{ id: 'new_rule', severity: 'warning', title: 'Something', detail: 'Do this' }] });
+  assert.equal(line(extra, 'extra:new_rule').action, 'Do this');
 });
