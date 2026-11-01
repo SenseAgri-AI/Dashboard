@@ -181,3 +181,9 @@ test('ventilation CO₂: a lone reading after a gap does not count as sustained'
   const lone = [{ t: NOW - 10 * 60_000, tempC: 20, rhPct: 60, co2: 1800 }];
   assert.equal(V.co2Sustained(lone, NOW, 1400, 60), null);
 });
+
+test('3-day outlook labels by local date: in the evening the first day is tomorrow', () => {
+  const evening = Date.parse('2026-11-01T19:00:00Z'); // 21:00 SAST
+  const v = V.buildVentilation({ now: evening, outside: outside(() => 20), sun, inside: [], offsetHours: 2 });
+  assert.deepEqual(plain(v.outlook.map((d) => d.label)), ['Tomorrow', 'Tue', 'Wed']);
+});

@@ -218,7 +218,9 @@ export function buildVentilation(input: VentInput): VentView {
     const dv = outsideIn(hours, p), nv = n ? outsideIn(hours, n) : [];
     const dayMax = dv.length ? r0(Math.max(...dv)) : null;
     const nightMin = nv.length ? r0(Math.min(...nv)) : null;
-    outlook.push({ label: outlook.length === 0 ? "Today" : outlook.length === 1 ? "Tomorrow" : p.label, dayMax, nightMin,
+    // Label by farm-local date: in the evening the next daylight is tomorrow's.
+    const dDate = localDate(p.start, offsetHours), today0 = localDate(now, offsetHours), tomorrow0 = localDate(now + 24 * H, offsetHours);
+    outlook.push({ label: dDate === today0 ? "Today" : dDate === tomorrow0 ? "Tomorrow" : p.label, dayMax, nightMin,
       hot: dayMax != null && dayMax >= t.hotDayC, cold: nightMin != null && nightMin <= t.coldNightC });
   }
 
