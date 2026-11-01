@@ -19,6 +19,8 @@ export async function GET() {
     if (err instanceof FarmAccessError) return NextResponse.json({ error: err.message }, { status: 403 });
     return NextResponse.json({ error: "Failed to resolve farm" }, { status: 500 });
   }
+  // First house only, like the analytics explorer: every farm today has one house with meters. A
+  // multi-house farm needs a per-house check (docs/water-use-check.md).
   const houseId = Object.keys(farm.houseHens ?? {})[0] || "house1";
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0); // complete days only; same SQL all day, so the Athena cache hits

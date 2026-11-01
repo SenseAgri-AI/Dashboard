@@ -19,6 +19,10 @@ an early warning ("Early warning: check …"); it never names a cause.
 Read-only, farm-scoped, Athena-cached.
 
 - A meter's day counts only with at least 22 hourly rows. A gap is never read as zero water.
+- Missing calendar days are filled as gaps, so "2 days" always means 2 calendar days in a row.
+- A meter with no reading in the whole 17-day window is treated as not installed (one-meter farms get the
+  farm check only).
+- First house only (every farm today has one metered house); multi-house farms need a per-house check.
 - Days are UTC (02:00–02:00 SAST). Hens drink little at night, so this barely shifts the totals.
 - The silver batch runs once a day, so yesterday appears in the early morning. If the newest complete day
   is more than 2 days old the check stays silent; the Sensors line covers stale meters.
@@ -29,13 +33,13 @@ Read-only, farm-scoped, Athena-cached.
 |---|---|---|
 | Farm drop (amber) | Each of the last 2 complete days is below 70 % of the median of the 14 days before them (at least 10 valid days, median at least 300 L) | "Down 40% on usual for 2 days: 600 L/day vs ~1 000 L" / "Early warning: check drinkers, pressure and the birds" |
 | Farm drop (red) | Same, for 3 days | same wording, red |
-| One line quiet (amber) | One meter's latest day is below 30 % of its own 14-day median (median at least 100 L) while the other meter is at least 70 % of its median | "Meter 1 used 0 L on 09-17 vs ~640 L usual; the other line was normal" |
+| One line quiet (amber) | One meter's latest day is below 30 % of its own 14-day median (median at least 100 L) while the other meter is at least 70 % of its median | "Meter 1 used 0 L on 17 Sep vs ~640 L usual; the other line was normal" |
 
 A firing platform water alert still overrides the line, as before.
 
 ## Backtest (14 Apr – 31 Oct 2026, 185 evaluable days)
 
-11 days flagged:
+11 days flagged (farm rule 5 amber + 4 red, line rule 2):
 
 - 4 Jul, 14 Aug: two-day farm dips (amber).
 - 9 Jul: Meter 2 at 40 L against ~140 L (low-flow winter period, lower confidence).

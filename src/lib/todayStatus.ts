@@ -65,8 +65,8 @@ export const DEFAULT_TODAY_THRESHOLDS: TodayThresholds = {
   hdepDrop: { pts: 5, amberDays: 2, redDays: 3, baselineDays: 7, minBaselineDays: 3, plausibleMinPct: 20, plausibleMaxPct: 100 },
   // Backtest: day rule 2 days a year; week rule 1 episode. Few real events to validate against.
   mortality: { minDeaths: 3, dayFactor: 2, baselineDays: 7, weekMin: 7, weekFactor: 2, priorWeeks: 4 },
-  // Backtest (Apr–Oct 2026, docs/water-use-check.md): farm rule 10 amber / 5 red days, nearly all in
-  // the 9–23 Oct drop; the line rule fired twice, incl. the 17 Sep day Meter 1 read 0 L. PROVISIONAL.
+  // Backtest (14 Apr – 31 Oct 2026, 185 days, docs/water-use-check.md): 11 days flagged. Farm rule 5 amber
+  // + 4 red days, mostly the 9–24 Oct drop; line rule 2, incl. the 17 Sep day Meter 1 read 0 L. PROVISIONAL.
   waterDrop: { frac: 0.7, amberDays: 2, redDays: 3, baselineDays: 14, minBaselineDays: 10, minBaselineL: 300, lineFrac: 0.3, otherFrac: 0.7, minLineBaselineL: 100, maxAgeDays: 2 },
   // night_disturbance fired 17 times in 7 weeks; only the 2-night poor-sleep rule affects Birds.
   birdsAlertTypes: ["sleep_decline"],
@@ -355,11 +355,25 @@ function baselineBefore(vals: (number | null)[], i: number, n: number, min: numb
 export function waterUseCheck(days: WaterDay[] | undefined, now: number, t: TodayThresholds = DEFAULT_TODAY_THRESHOLDS,
   names: string[] = [], offsetHours = 2): { rag: Rag; text: string; action: string } | null {
   const w = t.waterDrop;
-  const rows = (days ?? []).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.date)).sort((a, b) => a.date.localeCompare(b.date));
-  if (!rows.length) return null;
+  const given = (days ?? []).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.date)).sort((a, b) => a.date.localeCompare(b.date));
+  if (!given.length) return null;
+  // Meters with no reading in the whole window are not installed (e.g. a one-meter farm): leave them out,
+  // so they neither block the farm total nor count as "the other line".
+  const width = Math.max(...given.map((d) => d.meters.length));
+  const active = Array.from({ length: width }, (_, j) => j).filter((j) => given.some((d) => d.meters[j] != null));
+  if (!active.length) return null;
+  // One row per calendar day: a day with no rows at all becomes a gap, so "2 days" always means 2 calendar days.
+  const byDate = new Map(given.map((d) => [d.date, d]));
+  const rows: WaterDay[] = [];
+  for (let ms = Date.parse(`${given[0].date}T00:00:00Z`), end = Date.parse(`${given[given.length - 1].date}T00:00:00Z`); ms <= end; ms += 86_400_000) {
+    const date = new Date(ms).toISOString().slice(0, 10);
+    const d = byDate.get(date);
+    rows.push({ date, meters: active.map((j) => d?.meters[j] ?? null) });
+  }
+  const label = active.map((j) => names[j] || `Meter ${j + 1}`);
   const age = daysSinceLog(rows[rows.length - 1].date, now, offsetHours);
   if (age == null || age > w.maxAgeDays) return null; // old data: the Sensors line covers it, never a "drop"
-  const total = rows.map((d) => (d.meters.length && d.meters.every((m) => m != null) ? d.meters.reduce<number>((a, m) => a + (m ?? 0), 0) : null));
+  const total = rows.map((d) => (d.meters.every((m) => m != null) ? d.meters.reduce<number>((a, m) => a + (m ?? 0), 0) : null));
   const last = rows.length - 1;
 
   // Farm: a run of low days, each against the same baseline from before the run.
@@ -395,8 +409,8 @@ export function waterUseCheck(days: WaterDay[] | undefined, now: number, t: Toda
       return o != null && ob != null && o >= w.otherFrac * ob;
     });
     if (!othersOk) continue;
-    const name = names[m] || `Meter ${m + 1}`;
-    return { rag: "amber", text: `${name} used ${litres(v)} on ${rows[last].date.slice(5)} vs ~${litres(b)} usual; the other line was normal`, action: "Early warning: check that drinker line and pressure" };
+    const day = new Date(`${rows[last].date}T00:00:00Z`).toLocaleDateString("en-ZA", { timeZone: "UTC", day: "numeric", month: "short" });
+    return { rag: "amber", text: `${label[m]} used ${litres(v)} on ${day} vs ~${litres(b)} usual; the other line was normal`, action: "Early warning: check that drinker line and pressure" };
   }
   return null;
 }

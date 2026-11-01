@@ -274,7 +274,7 @@ test('water: three low days -> red', () => {
 test('water: one line quiet while the other is normal -> amber naming the meter', () => {
   const l = water([[500, 500], [0, 520]]);
   assert.equal(l.rag, 'amber');
-  assert.match(l.text, /^Meter 1 used 0 L on 10-30 vs ~500 L usual/);
+  assert.match(l.text, /^Meter 1 used 0 L on 30 Oct vs ~500 L usual/);
 });
 
 test('water: both lines low on one day is not a single-line problem', () => {
@@ -302,4 +302,25 @@ test('water: a platform water alert still wins over a farm drop', () => {
   const l = water([[300, 300], [300, 300]], { alerts: [{ id: 'water_x', category: 'water', severity: 'danger', title: 'A-frame 2 no flow' }] });
   assert.equal(l.rag, 'red');
   assert.equal(l.text, 'A-frame 2 no flow');
+});
+
+test('water: a missing calendar day breaks the run (no "2 days" across a gap)', () => {
+  // low on 29 and 31 Oct, no rows at all for 30 Oct (now = 1 Nov)
+  const days = [...wdays([...normal, [300, 300]]).map((x) => ({ ...x, date: new Date(Date.parse(x.date + 'T00:00:00Z') - 86_400_000).toISOString().slice(0, 10) })),
+    { date: '2026-10-31', meters: [300, 300] }];
+  assert.equal(days.at(-2).date, '2026-10-29');
+  const now = Date.parse('2026-11-01T10:00:00Z');
+  assert.equal(T.waterUseCheck(days, now, undefined, ['Meter 1', 'Meter 2']), null);
+  // with 30 Oct present and low, it does fire
+  const full = [...days.slice(0, -1), { date: '2026-10-30', meters: [300, 300] }, days.at(-1)];
+  assert.equal(T.waterUseCheck(full, now, undefined, ['Meter 1', 'Meter 2']).rag, 'red');
+});
+
+test('water: a one-meter farm still gets the farm check, never the line check', () => {
+  const one = wdays([...Array.from({ length: 14 }, () => [500, null]), [300, null], [300, null]]);
+  const l = line(today({ waterDays: one, waterMeterNames: ['Meter 1', 'Meter 2'] }), 'water');
+  assert.equal(l.rag, 'amber');
+  assert.match(l.text, /^Down 40% on usual for 2 days: 300 L\/day vs ~500 L/);
+  const quiet = wdays([...Array.from({ length: 14 }, () => [500, null]), [500, null], [0, null]]);
+  assert.equal(line(today({ waterDays: quiet }), 'water'), undefined);
 });
