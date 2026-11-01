@@ -130,13 +130,15 @@ function EnvTile({ name, value, unit, status, normal, chart }: {
 // Story: when the climate sensor stops reporting, say so (and since when) instead of a row of "—",
 // so I check the sensor and power rather than wondering whether the house is fine.
 function ClimateStale({ lastIso }: { lastIso: string | null }) {
-  const last = lastIso ? Date.parse(lastIso) : NaN;
+  // Chart points are 30-min averages stamped at the block start; the last reading fell somewhere in
+  // that block, so show its end time as "around" (never earlier than the real reading).
+  const last = lastIso ? Date.parse(lastIso) + 30 * 60_000 : NaN;
   const when = Number.isFinite(last)
-    ? new Date(last).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })
+    ? new Date(last).toLocaleString("en-GB", { timeZone: "Africa/Johannesburg", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })
     : null;
   return (
     <div role="status" style={{ gridColumn: "1 / -1", background: "var(--warn-bg)", color: "var(--warn)", fontSize: 13, padding: "9px 12px", borderRadius: 8 }}>
-      {when ? `No climate reading in the last hour (last ${when}).` : "No climate readings in the last 24 hours."}
+      {when ? `No climate reading in the last hour (last around ${when}).` : "No climate readings in the last 24 hours."}
       {" "}Check the climate sensor and gateway power. Charts show the last 24 h.
     </div>
   );
