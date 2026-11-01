@@ -188,10 +188,16 @@ test('3-day outlook labels by local date: in the evening the first day is tomorr
   assert.deepEqual(plain(v.outlook.map((d) => d.label)), ['Tomorrow', 'Tue', 'Wed']);
 });
 
+test('farmId format is checked before it can reach SQL', () => {
+  const F = load('src/lib/farms.ts', { '@aws-sdk/client-ssm': {}, '@clerk/nextjs/server': {} });
+  for (const ok of ['farm_anike_001', 'farm-x-2', 'a']) assert.equal(F.isValidFarmId(ok), true, ok);
+  for (const bad of ["farm' OR 1=1 --", 'Farm_A', 'farm id', '', null, 42, 'x'.repeat(65)]) assert.equal(F.isValidFarmId(bad), false, String(bad));
+});
+
 test('farm location validation', () => {
   const F = load('src/lib/farms.ts', { '@aws-sdk/client-ssm': {}, '@clerk/nextjs/server': {} });
-  assert.deepEqual(plain(F.validLocation({ lat: -26.73, lon: 27.7 })), { lat: -26.73, lon: 27.7 });
-  assert.equal(F.validLocation({ lat: 'x', lon: 27.7 }), null);
-  assert.equal(F.validLocation({ lat: -126, lon: 27.7 }), null);
+  assert.deepEqual(plain(F.validLocation({ lat: -25.0, lon: 28.0 })), { lat: -25, lon: 28 }); // placeholder, not a real farm
+  assert.equal(F.validLocation({ lat: 'x', lon: 28.0 }), null);
+  assert.equal(F.validLocation({ lat: -126, lon: 28.0 }), null);
   assert.equal(F.validLocation(undefined), null);
 });

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { requireSuperadmin, NotSuperadminError } from "@/lib/admin";
-import { putFarmConfig, listConfiguredFarmSlugs, type FarmConfig } from "@/lib/farms";
+import { putFarmConfig, listConfiguredFarmSlugs, type FarmConfig, isValidFarmId } from "@/lib/farms";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +60,9 @@ export async function POST(request: Request) {
   if (!/^[a-z0-9-]+$/.test(slug)) return err(400, "Slug must be lowercase letters, numbers, and hyphens");
   if (!farmConfig?.farmId || !farmConfig?.spreadsheetId) {
     return err(400, "farmConfig must include at least farmId and spreadsheetId");
+  }
+  if (!isValidFarmId(farmConfig.farmId)) {
+    return err(400, "farmId may only contain lowercase letters, digits, '_' and '-'");
   }
 
   const client = await clerkClient();

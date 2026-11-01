@@ -43,6 +43,13 @@ export interface FarmConfig {
   ventilation?: import("./ventilation").VentThresholdOverrides;
 }
 
+/** Allowed `farmId` format. Every Influx/Athena query interpolates farmId, so it is checked once here
+ *  when the config is loaded (e.g. "farm_anike_001"; underscores are allowed because real ids use them). */
+export const FARM_ID_RE = /^[a-z0-9_-]+$/;
+export function isValidFarmId(id: unknown): id is string {
+  return typeof id === "string" && id.length > 0 && id.length <= 64 && FARM_ID_RE.test(id);
+}
+
 /** A usable `location` from the farm config, or null. */
 export function validLocation(l: unknown): { lat: number; lon: number } | null {
   const o = l as { lat?: unknown; lon?: unknown } | null;
@@ -68,6 +75,7 @@ async function loadFarmConfig(slug: string): Promise<FarmConfig> {
   if (!raw) throw new FarmAccessError(`No farm config found for organization '${slug}'`);
 
   const cfg = JSON.parse(raw) as FarmConfig;
+  if (!isValidFarmId(cfg.farmId)) throw new FarmAccessError(`Farm config for '${slug}' has an invalid farmId`);
   cache.set(slug, { cfg, at: Date.now() });
   return cfg;
 }
