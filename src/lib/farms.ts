@@ -38,6 +38,9 @@ export interface FarmConfig {
   waterMeters?: { deviceId: string; name: string }[];
   /** Optional per-farm overrides for the Today card thresholds (see src/lib/todayStatus.ts). */
   today?: import("./todayStatus").TodayThresholdOverrides;
+  /** Farm location for the outside weather forecast (Open-Meteo). Optional: the Ventilation page asks for it when missing. */
+  location?: { lat: number; lon: number };
+  ventilation?: import("./ventilation").VentThresholdOverrides;
 }
 
 const TTL_MS = 60 * 60 * 1000;
