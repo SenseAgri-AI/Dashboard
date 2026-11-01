@@ -33,6 +33,46 @@ export interface FarmConfig {
   waterLitresPerPulse: number;
   /** Farm timezone offset from UTC in hours (SAST = 2). */
   timezoneOffset: number;
+  /** Optional: every in-use water meter with a farmer-facing name, e.g. per A-frame. Falls back to
+   *  `waterDeviceId` when absent. Used by the Home freshness / Today card. */
+  waterMeters?: { deviceId: string; name: string }[];
+  /** Optional per-farm overrides for the Today card thresholds (see src/lib/todayStatus.ts). */
+  today?: import("./todayStatus").TodayThresholdOverrides;
+  /** Farm location for the outside weather forecast (Open-Meteo). Optional: the Ventilation page asks for it when missing. */
+  location?: { lat: number; lon: number };
+  ventilation?: import("./ventilation").VentThresholdOverrides;
+}
+
+/** Allowed `farmId` format. Every Influx/Athena query interpolates farmId, so it is checked once here
+ *  when the config is loaded (e.g. "farm_anike_001"; underscores are allowed because real ids use them). */
+export const FARM_ID_RE = /^[a-z0-9_-]+$/;
+export function isValidFarmId(id: unknown): id is string {
+  return typeof id === "string" && id.length > 0 && id.length <= 64 && FARM_ID_RE.test(id);
+}
+
+/** Device ids are LoRaWAN devEUIs: 16 hex digits. Empty means "no such device" (e.g. a farm without a
+ *  feed meter). Checked on load because the ids are interpolated into Influx queries. */
+export const DEVICE_EUI_RE = /^[0-9a-f]{16}$/i;
+export function isValidDeviceIdOrEmpty(id: unknown): boolean {
+  return id === "" || id == null || (typeof id === "string" && DEVICE_EUI_RE.test(id));
+}
+
+/** First problem with a farm config's ids, or null when they are all well-formed. */
+export function farmConfigIdProblem(cfg: Partial<FarmConfig>): string | null {
+  if (!isValidFarmId(cfg.farmId)) return "invalid farmId";
+  if (!isValidDeviceIdOrEmpty(cfg.waterDeviceId)) return "invalid waterDeviceId";
+  if (!isValidDeviceIdOrEmpty(cfg.feedDeviceId)) return "invalid feedDeviceId";
+  if (cfg.waterMeters != null && (!Array.isArray(cfg.waterMeters) || cfg.waterMeters.some((m) => !m || typeof m.deviceId !== "string" || !DEVICE_EUI_RE.test(m.deviceId)))) {
+    return "invalid waterMeters deviceId";
+  }
+  return null;
+}
+
+/** A usable `location` from the farm config, or null. */
+export function validLocation(l: unknown): { lat: number; lon: number } | null {
+  const o = l as { lat?: unknown; lon?: unknown } | null;
+  const lat = Number(o?.lat), lon = Number(o?.lon);
+  return o && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
 }
 
 const TTL_MS = 60 * 60 * 1000;
@@ -53,6 +93,8 @@ async function loadFarmConfig(slug: string): Promise<FarmConfig> {
   if (!raw) throw new FarmAccessError(`No farm config found for organization '${slug}'`);
 
   const cfg = JSON.parse(raw) as FarmConfig;
+  const problem = farmConfigIdProblem(cfg);
+  if (problem) throw new FarmAccessError(`Farm config for '${slug}' has an ${problem}`);
   cache.set(slug, { cfg, at: Date.now() });
   return cfg;
 }

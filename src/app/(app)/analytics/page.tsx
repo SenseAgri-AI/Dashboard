@@ -134,7 +134,10 @@ const ENV_OPTIONS = CATALOG.filter((c) => c.env);
 // High-res chart draws from InfluxDB: env sensors + acoustic sound level + drinking rate (water meter).
 const HR_OPTIONS = CATALOG.filter((c) => c.env || c.key === "noise" || c.key === "water" || c.key === "thi");
 // Daily history: everything except the high-res-only drinking rate (its daily form is "water_daily").
-const SILVER_OPTIONS = CATALOG.filter((c) => c.key !== "water");
+// Feed auger pulse meters are offline and never calibrated to kg (all zero since 31 Aug 2026, and
+// 650 000 pulses in one April week), so they are kept out of the picker until they are fixed.
+const FEED_METER_KEYS = new Set(["feed_augers", "feed_a1", "feed_a2"]);
+const SILVER_OPTIONS = CATALOG.filter((c) => c.key !== "water" && !FEED_METER_KEYS.has(c.key));
 // Only sensor metrics vary within a day → only they get a min–max band. Sheet-derived daily
 // values (eggs, sizes, breakages, weight, mortality) are broadcast across the 24 hours, so their
 // min = max = the day's value (a flat, meaningless band).

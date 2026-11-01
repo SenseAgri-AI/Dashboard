@@ -111,7 +111,7 @@ function SiloGauge({ silo, index, narrow, lowLine }: { silo: SiloLevel; index: n
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "minmax(0, 1fr) 105px", alignItems: "center", gap: 8, flex: 1, marginTop: 2 }}>
-        <svg viewBox="0 0 300 270" role="img" aria-label={`Feed Silo ${index + 1} is ${Math.round(pct)}% full`} style={{ width: "100%", height: narrow ? 225 : 240, overflow: "visible" }}>
+        <svg viewBox="0 0 300 270" role="img" aria-label={`Feed Silo ${index + 1} is about ${roundTo5(pct)}% full by height`} style={{ width: "100%", height: narrow ? 225 : 240, overflow: "visible" }}>
           <defs>
             <clipPath id={clipId}><path d="M58 42 Q140 15 222 42 L222 166 L166 236 H114 L58 166 Z" /></clipPath>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -138,8 +138,8 @@ function SiloGauge({ silo, index, narrow, lowLine }: { silo: SiloLevel; index: n
 
         <div style={{ minWidth: 0, display: narrow ? "grid" : "block", gridTemplateColumns: narrow ? "1.25fr 1fr 0.8fr" : undefined, gap: narrow ? 10 : undefined, alignItems: "end" }}>
           <div>
-            <div style={{ fontSize: 9, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--t3)" }}>Estimated fill</div>
-            <div style={{ fontFamily: "var(--font-d)", fontSize: narrow ? 30 : 38, fontWeight: 800, letterSpacing: "-0.04em", color: isLow ? RED : INK, lineHeight: 1.05, marginTop: 4 }}>{Math.round(pct)}%</div>
+            <div style={{ fontSize: 9, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--t3)" }}>Fill by height · approx.</div>
+            <div style={{ fontFamily: "var(--font-d)", fontSize: narrow ? 30 : 38, fontWeight: 800, letterSpacing: "-0.04em", color: isLow ? RED : INK, lineHeight: 1.05, marginTop: 4 }}>≈{roundTo5(pct)}%</div>
             <div style={{ width: "100%", maxWidth: 120, height: 6, background: "#E2E9EA", marginTop: 10, overflow: "hidden", borderRadius: 10 }}>
               <div style={{ width: `${pct}%`, height: "100%", background: isLow ? RED : `linear-gradient(90deg, ${NAVY}, ${TEAL})` }} />
             </div>
@@ -187,7 +187,16 @@ export default function DashSiloLevels({ data, narrow = false }: { data: SiloLev
           <div><div style={{ color: "var(--t2)", fontSize: 12, fontWeight: 700 }}>No silo radar readings available</div><div style={{ color: "var(--t3)", fontSize: 10.5, marginTop: 5 }}>Waiting for a physical silo sensor to report.</div></div>
         </div>
       )}
-      {silos.length > 0 && data && <div style={{ fontSize: 9.5, color: "var(--t3)", marginTop: 7, textAlign: "right" }}>100% usable fill is calibrated at {data.calibration.fullDistanceMm.toLocaleString("en-ZA")} mm head space.{low && ` A silo shows Low (${low.displayPercent}%) after ${low.overCutReadings} readings in a row over ${low.cutMm.toLocaleString("en-ZA")} mm or ${low.readings} over ${low.distanceMm.toLocaleString("en-ZA")} mm, until it is at least ${low.refilledPercent}% full again.`}</div>}
+      {/* As a farmer, I want to know roughly how full each silo is and when to order, without a falsely
+          precise number: the radar measures head space and the funnel is not calibrated, so % is by height. */}
+      {silos.length > 0 && data && <div style={{ fontSize: 9.5, color: "var(--t3)", marginTop: 7, textAlign: "right" }}
+        title={low ? `Low after ${low.overCutReadings} readings in a row over ${low.cutMm.toLocaleString("en-ZA")} mm or ${low.readings} over ${low.distanceMm.toLocaleString("en-ZA")} mm head space, until at least ${low.refilledPercent}% full again. 100% = ${data.calibration.fullDistanceMm.toLocaleString("en-ZA")} mm head space.` : undefined}>
+        % is by feed height, not weight: the funnel isn&apos;t calibrated, so the bottom of the silo holds less than the % suggests. Order on &ldquo;Running low&rdquo;, not on the %.</div>}
     </section>
   );
+}
+
+/** The radar % is approximate (head space, uncalibrated funnel): show it to the nearest 5. */
+function roundTo5(pct: number): number {
+  return Math.max(0, Math.min(100, Math.round(pct / 5) * 5));
 }

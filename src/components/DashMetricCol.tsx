@@ -1,7 +1,7 @@
 export type DailyEntry = {
   date: string; eggs: number; small: number; medium: number; large: number; xl: number; jumbo: number;
   damaged: number; mortality: number; liveHens: number; avgWeight: number | null; revenue: number;
-  hdep: number | null; hhep?: number | null; feedPulses: number | null; fcr: number | null;
+  hdep: number | null; hhep?: number | null;
 };
 
 export interface ProductionData {

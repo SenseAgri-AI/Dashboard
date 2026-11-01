@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
 import { queryInflux } from "@/lib/influxdb";
-import { thi, plausibleClimate } from "@/lib/thi";
+import { feltTemp, plausibleClimate } from "@/lib/thi";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -123,7 +123,7 @@ export async function GET(req: NextRequest) {
         `);
         for (const r of rows) {
           const t = Number(r.t), h = Number(r.h);
-          if (plausibleClimate(t, h)) point(toIso(r.time)).thi = round(thi(t, h));
+          if (plausibleClimate(t, h)) point(toIso(r.time)).thi = round(feltTemp(t, h));
         }
       } catch (e) {
         console.error("High-res THI query failed:", e); // other metrics still render

@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import ListEmptyRow, { type LoadState } from "./ListEmptyRow";
+import { deliveryWarning, intakeBetweenDeliveries, parseFeedWeightKg, LAYER_INTAKE_G } from "@/lib/feedSanity";
 import HouseSelect, { houseLabel } from "@/components/HouseSelect";
 
 type FeedDelivery = {
@@ -31,16 +33,35 @@ const grid = (min: number): React.CSSProperties => ({ display: "grid", gridTempl
 
 export default function FeedTab() {
   const [rows, setRows] = useState<FeedDelivery[]>([]);
+  const [hens, setHens] = useState(0);
   const [f, setF] = useState<FeedDelivery>(empty());
   const [status, setStatus] = useState<{ kind: "idle" | "saving" | "ok" | "error"; msg?: string }>({ kind: "idle" });
 
+  // As a farmer, when the list fails to load I want to be told, not shown "No deliveries logged yet",
+  // so I don't log the same delivery twice.
+  const [loadState, setLoadState] = useState<LoadState>("loading");
   const load = useCallback(async () => {
-    const res = await fetch("/api/feed");
-    if (res.ok) setRows((await res.json()).deliveries ?? []);
+    try {
+      const res = await fetch("/api/feed");
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      setRows(data.deliveries ?? []);
+      setHens(Number(data.totalHens) || 0);
+      setLoadState("ok");
+    } catch {
+      setLoadState("error");
+    }
   }, []);
   useEffect(() => { load(); }, [load]);
 
   const set = (k: keyof FeedDelivery) => (e: React.ChangeEvent<HTMLInputElement>) => setF((x) => ({ ...x, [k]: e.target.value }));
+
+  // As a farmer logging a delivery, I want a typo or a bag count caught before it is saved,
+  // so the "how long did it last" figures below stay trustworthy.
+  const weightWarning = hens > 0 ? deliveryWarning(f.weight, hens) : null;
+  // As a farmer, I want to see how long each delivery lasted in g/hen/day (layers eat about
+  // 100–125 g), so I notice birds eating less, feed wastage, or a delivery I forgot to log.
+  const intakeByDate = new Map(hens > 0 ? intakeBetweenDeliveries(rows, hens).map((x) => [x.date, x]) : []);
 
   // Load an existing delivery into the form for editing (keeps its id → save updates it).
   function edit(d: FeedDelivery) {
@@ -88,7 +109,10 @@ export default function FeedTab() {
               <Field label="Feed type / formulation"><input value={f.feedType} onChange={set("feedType")} style={inputStyle} placeholder="Layer mash phase 2" /></Field>
               <Field label="Batch no."><input value={f.batch} onChange={set("batch")} style={inputStyle} placeholder="for batch tracing" /></Field>
               <Field label="Supplier"><input value={f.supplier} onChange={set("supplier")} style={inputStyle} /></Field>
-              <Field label="Weight filled"><input value={f.weight} onChange={set("weight")} style={inputStyle} placeholder="e.g. 5000 kg" /></Field>
+              <Field label="Weight filled (kg)">
+                <input value={f.weight} onChange={set("weight")} style={inputStyle} placeholder="e.g. 25 000 kg" />
+                {weightWarning && <span style={{ fontSize: 11, color: "var(--warn, #B45309)", fontWeight: 600 }}>{weightWarning}</span>}
+              </Field>
               <Field label="Date *"><input type="date" value={f.date} max={todayInSast()} onChange={set("date")} style={inputStyle} /></Field>
               <Field label="Time"><input type="time" value={f.time} onChange={set("time")} style={inputStyle} /></Field>
             </div>
@@ -120,11 +144,13 @@ export default function FeedTab() {
 
       <section className="sa-panel" style={{ padding: 0 }}>
         <div className="sa-panel-hd sa-panel-hd--welfare">Recent deliveries</div>
+        <div style={{ padding: "6px 12px 0", fontSize: 11, color: "var(--t3)" }}>&ldquo;Lasted&rdquo; is whole-farm: days until the next logged delivery (any silo), per housed hen. A rough guide, not per silo.</div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 860 }}>
             <thead>
               <tr style={{ textAlign: "left", color: "var(--t2)" }}>
-                {["Date", "House", "Silo", "Feed type", "Batch", "Weight", "Protein", "Calcium", "Phos", "Energy", ""].map((h) => (
+                {/* Date, weight and "lasted" first: on a phone they're what fits without scrolling. */}
+                {["Date", "Weight", "Lasted", "House", "Silo", "Feed type", "Batch", "Protein", "Calcium", "Phos", "Energy", ""].map((h) => (
                   <th key={h} style={{ padding: "8px 10px", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid var(--divider)" }}>{h}</th>
                 ))}
               </tr>
@@ -133,11 +159,12 @@ export default function FeedTab() {
               {recent.map((d) => (
                 <tr key={d.id} style={{ borderBottom: "1px solid var(--divider)" }}>
                   <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{d.date}</td>
+                  <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{weightCell(d.weight)}</td>
+                  <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{lastedCell(intakeByDate.get(d.date))}</td>
                   <td style={{ padding: "8px 10px", color: "var(--t2)" }}>{houseLabel(d.house)}</td>
                   <td style={{ padding: "8px 10px", fontWeight: 700 }}>{d.silo}</td>
                   <td style={{ padding: "8px 10px" }}>{d.feedType}</td>
                   <td style={{ padding: "8px 10px", fontFamily: "ui-monospace, monospace" }}>{d.batch}</td>
-                  <td style={{ padding: "8px 10px" }}>{d.weight}</td>
                   <td style={{ padding: "8px 10px" }}>{d.protein}</td>
                   <td style={{ padding: "8px 10px" }}>{d.calcium}</td>
                   <td style={{ padding: "8px 10px" }}>{d.phosphorus}</td>
@@ -148,11 +175,28 @@ export default function FeedTab() {
                   </td>
                 </tr>
               ))}
-              {recent.length === 0 && <tr><td colSpan={11} style={{ padding: "20px 12px", color: "var(--t3)", textAlign: "center" }}>No deliveries logged yet.</td></tr>}
+              {recent.length === 0 && <ListEmptyRow state={loadState} colSpan={12} what="deliveries" empty="No deliveries logged yet." onRetry={() => { setLoadState("loading"); load(); }} />}
             </tbody>
           </table>
         </div>
       </section>
     </div>
   );
+}
+
+function weightCell(text: string) {
+  const p = parseFeedWeightKg(text);
+  if (p.kg != null && p.issue == null) return `${Math.round(p.kg).toLocaleString("en-ZA")} kg`;
+  if (!text) return "";
+  return <span title="Weight should be in kg, e.g. 25 000 kg">{text} <span style={{ color: "var(--warn, #B45309)", fontWeight: 700 }}>unit?</span></span>;
+}
+
+function lastedCell(x: ReturnType<typeof intakeBetweenDeliveries>[number] | undefined) {
+  if (!x) return <span style={{ color: "var(--t3)" }}>–</span>;
+  if (x.verdict === "looks-wrong") {
+    return <span style={{ color: "var(--warn, #B45309)", fontWeight: 700 }} title="Outside 70–160 g/hen/day: usually a delivery that wasn't logged, or a weight typo">{x.days} days · looks wrong</span>;
+  }
+  const colour = x.verdict === "normal" ? "var(--t1)" : "var(--warn, #B45309)";
+  const note = x.verdict === "low" ? ` (below ${LAYER_INTAKE_G.min} g)` : x.verdict === "high" ? ` (above ${LAYER_INTAKE_G.max} g)` : "";
+  return <span style={{ color: colour }}>{x.days} days · {x.gPerHenDay} g/hen/day{note}</span>;
 }

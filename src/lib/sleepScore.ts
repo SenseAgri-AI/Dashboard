@@ -6,7 +6,7 @@
 // suppresses sleep even when the birds are quiet; darkness checks they got ENOUGH dark time to rest
 // (one-sided — too little is penalised, too much is fine). Pure — the route supplies noise + climate.
 
-import { thi, thiZone, heatPenalty, plausibleClimate, type ThiZone } from "./thi";
+import { feltTemp, thiZone, heatPenalty, plausibleClimate, type ThiZone } from "./thi";
 
 export const NIGHT_START_SAST = 20;   // dark period 20:00–05:00 SAST
 export const NIGHT_END_SAST = 5;
@@ -81,7 +81,7 @@ function nightThi(pts: ClimateSample[]): number | null {
   let sum = 0, n = 0;
   for (const c of pts) {
     if (c.temp == null || c.rh == null || !plausibleClimate(c.temp, c.rh)) continue;
-    sum += thi(c.temp, c.rh); n++;
+    sum += feltTemp(c.temp, c.rh); n++; // shown as "felt"; same as THI in the heat-penalty range
   }
   return n ? sum / n : null;
 }

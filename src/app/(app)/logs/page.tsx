@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ListEmptyRow, { type LoadState } from "@/components/ListEmptyRow";
 
 type House = { id: string; name: string; startDate: string; startAgeDays: number; startingHens: number };
 type Entry = {
@@ -59,11 +60,17 @@ export default function LogsPage() {
     setHouseId((prev) => prev || hs[0]?.id || "house1");
   }, []);
 
+  const [loadState, setLoadState] = useState<LoadState>("loading");
   const loadEntries = useCallback(async () => {
-    const res = await fetch("/api/logs");
-    if (!res.ok) return;
-    const data = await res.json();
-    setEntries(data.entries ?? []);
+    try {
+      const res = await fetch("/api/logs");
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      setEntries(data.entries ?? []);
+      setLoadState("ok");
+    } catch {
+      setLoadState("error");
+    }
   }, []);
 
   useEffect(() => {
@@ -237,7 +244,7 @@ export default function LogsPage() {
                   );
                 })}
                 {recent.length === 0 && (
-                  <tr><td colSpan={6} style={{ padding: "20px 12px", color: "var(--t3)", textAlign: "center" }}>No entries yet.</td></tr>
+                  <ListEmptyRow state={loadState} colSpan={6} what="log entries" empty="No entries yet." onRetry={() => { setLoadState("loading"); loadEntries(); }} />
                 )}
               </tbody>
             </table>

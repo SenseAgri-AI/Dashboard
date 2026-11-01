@@ -3,7 +3,7 @@ import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
 import { fetchSilverDaily, isSilverMetric, fetchMetersDaily, type DailyRow, type MeterDay } from "@/lib/silverSource";
 import { queryInflux } from "@/lib/influxdb";
 import { nightScores, type NoiseSample, type ClimateSample } from "@/lib/sleepScore";
-import { thi, plausibleClimate } from "@/lib/thi";
+import { feltTemp, plausibleClimate } from "@/lib/thi";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -177,7 +177,7 @@ export async function GET(req: NextRequest) {
           if (day < fromDay || day > toDay) continue;
           const t = row.temperature as number | null, h = row.humidity as number | null;
           const point = byDay.get(day) ?? { time: row.time };
-          point[THI] = t != null && h != null && plausibleClimate(t, h) ? round(thi(t, h), 1) : null;
+          point[THI] = t != null && h != null && plausibleClimate(t, h) ? round(feltTemp(t, h), 1) : null;
           byDay.set(day, point);
         }
       } catch (e) {
