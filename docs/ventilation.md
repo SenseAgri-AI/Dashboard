@@ -32,3 +32,12 @@ Every prompt is worded as a suggestion ("consider …") with a one-line "why"; n
 - Wind and rain as their own prompts: the forecast has them but not wind direction relative to the curtains; rain only limits the airing window.
 - Inside forecast or "predicted inside temperature": no validated model yet.
 - Dew point, pressure, PM: not decision-relevant for curtains and fans here.
+
+## After sunset
+
+The Day box always shows the next daylight period. After sunset that is tomorrow, which has no inside
+readings yet, so the page used to show "inside so far –" every evening. Now the heading reads
+"Tomorrow · outside vs inside" and the Day box shows "inside today (measured)", the range from the day that
+just ended, the same way the Night box uses last night. If an inside figure is still blank it says why:
+"No inside reading since 1 Nov, 12:41" (sensor quiet over 90 min), "Day just started", or "No inside
+readings in this period".

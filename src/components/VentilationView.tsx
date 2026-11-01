@@ -84,10 +84,10 @@ export default function VentilationView({ data, now, narrow = false }: { data: V
 
       {/* Today & tonight */}
       <section style={card} aria-label="Today and tonight">
-        <h2 style={h2}>Today &amp; tonight · outside vs inside</h2>
+        <h2 style={h2}>{v.today?.upcoming ? "Tomorrow" : "Today & tonight"} · outside vs inside</h2>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <PeriodBox title="Day" row={v.today} offset={data.offsetHours} insideLabel="inside so far" usualLabel="usual day" />
-          <PeriodBox title="Night" row={v.tonight} offset={data.offsetHours} insideLabel="inside last night" usualLabel="usual night" />
+          <PeriodBox title="Day" row={v.today} offset={data.offsetHours} insideLabel={v.today?.upcoming ? "inside today (measured)" : "inside so far"} usualLabel="usual day" lastAt={v.insideLastAt} now={now} />
+          <PeriodBox title="Night" row={v.tonight} offset={data.offsetHours} insideLabel="inside last night" usualLabel="usual night" lastAt={v.insideLastAt} now={now} />
         </div>
       </section>
 
@@ -134,7 +134,7 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
-function PeriodBox({ title, row, offset, insideLabel, usualLabel }: { title: string; row: PeriodRow | null; offset: number; insideLabel: string; usualLabel: string }) {
+function PeriodBox({ title, row, offset, insideLabel, usualLabel, lastAt, now }: { title: string; row: PeriodRow | null; offset: number; insideLabel: string; usualLabel: string; lastAt: number | null; now: number }) {
   if (!row) return <div style={{ fontSize: 13, color: MUTED }}>{title}: –</div>;
   const p = row.period;
   return (
@@ -143,10 +143,23 @@ function PeriodBox({ title, row, offset, insideLabel, usualLabel }: { title: str
       <div style={{ marginTop: 6, fontSize: 12, color: MUTED }}>Outside (forecast)</div>
       <div style={{ fontSize: 18, fontWeight: 800, color: OUT_C }}>{range(row.outside)}</div>
       <div style={{ marginTop: 6, fontSize: 12, color: MUTED }}>{insideLabel}</div>
-      <div style={{ fontSize: 18, fontWeight: 800, color: IN_C }}>{range(row.inside)}</div>
+      {row.inside
+        ? <div style={{ fontSize: 18, fontWeight: 800, color: IN_C }}>{range(row.inside)}</div>
+        : <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--warn)" }}>{noInsideReason(row, lastAt, now, offset)}</div>}
       {row.insideUsual && <div style={{ fontSize: 11, color: MUTED }}>{usualLabel} {range(row.insideUsual)}</div>}
     </div>
   );
+}
+
+// Story: a blank inside figure should say why, so I know whether the sensor is down or it's just early.
+function noInsideReason(row: PeriodRow, lastAt: number | null, now: number, offset: number): string {
+  if (lastAt == null) return "No inside readings this week";
+  if (now - lastAt > 90 * 60_000) {
+    const day = new Date(lastAt + offset * H).toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "short" });
+    return `No inside reading since ${day}, ${localHHMM(lastAt, offset)}`;
+  }
+  if (!row.upcoming && row.period.start > now - 30 * 60_000) return "Day just started";
+  return "No inside readings in this period";
 }
 
 function TempChart({ data, now, narrow }: { data: VentData; now: number; narrow: boolean }) {

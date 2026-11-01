@@ -216,3 +216,18 @@ test('farm location validation', () => {
   assert.equal(F.validLocation({ lat: -126, lon: 28.0 }), null);
   assert.equal(F.validLocation(undefined), null);
 });
+
+test('after sunset the Day box is tomorrow and shows the day that just ended (not a blank)', () => {
+  const evening = Date.parse('2026-11-01T20:45:00Z'); // 22:45 SAST
+  const pts = Array.from({ length: Math.floor((evening - DAY0) / (H / 2)) + 1 }, (_, i) => DAY0 + i * H / 2)
+    .map((t) => ({ t, tempC: localHour(t) >= 12 && localHour(t) < 16 ? 28 : 20, rhPct: 60, co2: 900 }));
+  const v = V.buildVentilation({ now: evening, outside: outside(() => 20), sun, inside: pts, offsetHours: 2 });
+  assert.equal(v.today.upcoming, true);
+  assert.ok(v.today.period.start > evening);
+  assert.deepEqual(plain(v.today.inside), { min: 20, max: 28 }); // 1 Nov daytime, measured
+  // the live sensor is not reported as quiet
+  assert.ok(v.insideNow != null);
+  assert.equal(v.insideLastAt, pts.at(-1).t);
+  // during the day it is still "so far"
+  assert.equal(view(outside(sine(14, 24))).today.upcoming, false);
+});

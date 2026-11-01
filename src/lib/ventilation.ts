@@ -88,7 +88,8 @@ export type VentInput = {
 export type Period = { kind: "day" | "night"; start: number; end: number; label: string };
 export type Range = { min: number; max: number } | null;
 export type Prompt = { id: string; level: "act" | "plan"; text: string; why: string };
-export type PeriodRow = { period: Period; outside: Range; inside: Range; insideUsual: Range; partial: boolean };
+/** `upcoming`: the day box is the next day (it is night now), so `inside` is the day that just ended. */
+export type PeriodRow = { period: Period; outside: Range; inside: Range; insideUsual: Range; partial: boolean; upcoming?: boolean };
 export type DayOutlook = { label: string; dayMax: number | null; nightMin: number | null; hot: boolean; cold: boolean };
 
 export type VentView = {
@@ -195,10 +196,15 @@ export function buildVentilation(input: VentInput): VentView {
   const usualDayMax = median(pastDays.map((p) => insideIn(inside, p)).filter((v) => v.length >= 6).map((v) => Math.max(...v)));
   const usualDayMin = median(pastDays.map((p) => insideIn(inside, p)).filter((v) => v.length >= 6).map((v) => Math.min(...v)));
 
+  // After sunset the next day hasn't started, so it has no inside readings yet: show the day that just
+  // ended (measured) as the guide, like the night box uses last night.
+  const upcoming = day != null && day.start > now;
+  const prevDay = pastDays.at(-1) ?? null;
   const today: PeriodRow | null = day ? {
     period: day,
     outside: rangeOf(outsideIn(hours, day)),
-    inside: rangeOf(insideIn(inside, { ...day, end: Math.min(day.end, now) })),
+    inside: rangeOf(upcoming ? (prevDay ? insideIn(inside, prevDay) : []) : insideIn(inside, { ...day, end: Math.min(day.end, now) })),
+    upcoming,
     insideUsual: usualDayMax != null && usualDayMin != null ? { min: r1(usualDayMin), max: r1(usualDayMax) } : null,
     partial: day.start < now,
   } : null;
