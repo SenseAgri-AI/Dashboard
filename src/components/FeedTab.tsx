@@ -149,7 +149,8 @@ export default function FeedTab() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 860 }}>
             <thead>
               <tr style={{ textAlign: "left", color: "var(--t2)" }}>
-                {["Date", "House", "Silo", "Feed type", "Batch", "Weight", "Lasted", "Protein", "Calcium", "Phos", "Energy", ""].map((h) => (
+                {/* Date, weight and "lasted" first: on a phone they're what fits without scrolling. */}
+                {["Date", "Weight", "Lasted", "House", "Silo", "Feed type", "Batch", "Protein", "Calcium", "Phos", "Energy", ""].map((h) => (
                   <th key={h} style={{ padding: "8px 10px", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid var(--divider)" }}>{h}</th>
                 ))}
               </tr>
@@ -158,12 +159,12 @@ export default function FeedTab() {
               {recent.map((d) => (
                 <tr key={d.id} style={{ borderBottom: "1px solid var(--divider)" }}>
                   <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{d.date}</td>
+                  <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{weightCell(d.weight)}</td>
+                  <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{lastedCell(intakeByDate.get(d.date))}</td>
                   <td style={{ padding: "8px 10px", color: "var(--t2)" }}>{houseLabel(d.house)}</td>
                   <td style={{ padding: "8px 10px", fontWeight: 700 }}>{d.silo}</td>
                   <td style={{ padding: "8px 10px" }}>{d.feedType}</td>
                   <td style={{ padding: "8px 10px", fontFamily: "ui-monospace, monospace" }}>{d.batch}</td>
-                  <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{weightCell(d.weight)}</td>
-                  <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{lastedCell(intakeByDate.get(d.date))}</td>
                   <td style={{ padding: "8px 10px" }}>{d.protein}</td>
                   <td style={{ padding: "8px 10px" }}>{d.calcium}</td>
                   <td style={{ padding: "8px 10px" }}>{d.phosphorus}</td>

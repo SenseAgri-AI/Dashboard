@@ -72,7 +72,8 @@ export default function TodayCard({ ready, daily, lastLogDate, climate, extras, 
     offsetHours: fresh?.timezoneOffset ?? 2,
   }, fresh?.thresholds);
 
-  const headColor = !result ? "var(--t3)" : result.problems === 0 ? RAG_STYLE.green.text
+  const waterPending = water === "loading";
+  const headColor = !result || (waterPending && result.problems === 0) ? "var(--t3)" : result.problems === 0 ? RAG_STYLE.green.text
     : result.lines.some((l) => l.rag === "red") ? RAG_STYLE.red.text : RAG_STYLE.amber.text;
 
   return (
@@ -80,9 +81,13 @@ export default function TodayCard({ ready, daily, lastLogDate, climate, extras, 
       <div className="sa-panel-hd sa-panel-hd--production">Today</div>
       <div style={{ padding: narrow ? "8px 10px 10px" : "10px 14px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
         <div role="status" style={{ fontFamily: "var(--font-d)", fontSize: narrow ? 18 : 20, fontWeight: 800, color: headColor, padding: "2px 2px 4px" }}>
-          {result ? result.headline : "Checking the farm…"}
+          {/* Never say "All good" until the water check is in; it can still add a problem. */}
+          {!result ? "Checking the farm…" : waterPending && result.problems === 0 ? "Nothing flagged yet" : result.headline}
         </div>
         {result?.lines.map((l) => <Line key={l.key} rag={l.rag} label={l.label} text={l.text} action={l.action} narrow={narrow} />)}
+        {result && waterPending && (
+          <div style={{ fontSize: 12, color: "var(--t3)", padding: "2px 2px 0" }}>Checking water use…</div>
+        )}
         {result?.someChecksFailed && (
           <div style={{ fontSize: 12, color: "var(--t3)", padding: "2px 2px 0" }}>Some checks didn&apos;t load — try again later.</div>
         )}
