@@ -50,6 +50,24 @@ export function isValidFarmId(id: unknown): id is string {
   return typeof id === "string" && id.length > 0 && id.length <= 64 && FARM_ID_RE.test(id);
 }
 
+/** Device ids are LoRaWAN devEUIs: 16 hex digits. Empty means "no such device" (e.g. a farm without a
+ *  feed meter). Checked on load because the ids are interpolated into Influx queries. */
+export const DEVICE_EUI_RE = /^[0-9a-f]{16}$/i;
+export function isValidDeviceIdOrEmpty(id: unknown): boolean {
+  return id === "" || id == null || (typeof id === "string" && DEVICE_EUI_RE.test(id));
+}
+
+/** First problem with a farm config's ids, or null when they are all well-formed. */
+export function farmConfigIdProblem(cfg: Partial<FarmConfig>): string | null {
+  if (!isValidFarmId(cfg.farmId)) return "invalid farmId";
+  if (!isValidDeviceIdOrEmpty(cfg.waterDeviceId)) return "invalid waterDeviceId";
+  if (!isValidDeviceIdOrEmpty(cfg.feedDeviceId)) return "invalid feedDeviceId";
+  if (cfg.waterMeters != null && (!Array.isArray(cfg.waterMeters) || cfg.waterMeters.some((m) => !m || typeof m.deviceId !== "string" || !DEVICE_EUI_RE.test(m.deviceId)))) {
+    return "invalid waterMeters deviceId";
+  }
+  return null;
+}
+
 /** A usable `location` from the farm config, or null. */
 export function validLocation(l: unknown): { lat: number; lon: number } | null {
   const o = l as { lat?: unknown; lon?: unknown } | null;
@@ -75,7 +93,8 @@ async function loadFarmConfig(slug: string): Promise<FarmConfig> {
   if (!raw) throw new FarmAccessError(`No farm config found for organization '${slug}'`);
 
   const cfg = JSON.parse(raw) as FarmConfig;
-  if (!isValidFarmId(cfg.farmId)) throw new FarmAccessError(`Farm config for '${slug}' has an invalid farmId`);
+  const problem = farmConfigIdProblem(cfg);
+  if (problem) throw new FarmAccessError(`Farm config for '${slug}' has an ${problem}`);
   cache.set(slug, { cfg, at: Date.now() });
   return cfg;
 }

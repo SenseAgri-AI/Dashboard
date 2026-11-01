@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { requireSuperadmin, NotSuperadminError } from "@/lib/admin";
-import { putFarmConfig, listConfiguredFarmSlugs, type FarmConfig, isValidFarmId } from "@/lib/farms";
+import { putFarmConfig, listConfiguredFarmSlugs, type FarmConfig, isValidFarmId, farmConfigIdProblem } from "@/lib/farms";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +64,8 @@ export async function POST(request: Request) {
   if (!isValidFarmId(farmConfig.farmId)) {
     return err(400, "farmId may only contain lowercase letters, digits, '_' and '-'");
   }
+  const idProblem = farmConfigIdProblem(farmConfig);
+  if (idProblem) return err(400, `farmConfig has an ${idProblem} (device ids are 16 hex digits)`);
 
   const client = await clerkClient();
 

@@ -194,6 +194,18 @@ test('farmId format is checked before it can reach SQL', () => {
   for (const bad of ["farm' OR 1=1 --", 'Farm_A', 'farm id', '', null, 42, 'x'.repeat(65)]) assert.equal(F.isValidFarmId(bad), false, String(bad));
 });
 
+test('device ids in the farm config must be 16-hex devEUIs (or empty)', () => {
+  const F = load('src/lib/farms.ts', { '@aws-sdk/client-ssm': {}, '@clerk/nextjs/server': {} });
+  const ok = { farmId: 'farm_x_001', waterDeviceId: '0123456789abcdef', feedDeviceId: '' };
+  assert.equal(F.farmConfigIdProblem(ok), null);
+  assert.equal(F.farmConfigIdProblem({ ...ok, feedDeviceId: 'ABCDEF0123456789' }), null);
+  assert.equal(F.farmConfigIdProblem({ ...ok, waterDeviceId: "x' OR '1'='1" }), 'invalid waterDeviceId');
+  assert.equal(F.farmConfigIdProblem({ ...ok, feedDeviceId: '0123456789abcde' }), 'invalid feedDeviceId');
+  assert.equal(F.farmConfigIdProblem({ ...ok, waterMeters: [{ deviceId: '0123456789abcdef', name: 'A' }] }), null);
+  assert.equal(F.farmConfigIdProblem({ ...ok, waterMeters: [{ deviceId: 'nope', name: 'A' }] }), 'invalid waterMeters deviceId');
+  assert.equal(F.farmConfigIdProblem({ ...ok, farmId: 'Bad Id' }), 'invalid farmId');
+});
+
 test('farm location validation', () => {
   const F = load('src/lib/farms.ts', { '@aws-sdk/client-ssm': {}, '@clerk/nextjs/server': {} });
   assert.deepEqual(plain(F.validLocation({ lat: -25.0, lon: 28.0 })), { lat: -25, lon: 28 }); // placeholder, not a real farm
