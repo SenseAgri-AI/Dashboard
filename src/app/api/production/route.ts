@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { getSheetValues } from "@/lib/sheets";
-import { queryInflux } from "@/lib/influxdb";
 import { getFarmForRequest, FarmAccessError, type PriceTier } from "@/lib/farms";
 
 // Farm-specific values (sheet, feed device, hens, price tiers) come from per-farm
@@ -38,57 +37,8 @@ function toNum(v: unknown): number | null {
   return isNaN(n) ? null : n;
 }
 
-interface FeedRow {
-  bucket: string | Date;
-  cumulative?: number | null;
-}
-
-function prevDayKey(dateKey: string): string {
-  const d = new Date(dateKey + "T12:00:00Z");
-  d.setUTCDate(d.getUTCDate() - 1);
-  return d.toISOString().slice(0, 10);
-}
-
-function nextDayKey(dateKey: string): string {
-  const d = new Date(dateKey + "T12:00:00Z");
-  d.setUTCDate(d.getUTCDate() + 1);
-  return d.toISOString().slice(0, 10);
-}
-
-// Attribute feed pulses by farm-day logic:
-// The FIRST fill of each UTC calendar day is the previous evening's top-up
-// and belongs to the previous day. All subsequent fills that day are current-day.
-function feedDailyMap(rows: FeedRow[]): Map<string, number> {
-  let prev: number | null = null;
-  const firstFillSeen = new Set<string>();
-  const map = new Map<string, number>();
-
-  for (const row of rows) {
-    const cumulative = toNum(row.cumulative);
-    const iso = (row.bucket instanceof Date
-      ? row.bucket.toISOString()
-      : new Date(row.bucket).toISOString()
-    );
-    const dateKey = iso.slice(0, 10);
-
-    if (cumulative !== null && prev !== null) {
-      const delta = Math.max(0, cumulative - prev);
-      if (delta > 0) {
-        if (!firstFillSeen.has(dateKey)) {
-          // First fill of this calendar day → belongs to the previous day
-          firstFillSeen.add(dateKey);
-          const target = prevDayKey(dateKey);
-          map.set(target, (map.get(target) ?? 0) + delta);
-        } else {
-          // Subsequent fills → current day
-          map.set(dateKey, (map.get(dateKey) ?? 0) + delta);
-        }
-      }
-    }
-    if (cumulative !== null) prev = cumulative;
-  }
-  return map;
-}
+// Feed: the auger pulse meters are offline and were never calibrated to kg, so this route no longer
+// reads them. It used to return `fcr` = pulses ÷ eggs, which is not a feed conversion ratio (no kg).
 
 export async function GET(request: Request) {
   let farm;
@@ -107,22 +57,7 @@ export async function GET(request: Request) {
   const toParam   = searchParams.get("to");   // YYYY-MM-DD, optional
 
   try {
-    const [sheetRows, feedRows] = await Promise.all([
-      getSheetValues(farm.spreadsheetId, farm.sheetRange),
-      queryInflux<FeedRow>(`
-        SELECT
-          date_bin(INTERVAL '1 hour', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
-          MAX(pulse_total) AS cumulative
-        FROM sensors
-        WHERE farm_id = '${farm.farmId}'
-          AND device_id = '${farm.feedDeviceId}'
-          AND time > now() - INTERVAL '32 days'
-        GROUP BY bucket
-        ORDER BY bucket ASC
-      `),
-    ]);
-
-    const feedByDay = feedDailyMap(feedRows);
+    const sheetRows = await getSheetValues(farm.spreadsheetId, farm.sheetRange);
 
     const dataRows = sheetRows
       .map((r) => ({ key: normDate(r[0]), r }))
@@ -207,12 +142,6 @@ export async function GET(request: Request) {
       .map((date) => {
         const v = dailyMap.get(date)!;
         const lh = liveHensByDay.get(date) ?? liveHens;
-        const feedPulses = feedByDay.get(date) ?? null;
-        // FCR: feed consumed on Day N-1 produced eggs collected on Day N
-        const prevFeed = feedByDay.get(prevDayKey(date)) ?? null;
-        const fcr = prevFeed !== null && v.eggs > 0
-          ? Math.round((prevFeed / v.eggs) * 100) / 100
-          : null;
         return {
           date,
           eggs: v.eggs,
@@ -225,8 +154,6 @@ export async function GET(request: Request) {
           hdep: TOTAL_HENS > 0 ? Math.round((v.eggs / lh) * 1000) / 10 : null,
           // Hen-housed %: the same eggs against the hens originally housed (deaths and culls not taken out).
           hhep: TOTAL_HENS > 0 ? Math.round((v.eggs / TOTAL_HENS) * 1000) / 10 : null,
-          feedPulses,
-          fcr,
         };
       });
 
