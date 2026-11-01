@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   );
   if (!params.ok) return NextResponse.json({ error: params.error }, { status: params.status });
   const { deviceId, deviceType } = params;
-  if (!(await farmOwnsDevice(farm, deviceId, deviceType))) {
+  if (!(await farmOwnsDevice(farm, deviceId))) {
     return NextResponse.json({ error: "Device not found for this farm" }, { status: 404 });
   }
 
