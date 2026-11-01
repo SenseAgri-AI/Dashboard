@@ -1,7 +1,7 @@
 "use client";
 
 import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip } from "recharts";
-import { thi, thiZone, THI_COMFORT, THI_EXTREME } from "@/lib/thi";
+import { feltTemp, thiZone, THI_COMFORT, THI_EXTREME } from "@/lib/thi";
 import { withFlockAge } from "@/lib/flockAge";
 import { SeriesMark, TIP_BOX, TIP_LABEL, TipRow } from "@/components/ChartTooltip";
 
@@ -146,7 +146,7 @@ export default function DashEnvCol({ env, narrow, house = null }: { env: EnvData
   const tSpk = env?.temperature.sparkline ?? [], hSpk = env?.humidity.sparkline ?? [];
   const thiSpark: SparklinePoint[] = tSpk.map((tp, i) => {
     const t = tp.value, h = hSpk[i]?.value;
-    return { time: tp.time, value: Number.isFinite(t) && Number.isFinite(h) ? Math.round(thi(t, h as number) * 10) / 10 : NaN };
+    return { time: tp.time, value: Number.isFinite(t) && Number.isFinite(h) ? Math.round(feltTemp(t, h as number) * 10) / 10 : NaN };
   });
   let thiCurrent: number | null = null;
   for (let i = thiSpark.length - 1; i >= 0; i--) { if (Number.isFinite(thiSpark[i].value)) { thiCurrent = thiSpark[i].value; break; } }

@@ -186,6 +186,16 @@ test('climate: dry-bulb backstop only when sustained', () => {
   assert.equal(T.sustainedAtOrAbove(co2(31, 31, 31), NOW, t.dryBulbC.amber, t.dryBulbC.dwellMinutes), 31);
 });
 
+test('climate: dry-bulb backstop never fires on a lone reading after a gap', () => {
+  const lone = [{ time: iso(5), value: 33 }];
+  assert.equal(T.sustainedAtOrAbove(lone, NOW, 32, 30), null);
+  assert.equal(line(today({ climate: { temperatureC: 33, humidityPct: 15, co2Series: [], tempSeries: lone } }), 'climate').rag, 'green');
+});
+
+test('climate: "feels" is never shown warmer than the air in the cold', () => {
+  assert.equal(line(today({ climate: { temperatureC: 8, humidityPct: 50, co2Series: [] } }), 'climate').text, '8°C (feels 8°C)');
+});
+
 test('climate: CO2 only when sustained at or above 1400 ppm', () => {
   const t = T.DEFAULT_TODAY_THRESHOLDS;
   assert.equal(T.co2Sustained(co2(1500, 1450, 1420), NOW, t), 1420);

@@ -160,3 +160,24 @@ test('Open-Meteo parsing', () => {
   assert.deepEqual(plain(p), { outside: [{ t: 1000, tempC: 10, rhPct: 50, rainPct: null, windKmh: null }], sun: [{ sunrise: 100000, sunset: 200000 }] });
   assert.equal(V.parseOpenMeteo({ error: true }), null);
 });
+
+test('cold night: felt never above the air, chill = min(actual, felt) − 3', () => {
+  assert.ok(thi.thi(10, 60) > 10); // the Marai index reads warm below ~14.4 °C
+  assert.equal(thi.feltTemp(10, 60), 10);
+  const v = view(outside(() => 8), inside(() => ({ tempC: 10, rhPct: 60, co2: 900 })));
+  assert.equal(v.insideNow.feltC, 10);
+  assert.equal(v.insideNow.chillEstC, 7);
+});
+
+test('hot-day wording uses the farm-local date: before sunrise, today is "afternoon"', () => {
+  const early = Date.parse('2026-11-01T02:00:00Z'); // 04:00 SAST, before sunrise
+  const o = outside((h, d) => (d === 8 && h >= 11 && h <= 15 ? 33 : 20));
+  const v = V.buildVentilation({ now: early, outside: o, sun, inside: inside(calmInside).filter((x) => x.t <= early), offsetHours: 2 });
+  const p = v.prompts.find((x) => x.id === 'hot-day');
+  assert.match(p.text, /^Hot afternoon forecast \(33 °C around 11:00\): consider opening up and fans on before 10:00$/);
+});
+
+test('ventilation CO₂: a lone reading after a gap does not count as sustained', () => {
+  const lone = [{ t: NOW - 10 * 60_000, tempC: 20, rhPct: 60, co2: 1800 }];
+  assert.equal(V.co2Sustained(lone, NOW, 1400, 60), null);
+});

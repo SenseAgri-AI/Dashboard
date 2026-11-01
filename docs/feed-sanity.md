@@ -16,4 +16,6 @@ Audit (read-only, farm_anike_001, house1, 1 Nov 2026): Athena `meters_hourly` / 
 | Silver `aligned_hourly.feed_kg` (AI agent tool) | n/a | Always null. The agent sees "no data", not a number. | None. | n/a |
 | `/api/dashboard/summary` `env.feed.sparkline` | Influx pulse meter | Still queried; no screen shows it. | Left as is (unrelated working code); candidate for removal. | n/a |
 
+**"Lasted" is whole-farm**: each delivery's kg over the days until the next logged delivery to *any* silo, divided by *housed* hens from the config (not live hens). With two silos filled at different times a single row can read low or high even when the long-run average is fine; the Feed tab says so under the table. Per-silo pairing or a rolling average is a possible follow-up.
+
 Constants (`src/lib/feedSanity.ts`, tested in `tests/feed-sanity.test.mjs`): typical layer intake 100–125 g/hen/day; plausible 70–160 g (PROVISIONAL, confirm against the breed guide once breed is recorded).

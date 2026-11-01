@@ -50,7 +50,7 @@ export async function GET() {
       SELECT date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
         AVG(temperature) AS temperature, AVG(humidity) AS humidity, AVG(co2) AS co2
       FROM sensors
-      WHERE farm_id = '${farm.farmId}' AND device_type = 'AM308-1' AND time > now() - INTERVAL '8 days'
+      WHERE farm_id = '${String(farm.farmId).replace(/'/g, "''")}' AND device_type = 'AM308-1' AND time > now() - INTERVAL '8 days'
       GROUP BY bucket ORDER BY bucket ASC
     `),
     location ? forecast(location) : Promise.resolve(null),

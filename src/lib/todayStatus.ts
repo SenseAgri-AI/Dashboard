@@ -5,7 +5,7 @@
 // Thresholds are configurable per farm (FarmConfig.today in SSM) and merged over the defaults
 // below. Defaults marked PROVISIONAL still need a backtest on farm data; the rest reuse values
 // already used by the dashboard or the platform notifier.
-import { thi, plausibleClimate, THI_SEVERE, THI_EXTREME } from "./thi";
+import { feltTemp, plausibleClimate, THI_SEVERE, THI_EXTREME } from "./thi";
 import { LOG_OVERDUE_DAYS } from "./legacyAlerts";
 
 export type Rag = "green" | "amber" | "red" | "unknown";
@@ -282,7 +282,9 @@ export function birdsLine(input: TodayInput, t: TodayThresholds): TodayLine {
 export function sustainedAtOrAbove(series: SeriesPoint[], now: number, min: number, dwellMinutes: number, bucketMinutes = 30): number | null {
   const from = now - (dwellMinutes + bucketMinutes) * 60_000; // allow for the current, partial bucket
   const pts = series.filter((p) => Date.parse(p.time) >= from && Number.isFinite(p.value));
-  if (pts.length < Math.max(1, Math.ceil(dwellMinutes / bucketMinutes))) return null;
+  // One more point than the dwell spans (the current partial bucket plus full ones), so a lone
+  // reading after a data gap can never fire on its own.
+  if (pts.length < Math.ceil(dwellMinutes / bucketMinutes) + 1) return null;
   return pts.every((p) => p.value >= min) ? pts[pts.length - 1].value : null;
 }
 
@@ -298,7 +300,7 @@ export function climateLine(input: TodayInput, t: TodayThresholds): TodayLine {
   const c = input.climate;
   const temp = c?.temperatureC, rh = c?.humidityPct;
   const valid = temp != null && rh != null && plausibleClimate(temp, rh);
-  const felt = valid ? thi(temp, rh) : null;
+  const felt = valid ? feltTemp(temp, rh) : null;
   const co2 = c ? co2Sustained(c.co2Series, input.now, t) : null;
   // Dry-bulb backstop: sustained, never a single reading. Felt temperature stays the primary signal.
   const hotDry = c?.tempSeries ? sustainedAtOrAbove(c.tempSeries.filter((p) => p.value >= -20 && p.value <= 60), input.now, t.dryBulbC.amber, t.dryBulbC.dwellMinutes) : null;

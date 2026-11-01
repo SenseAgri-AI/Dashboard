@@ -76,7 +76,7 @@ export default function VentilationView({ data, now, narrow = false }: { data: V
           <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr 1fr" : "repeat(4, 1fr)", gap: 10 }}>
             <Stat label="Temperature" value={fmt(v.insideNow.tempC)} sub={v.outsideNow != null ? `outside ${fmt(v.outsideNow)}` : undefined} />
             <Stat label="Feels" value={fmt(v.insideNow.feltC)} sub={v.insideNow.rhPct != null ? `RH ${v.insideNow.rhPct}%` : undefined} />
-            <Stat label="Chill estimate" value={v.insideNow.chillEstC != null ? `≈${fmt(v.insideNow.chillEstC)}` : "–"} sub={`feels − ${t.chillOffsetC} °C, rough`} />
+            <Stat label="Chill estimate" value={v.insideNow.chillEstC != null ? `≈${fmt(v.insideNow.chillEstC)}` : "–"} sub={`feels (≤ actual) − ${t.chillOffsetC} °C, rough`} />
             <Stat label="CO₂" value={v.insideNow.co2 != null ? `${v.insideNow.co2.toLocaleString("en-ZA")}` : "–"} sub="ppm" />
           </div>
         ) : <div style={{ fontSize: 13, color: MUTED }}>No recent inside reading (last 90 min).</div>}

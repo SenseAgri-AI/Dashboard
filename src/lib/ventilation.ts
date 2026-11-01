@@ -3,7 +3,7 @@
 // Every prompt is a suggestion ("consider …"), never a claimed cause. Thresholds are per-farm
 // (`ventilation` in the farm config) and PROVISIONAL until a farmer or vet confirms them.
 
-import { thi, plausibleClimate } from "./thi";
+import { feltTemp, plausibleClimate } from "./thi";
 
 export type VentThresholds = {
   /** Outside night minimum at or below this → "cold night ahead". */
@@ -32,7 +32,7 @@ export type VentThresholds = {
   airOutMaxHours: number;
   /** Inside night minimum this far below the flock's usual → mention it. */
   colderThanUsualC: number;
-  /** Dylan's wind-chill estimate: felt temperature minus this. A rough estimate, not a model. */
+  /** Dylan's wind-chill estimate: min(actual, felt) minus this. A rough estimate, not a model. */
   chillOffsetC: number;
   /** Nights used for the flock's own baseline. */
   baselineNights: number;
@@ -146,7 +146,7 @@ const insideIn = (pts: InsidePoint[], p: Period, key: "tempC" | "rhPct" = "tempC
 /** True when every inside CO₂ point in the last `dwell` minutes is ≥ ppm and there are enough of them. */
 export function co2Sustained(inside: InsidePoint[], now: number, ppm: number, dwellMinutes: number): number | null {
   const pts = inside.filter((x) => x.t > now - (dwellMinutes + 30) * 60_000 && x.t <= now && x.co2 != null);
-  if (pts.length < Math.ceil(dwellMinutes / 30)) return null;
+  if (pts.length < Math.ceil(dwellMinutes / 30) + 1) return null; // never on a lone reading after a gap
   return pts.every((x) => x.co2! >= ppm) ? pts[pts.length - 1].co2! : null;
 }
 
@@ -171,7 +171,7 @@ export function buildVentilation(input: VentInput): VentView {
   // Inside now: the latest point within 90 min (older = stale; the Today card's Sensors line covers it).
   const last = [...inside].reverse().find((x) => x.tempC != null);
   const insideNow = last && now - last.t <= 90 * 60_000 ? (() => {
-    const felt = last.rhPct != null && plausibleClimate(last.tempC!, last.rhPct) ? r1(thi(last.tempC!, last.rhPct)) : null;
+    const felt = last.rhPct != null && plausibleClimate(last.tempC!, last.rhPct) ? r1(feltTemp(last.tempC!, last.rhPct)) : null;
     return { tempC: r1(last.tempC!), rhPct: last.rhPct != null ? r0(last.rhPct) : null, feltC: felt,
       chillEstC: felt != null ? r1(felt - t.chillOffsetC) : null, co2: last.co2 != null ? r0(last.co2) : null, at: last.t };
   })() : null;
@@ -236,7 +236,8 @@ export function buildVentilation(input: VentInput): VentView {
     if (peak.tempC < t.hotDayC) continue;
     const warmFrom = dh.find((h) => h.tempC >= t.heatStartC) ?? peak;
     const by = warmFrom.t - t.fansLeadHours * H;
-    const when = i === 0 && p.start <= now ? "afternoon" : "tomorrow";
+    // Label by the farm's local date (before sunrise, today's daylight is still "today").
+    const when = localDate(p.start, offsetHours) === localDate(now, offsetHours) ? "afternoon" : "tomorrow";
     prompts.push({ id: "hot-day", level: by - now < 12 * H ? "act" : "plan",
       text: `Hot ${when} forecast (${r0(peak.tempC)} °C around ${hhmm(peak.t)}): consider opening up and fans on ${by > now ? `before ${hhmm(by)}` : "now"}`,
       why: `Outside reaches ${t.heatStartC} °C from about ${hhmm(warmFrom.t)}.` });

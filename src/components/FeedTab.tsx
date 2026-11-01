@@ -136,6 +136,7 @@ export default function FeedTab() {
 
       <section className="sa-panel" style={{ padding: 0 }}>
         <div className="sa-panel-hd sa-panel-hd--welfare">Recent deliveries</div>
+        <div style={{ padding: "6px 12px 0", fontSize: 11, color: "var(--t3)" }}>&ldquo;Lasted&rdquo; is whole-farm: days until the next logged delivery (any silo), per housed hen. A rough guide, not per silo.</div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 860 }}>
             <thead>
