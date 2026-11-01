@@ -42,19 +42,23 @@ export default function TodayCard({ ready, daily, lastLogDate, climate, extras, 
   const [silos, setSilos] = useState<SiloState[] | undefined>(undefined);
   const [fresh, setFresh] = useState<FreshnessResponse | null>(null);
   const [now, setNow] = useState<number | null>(null);
-  const [water, setWater] = useState<{ days: WaterDay[]; names: string[] } | undefined>(undefined);
+  // "loading" = still waiting (the card renders without it); null = failed. The water query hits Athena
+  // (a few seconds when not cached), so it never holds up the rest of the card.
+  const [water, setWater] = useState<{ days: WaterDay[]; names: string[] } | null | "loading">("loading");
 
   useEffect(() => {
     const json = (url: string) => fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))));
-    Promise.allSettled([json("/api/alerts"), json("/api/silo-levels"), json("/api/freshness"), json("/api/water-use")]).then(([a, s, f, w]) => {
+    Promise.allSettled([json("/api/alerts"), json("/api/silo-levels"), json("/api/freshness")]).then(([a, s, f]) => {
       if (a.status === "fulfilled" && Array.isArray(a.value.alerts)) setAlerts({ list: a.value.alerts, stale: a.value.stale === true });
       if (s.status === "fulfilled" && Array.isArray(s.value.silos)) {
         setSilos(s.value.silos.map((x: { low?: boolean }, i: number) => ({ name: `Silo ${i + 1}`, low: x.low === true })));
       }
       if (f.status === "fulfilled" && f.value.streams) setFresh(f.value);
-      if (w.status === "fulfilled" && Array.isArray(w.value.days)) setWater({ days: w.value.days, names: Array.isArray(w.value.names) ? w.value.names : [] });
       setNow(Date.now());
     });
+    json("/api/water-use")
+      .then((w) => setWater(Array.isArray(w.days) ? { days: w.days, names: Array.isArray(w.names) ? w.names : [] } : null))
+      .catch(() => setWater(null));
   }, []);
 
   const result: TodayResult | null = !ready || now == null ? null : buildToday({
@@ -63,7 +67,8 @@ export default function TodayCard({ ready, daily, lastLogDate, climate, extras, 
     climateLastMs: fresh ? ms(fresh.streams.climate) : undefined, // omitted key = that query failed
     siloRadars: fresh?.silos?.map((r) => ({ name: r.name, lastMs: ms(r.lastSeen) })),
     waterMeters: fresh?.water.map((m) => ({ name: m.name, lastMs: ms(m.lastSeen) })),
-    waterDays: water?.days, waterMeterNames: water?.names,
+    // Loading = no water check yet (not a failure); failed = undefined, which shows the footer.
+    waterDays: water === "loading" ? [] : water?.days, waterMeterNames: water === "loading" ? undefined : water?.names,
     offsetHours: fresh?.timezoneOffset ?? 2,
   }, fresh?.thresholds);
 

@@ -19,3 +19,9 @@ Audit (read-only, farm_anike_001, house1, 1 Nov 2026): Athena `meters_hourly` / 
 **"Lasted" is whole-farm**: each delivery's kg over the days until the next logged delivery to *any* silo, divided by *housed* hens from the config (not live hens). With two silos filled at different times a single row can read low or high even when the long-run average is fine; the Feed tab says so under the table. Per-silo pairing or a rolling average is a possible follow-up.
 
 Constants (`src/lib/feedSanity.ts`, tested in `tests/feed-sanity.test.mjs`): typical layer intake 100–125 g/hen/day; plausible 70–160 g (PROVISIONAL, confirm against the breed guide once breed is recorded).
+
+## Load failure on the Feed tab
+
+If the delivery list fails to load, the table says "Couldn't load deliveries, so don't re-enter them yet" with a
+**Try again** link, and "Loading deliveries…" while it loads. It used to say "No deliveries logged yet",
+which could lead a farmer to log the same delivery twice.

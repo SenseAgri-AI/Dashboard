@@ -36,12 +36,19 @@ export default function FeedTab() {
   const [f, setF] = useState<FeedDelivery>(empty());
   const [status, setStatus] = useState<{ kind: "idle" | "saving" | "ok" | "error"; msg?: string }>({ kind: "idle" });
 
+  // As a farmer, when the list fails to load I want to be told, not shown "No deliveries logged yet",
+  // so I don't log the same delivery twice.
+  const [loadState, setLoadState] = useState<"loading" | "ok" | "error">("loading");
   const load = useCallback(async () => {
-    const res = await fetch("/api/feed");
-    if (res.ok) {
+    try {
+      const res = await fetch("/api/feed");
+      if (!res.ok) throw new Error(String(res.status));
       const data = await res.json();
       setRows(data.deliveries ?? []);
       setHens(Number(data.totalHens) || 0);
+      setLoadState("ok");
+    } catch {
+      setLoadState("error");
     }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -166,7 +173,13 @@ export default function FeedTab() {
                   </td>
                 </tr>
               ))}
-              {recent.length === 0 && <tr><td colSpan={12} style={{ padding: "20px 12px", color: "var(--t3)", textAlign: "center" }}>No deliveries logged yet.</td></tr>}
+              {recent.length === 0 && (
+                <tr><td colSpan={12} style={{ padding: "20px 12px", color: loadState === "error" ? "var(--warn)" : "var(--t3)", textAlign: "center" }}>
+                  {loadState === "loading" ? "Loading deliveries…"
+                    : loadState === "error" ? <>Couldn&apos;t load deliveries, so don&apos;t re-enter them yet. <button onClick={() => { setLoadState("loading"); load(); }} style={{ background: "transparent", border: "none", color: "var(--teal, #2A8E9A)", fontWeight: 700, cursor: "pointer", padding: 0 }}>Try again</button></>
+                    : "No deliveries logged yet."}
+                </td></tr>
+              )}
             </tbody>
           </table>
         </div>
