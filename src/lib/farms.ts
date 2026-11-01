@@ -43,6 +43,13 @@ export interface FarmConfig {
   ventilation?: import("./ventilation").VentThresholdOverrides;
 }
 
+/** A usable `location` from the farm config, or null. */
+export function validLocation(l: unknown): { lat: number; lon: number } | null {
+  const o = l as { lat?: unknown; lon?: unknown } | null;
+  const lat = Number(o?.lat), lon = Number(o?.lon);
+  return o && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
+}
+
 const TTL_MS = 60 * 60 * 1000;
 const cache = new Map<string, { cfg: FarmConfig; at: number }>();
 

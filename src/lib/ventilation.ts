@@ -230,7 +230,7 @@ export function buildVentilation(input: VentInput): VentView {
 
   // Hot afternoon (today if the heat is still ahead, otherwise tomorrow).
   const hotDays = all.filter((p) => p.kind === "day" && p.end > now).slice(0, 2);
-  for (const [i, p] of hotDays.entries()) {
+  for (const p of hotDays) {
     const dh = hours.filter((h) => h.t >= p.start && h.t < p.end);
     const ahead = dh.filter((h) => h.t >= now - H); // the heat still to come (current hour included)
     if (!ahead.length) continue;

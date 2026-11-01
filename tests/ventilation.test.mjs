@@ -187,3 +187,11 @@ test('3-day outlook labels by local date: in the evening the first day is tomorr
   const v = V.buildVentilation({ now: evening, outside: outside(() => 20), sun, inside: [], offsetHours: 2 });
   assert.deepEqual(plain(v.outlook.map((d) => d.label)), ['Tomorrow', 'Tue', 'Wed']);
 });
+
+test('farm location validation', () => {
+  const F = load('src/lib/farms.ts', { '@aws-sdk/client-ssm': {}, '@clerk/nextjs/server': {} });
+  assert.deepEqual(plain(F.validLocation({ lat: -26.73, lon: 27.7 })), { lat: -26.73, lon: 27.7 });
+  assert.equal(F.validLocation({ lat: 'x', lon: 27.7 }), null);
+  assert.equal(F.validLocation({ lat: -126, lon: 27.7 }), null);
+  assert.equal(F.validLocation(undefined), null);
+});

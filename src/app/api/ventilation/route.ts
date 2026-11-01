@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
+import { getFarmForRequest, FarmAccessError, validLocation } from "@/lib/farms";
 import { queryInflux } from "@/lib/influxdb";
 import { mergeVentThresholds, parseOpenMeteo } from "@/lib/ventilation";
 
@@ -20,11 +20,6 @@ function toMs(t: unknown): number | null {
 }
 const num = (v: unknown) => (v == null ? null : Number.isFinite(Number(v)) ? Number(v) : null);
 
-function validLocation(l: unknown): { lat: number; lon: number } | null {
-  const o = l as { lat?: unknown; lon?: unknown } | null;
-  const lat = Number(o?.lat), lon = Number(o?.lon);
-  return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
-}
 
 async function forecast(loc: { lat: number; lon: number }) {
   const url = "https://api.open-meteo.com/v1/forecast"
