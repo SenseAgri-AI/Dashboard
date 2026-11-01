@@ -127,6 +127,21 @@ function EnvTile({ name, value, unit, status, normal, chart }: {
   );
 }
 
+// Story: when the climate sensor stops reporting, say so (and since when) instead of a row of "—",
+// so I check the sensor and power rather than wondering whether the house is fine.
+function ClimateStale({ lastIso }: { lastIso: string | null }) {
+  const last = lastIso ? Date.parse(lastIso) : NaN;
+  const when = Number.isFinite(last)
+    ? new Date(last).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })
+    : null;
+  return (
+    <div role="status" style={{ gridColumn: "1 / -1", background: "var(--warn-bg)", color: "var(--warn)", fontSize: 13, padding: "9px 12px", borderRadius: 8 }}>
+      {when ? `No climate reading in the last hour (last ${when}).` : "No climate readings in the last 24 hours."}
+      {" "}Check the climate sensor and gateway power. Charts show the last 24 h.
+    </div>
+  );
+}
+
 function LegendDot({ color, label }: { color: string; label: string }) {
   return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, color: "var(--t2)" }}><span style={{ width: 9, height: 3, borderRadius: 2, background: color }} />{label}</span>;
 }
@@ -149,13 +164,18 @@ export default function DashEnvCol({ env, narrow, house = null }: { env: EnvData
     return { time: tp.time, value: Number.isFinite(t) && Number.isFinite(h) ? Math.round(feltTemp(t, h as number) * 10) / 10 : NaN };
   });
   let thiCurrent: number | null = null;
-  for (let i = thiSpark.length - 1; i >= 0; i--) { if (Number.isFinite(thiSpark[i].value)) { thiCurrent = thiSpark[i].value; break; } }
+  // Only when there is a current temperature (last hour): otherwise the newest felt point may be hours
+  // old and would read as "now" next to the "—" temperature tile.
+  if (env?.temperature.current != null) {
+    for (let i = thiSpark.length - 1; i >= 0; i--) { if (Number.isFinite(thiSpark[i].value)) { thiCurrent = thiSpark[i].value; break; } }
+  }
   const thiZoneVal = thiCurrent != null ? thiZone(thiCurrent) : null;
   const thiStatus = thiZoneVal === "extreme" || thiZoneVal === "severe" ? "danger"
     : thiZoneVal === "moderate" ? "warning" : thiCurrent != null ? "good" : undefined;
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "repeat(2, minmax(0,1fr))", gap: 12 }}>
+      {env && env.temperature.current == null && <ClimateStale lastIso={tSpk.at(-1)?.time ?? null} />}
       <EnvTile name="Temperature" value={r1(env?.temperature.current)} unit="°C" status={env?.temperature.status} normal="18–26°C"
         chart={<EnvChart data={env?.temperature.sparkline ?? []} domain={[8, 36]} ticks={[10, 20, 30]} band={[18, 26]} tipUnit="°C" height={H} house={house} />} />
       <EnvTile name="Humidity" value={r0(env?.humidity.current)} unit="% RH" status={env?.humidity.status} normal="50–70%"
