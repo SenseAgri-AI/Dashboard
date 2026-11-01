@@ -12,7 +12,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.mjs",
-    "test:alerts": "node --test tests/alerts-push.test.mjs"
+    "test:alerts": "node --test tests/alerts-push.test.mjs",
+    "test:today": "node --test tests/today-status.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

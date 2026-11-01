@@ -5,6 +5,8 @@ import PushNotifications from "@/components/PushNotifications";
 import DashStatusBar from "@/components/DashStatusBar";
 import HouseHdepChart from "@/components/HouseHdepChart";
 import { buildAttention, type AttentionAlert } from "@/lib/attention";
+import TodayCard, { type TodayClimate } from "@/components/TodayCard";
+import type { DailyRow } from "@/lib/todayStatus";
 
 type House = { id: string; name: string; startDate: string; startAgeDays: number; startingHens: number };
 type Production = {
@@ -13,6 +15,7 @@ type Production = {
   hdep: number | null;
   mortality: { cumulative: number; rate: number | null };
   totalHens: number;
+  daily?: DailyRow[];
 } | null;
 type Health = { health: number; word: string; label: "good" | "normal" | "warning" | "danger" } | null;
 
@@ -78,6 +81,8 @@ export default function HomePage() {
   const [prod, setProd] = useState<Production>(null);
   const [health, setHealth] = useState<Health>(null);
   const [attention, setAttention] = useState<AttentionAlert[]>([]);
+  // Today card inputs: undefined = failed, so the card shows "couldn't check" rather than "OK".
+  const [today, setToday] = useState<{ prod: boolean; env: boolean; daily?: DailyRow[]; lastLogDate?: string | null; climate?: TodayClimate }>({ prod: false, env: false });
   const isNarrow = useIsNarrow();
 
   const loadHouses = useCallback(async () => {
@@ -89,21 +94,32 @@ export default function HomePage() {
     loadHouses();
     fetch("/api/dashboard/summary")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d && !d.error) setHealth({ health: d.health, word: d.healthWord, label: d.healthLabel }); })
-      .catch(() => {});
-    fetch("/api/production")
-      .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
+        if (d && !d.error) {
+          setHealth({ health: d.health, word: d.healthWord, label: d.healthLabel });
+          setToday((t) => ({ ...t, env: true, climate: { temperatureC: d.env?.temperature?.current ?? null, humidityPct: d.env?.humidity?.current ?? null, co2Ppm: d.env?.co2?.current ?? null } }));
+        } else setToday((t) => ({ ...t, env: true }));
+      })
+      .catch(() => setToday((t) => ({ ...t, env: true })));
+    fetch("/api/production")
+      .then((r) => (r.ok || r.status === 404 ? r.json().then((d) => ({ d, noData: r.status === 404 })) : { d: null, noData: false }))
+      .then(({ d, noData }) => {
         const lastLogDate = d && !d.error ? (d.date ?? null) : null;
         if (d && !d.error) setProd(d);
         setAttention(buildAttention({ lastLogDate, now: Date.now() }));
+        // 404 = the sheet has no entries (a real "no log yet"); other failures stay unknown.
+        setToday((t) => ({ ...t, prod: true, ...(d && !d.error ? { daily: d.daily ?? [], lastLogDate } : noData ? { daily: [], lastLogDate: null } : {}) }));
       })
-      .catch(() => setAttention(buildAttention({ lastLogDate: null, now: Date.now() })));
+      .catch(() => {
+        setAttention(buildAttention({ lastLogDate: null, now: Date.now() }));
+        setToday((t) => ({ ...t, prod: true }));
+      });
   }, [loadHouses]);
 
   return (
     <main className="sa-main" style={{ maxWidth: 1160, width: "100%", margin: "0 auto", gap: 12 }}>
       <PushNotifications />
+      <TodayCard ready={today.prod && today.env} daily={today.daily} lastLogDate={today.lastLogDate} climate={today.climate} narrow={isNarrow} />
       {/* Status band — health dial · sensing · attention */}
       <section style={{ display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "200px minmax(0, 1fr) minmax(0, 1.2fr)", gap: 12, alignItems: "stretch" }}>
         <div style={{ display: "flex", ...(isNarrow ? { maxWidth: 260, width: "100%", margin: "0 auto" } : {}) }}>

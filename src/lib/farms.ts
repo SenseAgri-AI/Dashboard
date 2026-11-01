@@ -33,6 +33,11 @@ export interface FarmConfig {
   waterLitresPerPulse: number;
   /** Farm timezone offset from UTC in hours (SAST = 2). */
   timezoneOffset: number;
+  /** Optional: every in-use water meter with a farmer-facing name, e.g. per A-frame. Falls back to
+   *  `waterDeviceId` when absent. Used by the Home freshness / Today card. */
+  waterMeters?: { deviceId: string; name: string }[];
+  /** Optional per-farm overrides for the Today card thresholds (see src/lib/todayStatus.ts). */
+  today?: import("./todayStatus").TodayThresholdOverrides;
 }
 
 const TTL_MS = 60 * 60 * 1000;
