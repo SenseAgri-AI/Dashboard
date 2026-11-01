@@ -27,7 +27,7 @@ const week = ['2026-10-23', '2026-10-24', '2026-10-25', '2026-10-26', '2026-10-2
 const co2 = (...vals) => vals.map((v, i) => ({ time: iso(30 * (vals.length - 1 - i)), value: v })); // last value = now
 const base = (extra = {}) => ({ now: NOW, daily: [...week, day('2026-10-30', 92, 1)], lastLogDate: '2026-10-30',
   climate: { temperatureC: 24, humidityPct: 60, co2Series: co2(600, 650, 700) },
-  climateLastMs: min(3), siloLastMs: min(120),
+  climateLastMs: min(3), siloRadars: [{ name: 'Silo 1', lastMs: min(120) }, { name: 'Silo 2', lastMs: min(200) }],
   waterMeters: [{ name: 'A-frame 1', lastMs: min(20) }, { name: 'A-frame 2', lastMs: min(20) }],
   silos: [{ name: 'Silo 1', low: false }], alerts: [], extras: [], ...extra });
 const today = (extra) => T.buildToday(base(extra));
@@ -36,7 +36,10 @@ const keys = (r) => plain(r.lines.map((l) => l.key));
 
 test('defaults reuse the existing alert windows', () => {
   const d = T.DEFAULT_TODAY_THRESHOLDS;
-  assert.equal(d.staleMinutes.climate.amber, legacy.FEED_STALE_MIN);
+  assert.equal(d.staleMinutes.climate.amber, 30);
+  assert.equal(d.staleMinutes.climate.red, 90);
+  assert.equal(d.dryBulbC.amber, 32);
+  assert.deepEqual(plain(d.birdsAlertTypes), ['sleep_decline']);
   assert.equal(d.logStaleDays.red, legacy.LOG_OVERDUE_DAYS);
   assert.equal(d.feltTempC.amber, thi.THI_SEVERE);
   assert.equal(d.feltTempC.red, thi.THI_EXTREME);
@@ -44,11 +47,15 @@ test('defaults reuse the existing alert windows', () => {
 });
 
 test('farm overrides merge deeply and ignore junk values', () => {
-  const t = T.mergeThresholds({ staleMinutes: { climate: { amber: 30 } }, co2Sustained: { ppm: 'x' }, hdepDropPts: { amber: -1 }, extra: 5 });
-  assert.equal(t.staleMinutes.climate.amber, 30);
-  assert.equal(t.staleMinutes.climate.red, 60);
+  const t = T.mergeThresholds({ staleMinutes: { climate: { amber: 45 } }, co2Sustained: { ppm: 'x' }, hdepDrop: { pts: -1 }, dryBulbC: { amber: 31 },
+    birdsAlertTypes: ['sleep_decline', 'night_disturbance'], extra: 5 });
+  assert.equal(t.staleMinutes.climate.amber, 45);
+  assert.equal(t.staleMinutes.climate.red, 90);
   assert.equal(t.co2Sustained.ppm, 1400);
-  assert.equal(t.hdepDropPts.amber, 3);
+  assert.equal(t.hdepDrop.pts, 5);
+  assert.equal(t.dryBulbC.amber, 31);
+  assert.deepEqual(plain(t.birdsAlertTypes), ['sleep_decline', 'night_disturbance']);
+  assert.deepEqual(plain(T.mergeThresholds({ birdsAlertTypes: [1] }).birdsAlertTypes), ['sleep_decline']);
   assert.equal('extra' in t, false);
   assert.deepEqual(plain(T.mergeThresholds(undefined)), plain(T.DEFAULT_TODAY_THRESHOLDS));
 });
@@ -60,11 +67,11 @@ test('quiet farm: "All good" with only Birds and Climate', () => {
   assert.equal(r.someChecksFailed, false);
   assert.deepEqual(keys(r), ['birds', 'climate']);
   assert.equal(line(r, 'birds').text, 'Lay 92% · 1 death');
-  assert.equal(line(r, 'climate').text, 'Feels 22.8°C');
+  assert.equal(line(r, 'climate').text, '24°C (feels 22.8°C)');
 });
 
 test('headline counts problems', () => {
-  const r = today({ silos: [{ name: 'Silo 2', low: true }], daily: [...week, day('2026-10-30', 85, 1)] });
+  const r = today({ silos: [{ name: 'Silo 2', low: true }], daily: [...week, day('2026-10-29', 85, 1), day('2026-10-30', 85, 1)] });
   assert.equal(r.problems, 2);
   assert.equal(r.headline, '2 things need you today');
   assert.equal(today({ silos: [{ name: 'Silo 2', low: true }] }).headline, '1 thing needs you today');
@@ -78,25 +85,51 @@ test('a failed check gives one footer flag, never a grey line or "All good"', ()
   assert.ok(r.lines.every((l) => l.rag !== 'unknown'));
   assert.equal(today({ waterMeters: [{ name: 'A-frame 1', lastMs: undefined }] }).someChecksFailed, true);
   assert.equal(today({ climateLastMs: undefined }).someChecksFailed, true);
+  assert.equal(today({ siloRadars: undefined }).someChecksFailed, true);
+  assert.equal(today({ siloRadars: [{ name: 'Silo 1', lastMs: undefined }] }).someChecksFailed, true);
 });
 
-test('birds: hen-day drop vs recent median', () => {
-  assert.equal(line(today({ daily: [...week, day('2026-10-30', 88, 1)] }), 'birds').rag, 'amber');
-  const red = line(today({ daily: [...week, day('2026-10-30', 85, 1)] }), 'birds');
-  assert.equal(red.rag, 'red');
-  assert.match(red.text, /down 7 pts/);
-  assert.equal(line(today({ daily: [day('2026-10-29', 92, 1), day('2026-10-30', 80, 1)] }), 'birds').rag, 'green'); // too little history
-});
+const wk = (hdep, mortality = 1) => ['2026-10-16', '2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22'].map((d) => day(d, hdep, mortality));
+const tail = (...v) => v.map((h, i) => day(`2026-10-${23 + i}`, h, 1));
+// lastLogDate fixed to yesterday so the missing-log nudge stays out of these rule tests
+const birds = (rows) => line(today({ daily: rows, lastLogDate: '2026-10-30' }), 'birds');
 
-test('birds: deaths vs usual, with a minimum count', () => {
-  assert.equal(line(today({ daily: [...week, day('2026-10-30', 92, 2)] }), 'birds').rag, 'green');
-  assert.equal(line(today({ daily: [...week, day('2026-10-30', 92, 3)] }), 'birds').rag, 'red');
-  const zeroWeek = week.map((d) => ({ ...d, mortality: 0 }));
-  assert.equal(line(today({ daily: [...zeroWeek, day('2026-10-30', 92, 1)] }), 'birds').rag, 'green');
-  const twoWeek = week.map((d) => ({ ...d, mortality: 2 }));
-  const amber = line(today({ daily: [...twoWeek, day('2026-10-30', 92, 4)] }), 'birds');
+test('birds: lay drop needs consecutive days', () => {
+  assert.equal(birds([...wk(92), ...tail(92, 92, 92, 92, 92, 92, 85)]).rag, 'green'); // one-day dip = collection timing
+  const amber = birds([...wk(92), ...tail(92, 92, 92, 92, 92, 86, 86)]);
   assert.equal(amber.rag, 'amber');
-  assert.match(amber.text, /usual 2/);
+  assert.match(amber.text, /down 6 pts for 2 days/);
+  assert.equal(birds([...wk(92), ...tail(92, 92, 92, 92, 86, 86, 86)]).rag, 'red');
+  assert.equal(birds([...wk(92), ...tail(92, 92, 92, 92, 92, 88, 88)]).rag, 'green'); // 4 pts: within day-to-day noise
+  assert.equal(birds([day('2026-10-28', 92, 1), day('2026-10-29', 80, 1), day('2026-10-30', 80, 1)]).rag, 'green'); // too little history
+});
+
+test('birds: implausible hen-day % is a log problem and stays out of baselines', () => {
+  const low = birds([...wk(92), ...tail(92, 92, 92, 92, 92, 92, 3)]);
+  assert.equal(low.rag, 'amber');
+  assert.match(low.text, /Lay 3% looks wrong/);
+  assert.equal(low.action, 'Check the last egg count in the log');
+  assert.match(birds([...wk(92), ...tail(92, 92, 92, 92, 92, 92, 105)]).text, /looks wrong/);
+  assert.equal(birds([...wk(92), ...tail(92, 92, 92, 2, 92, 92, 92)]).rag, 'green'); // bad entry not in the baseline
+});
+
+test('birds: one bad day of deaths is amber, a bad week is red', () => {
+  assert.equal(birds([...week, day('2026-10-30', 92, 2)]).rag, 'green'); // below minDeaths
+  const one = birds([...week, day('2026-10-30', 92, 3)]);
+  assert.equal(one.rag, 'amber');
+  assert.match(one.text, /3 deaths \(usual 1\)/);
+  const zeroWeek = week.map((d) => ({ ...d, mortality: 0 }));
+  assert.equal(birds([...zeroWeek, day('2026-10-30', 92, 1)]).rag, 'green');
+  // 4 quiet weeks (~0.3/day), then a week totalling 9 → red
+  const quiet = Array.from({ length: 28 }, (_, i) => day(`2026-09-${String(i + 1).padStart(2, '0')}`, 92, i % 3 === 0 ? 1 : 0));
+  const bad = [1, 2, 1, 1, 2, 1, 1].map((m, i) => day(`2026-10-${String(i + 1).padStart(2, '0')}`, 92, m));
+  const red = birds([...quiet, ...bad]);
+  assert.equal(red.rag, 'red');
+  assert.match(red.text, /9 this week/);
+  assert.equal(red.action, 'Check for sick birds; call the vet');
+  // the same week is not red when it is the farm's usual rate
+  const usual = Array.from({ length: 28 }, (_, i) => day(`2026-09-${String(i + 1).padStart(2, '0')}`, 92, i % 7 < 2 ? 2 : 1));
+  assert.notEqual(birds([...usual, ...bad]).rag, 'red');
 });
 
 test('birds: missing-log nudge lives in the Birds line', () => {
@@ -114,6 +147,15 @@ test('birds: missing-log nudge lives in the Birds line', () => {
   assert.equal(r.problems, 1);
 });
 
+test('only the poor-sleep alert raises Birds; night disturbance does not', () => {
+  const night = today({ alerts: [{ id: 'night_disturbance#2026-10-30T23:00', category: 'welfare', severity: 'warning', title: 'Birds unsettled overnight' }] });
+  assert.equal(line(night, 'birds').rag, 'green');
+  assert.equal(night.headline, 'All good');
+  const sleep = line(today({ alerts: [{ id: 'sleep_decline#2026-10-15T05:00', category: 'welfare', severity: 'warning', title: 'Poor flock sleep' }] }), 'birds');
+  assert.equal(sleep.rag, 'amber');
+  assert.equal(sleep.text, 'Poor flock sleep');
+});
+
 test('daily-log freshness uses farm-local days', () => {
   assert.equal(T.logFreshness('2026-10-31', NOW).text, 'logged today');
   assert.equal(T.logFreshness('2026-10-28', NOW).rag, 'amber');
@@ -122,11 +164,26 @@ test('daily-log freshness uses farm-local days', () => {
   assert.equal(T.daysSinceLog('2026-10-31', Date.parse('2026-10-30T23:30:00Z')), 0);
 });
 
-test('climate: felt temperature bands', () => {
+test('climate: felt temperature bands, actual °C always shown', () => {
   const c = (temperatureC, humidityPct) => line(today({ climate: { temperatureC, humidityPct, co2Series: [] } }), 'climate');
   assert.equal(c(31, 70).rag, 'amber'); // feels ~29.5
+  assert.equal(c(31, 70).text, '31°C (feels 29.5°C)');
   assert.equal(c(32, 70).rag, 'red');
   assert.equal(c(6553.5, 60), undefined); // EM300 junk: no line, never a fake value
+});
+
+test('climate: dry-bulb backstop only when sustained', () => {
+  const c = (tempSeries, temperatureC, humidityPct) => line(today({ climate: { temperatureC, humidityPct, co2Series: [], tempSeries } }), 'climate');
+  const dry = c(co2(33, 33), 33, 15); // feels ~26.8: green by the index alone
+  assert.equal(dry.rag, 'amber');
+  assert.match(dry.text, /^33°C \(feels 2\d\.\d°C\), 32°C\+ for 30\+ min$/);
+  assert.equal(dry.action, 'Increase airflow, keep water cool');
+  assert.equal(c(co2(33, 31), 31, 15).rag, 'green');  // dipped below inside the window
+  assert.equal(c([], 33, 15).rag, 'green');           // no series → never fires on a single reading
+  assert.equal(c(co2(36, 36), 34, 70).rag, 'red');    // felt index stays primary (feels > 30)
+  const t = T.mergeThresholds({ dryBulbC: { amber: 30, dwellMinutes: 60 } });
+  assert.equal(T.sustainedAtOrAbove(co2(31), NOW, t.dryBulbC.amber, t.dryBulbC.dwellMinutes), null); // 1 bucket < 60 min
+  assert.equal(T.sustainedAtOrAbove(co2(31, 31, 31), NOW, t.dryBulbC.amber, t.dryBulbC.dwellMinutes), 31);
 });
 
 test('climate: CO2 only when sustained at or above 1400 ppm', () => {
@@ -154,9 +211,15 @@ test('water, silo and sensors appear only on a problem', () => {
   const stale = line(today({ waterMeters: [{ name: 'A-frame 1', lastMs: min(10) }, { name: 'A-frame 2', lastMs: min(400) }] }), 'data');
   assert.equal(stale.rag, 'red');
   assert.equal(stale.text, 'Water (A-frame 2): no data for 7 h');
-  assert.equal(line(today({ climateLastMs: min(16) }), 'data').rag, 'amber');
-  assert.equal(line(today({ siloLastMs: min(36 * 60) }), 'data'), undefined); // sparse radar: long window
-  assert.equal(line(today({ siloLastMs: null }), 'data').text, 'Silo: no data this week');
+  assert.equal(line(today({ climateLastMs: min(20) }), 'data'), undefined); // one missed 10-min uplink
+  assert.equal(line(today({ climateLastMs: min(31) }), 'data').rag, 'amber');
+  assert.equal(line(today({ climateLastMs: min(91) }), 'data').rag, 'red');
+  assert.equal(line(today({ siloRadars: [{ name: 'Silo 1', lastMs: min(36 * 60) }] }), 'data'), undefined); // sparse radar: long window
+  // per radar: a fresh radar does not hide a silent one
+  const silent = line(today({ siloRadars: [{ name: 'Silo 1', lastMs: min(60) }, { name: 'Silo 2', lastMs: min(54 * 60) }] }), 'data');
+  assert.equal(silent.rag, 'amber');
+  assert.equal(silent.text, 'Silo 2: no data for 2 days');
+  assert.equal(line(today({ siloRadars: [{ name: 'Silo 1', lastMs: null }] }), 'data').text, 'Silo 1: no data this week');
   assert.equal(line(today({ alertsStale: true }), 'data').text, 'Farm alerts are delayed');
   const power = today({ alerts: [{ id: 'power_outage#1', category: 'power', severity: 'danger', title: 'Power / network down' }] });
   assert.equal(line(power, 'data').rag, 'red');

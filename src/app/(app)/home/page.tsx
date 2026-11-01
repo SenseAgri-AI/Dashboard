@@ -84,7 +84,7 @@ export default function HomePage() {
       .then((d) => {
         if (d && !d.error) {
           setHealth({ health: d.health, word: d.healthWord, label: d.healthLabel });
-          setToday((t) => ({ ...t, env: true, climate: { temperatureC: d.env?.temperature?.current ?? null, humidityPct: d.env?.humidity?.current ?? null, co2Series: Array.isArray(d.env?.co2?.sparkline) ? d.env.co2.sparkline : [] } }));
+          setToday((t) => ({ ...t, env: true, climate: { temperatureC: d.env?.temperature?.current ?? null, humidityPct: d.env?.humidity?.current ?? null, co2Series: Array.isArray(d.env?.co2?.sparkline) ? d.env.co2.sparkline : [], tempSeries: Array.isArray(d.env?.temperature?.sparkline) ? d.env.temperature.sparkline : [] } }));
         } else setToday((t) => ({ ...t, env: true }));
       })
       .catch(() => setToday((t) => ({ ...t, env: true })));

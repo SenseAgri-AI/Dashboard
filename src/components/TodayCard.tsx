@@ -9,9 +9,10 @@ import { buildToday, type DailyRow, type ExtraItem, type FarmAlert, type Rag, ty
 // /api/silo-levels plus the production + climate data Home already loads; /api/freshness is the
 // only new endpoint (last-reading times).
 
-export type TodayClimate = { temperatureC: number | null; humidityPct: number | null; co2Series: SeriesPoint[] };
+export type TodayClimate = { temperatureC: number | null; humidityPct: number | null; co2Series: SeriesPoint[]; tempSeries: SeriesPoint[] };
 type FreshnessResponse = {
-  streams: { climate?: string | null; silo?: string | null };
+  streams: { climate?: string | null };
+  silos?: { name: string; lastSeen?: string | null }[];
   water: { name: string; lastSeen?: string | null }[];
   thresholds: TodayThresholds;
   timezoneOffset: number;
@@ -58,7 +59,7 @@ export default function TodayCard({ ready, daily, lastLogDate, climate, extras, 
     now, daily, lastLogDate, climate, silos, extras,
     alerts: alerts.list, alertsStale: alerts.stale,
     climateLastMs: fresh ? ms(fresh.streams.climate) : undefined, // omitted key = that query failed
-    siloLastMs: fresh ? ms(fresh.streams.silo) : undefined,
+    siloRadars: fresh?.silos?.map((r) => ({ name: r.name, lastMs: ms(r.lastSeen) })),
     waterMeters: fresh?.water.map((m) => ({ name: m.name, lastMs: ms(m.lastSeen) })),
     offsetHours: fresh?.timezoneOffset ?? 2,
   }, fresh?.thresholds);

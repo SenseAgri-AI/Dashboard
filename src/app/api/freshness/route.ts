@@ -6,10 +6,12 @@ import { mergeThresholds } from "@/lib/todayStatus";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// Last-reading time per farmer-facing data stream (climate, water meters, silo) for the Home Today card. Read-only, farm-scoped.
+// Last-reading time per farmer-facing data stream (climate, each water meter, each silo radar) for the Home Today card. Read-only, farm-scoped.
 // A failed query returns `undefined` for that stream ("couldn't check"), never "stale".
 const LOOKBACK = "interval '7 days'";
 const DEVICE_ID = /^[0-9a-f]{16}$/i;
+// Same exclusion and ordering as /api/silo-levels, so "Silo 1/2" match the silo cards.
+const NON_PHYSICAL_DEVICE = /(test|demo|mock|simulator|virtual)/i;
 
 function toMs(t: unknown): number | null {
   if (t == null) return null;
@@ -46,12 +48,14 @@ export async function GET() {
   // Only streams the farmer is told about. Sound and the egg camera are SenseAgri ops checks.
   const [climate, silo, water] = await Promise.allSettled([
     lastTime(`SELECT MAX(time) AS last FROM sensors WHERE farm_id = '${f}' AND device_type = 'AM308-1' AND time > now() - ${LOOKBACK}`),
-    lastTime(`SELECT MAX(time) AS last FROM sensors WHERE farm_id = '${f}' AND device_type = 'EM411-RDL' AND time > now() - ${LOOKBACK}`),
+    // Per radar: one silent radar must not be hidden by the other one's fresh readings.
+    queryInflux<{ device_id: unknown; last: unknown }>(`SELECT device_id, MAX(time) AS last FROM sensors WHERE farm_id = '${f}' AND device_type = 'EM411-RDL' AND time > now() - ${LOOKBACK} GROUP BY device_id`),
     meters.length
       ? queryInflux<{ device_id: unknown; last: unknown }>(`SELECT device_id, MAX(time) AS last FROM sensors WHERE farm_id = '${f}' AND device_id IN (${ids}) AND pulse_total IS NOT NULL AND time > now() - ${LOOKBACK} GROUP BY device_id`)
       : Promise.resolve([]),
   ]);
   const val = (r: PromiseSettledResult<number | null>) => (r.status === "fulfilled" ? r.value : undefined);
+
   const iso = (ms: number | null | undefined) => (ms === undefined ? undefined : ms === null ? null : new Date(ms).toISOString());
   for (const [k, r] of Object.entries({ climate, silo, water })) {
     if (r.status === "rejected") console.error(`freshness: ${k} query failed`);
@@ -61,8 +65,17 @@ export async function GET() {
     checkedAt: new Date().toISOString(),
     streams: {
       climate: iso(val(climate)),
-      silo: iso(val(silo)),
     },
+    // `undefined` (omitted in JSON) = that query failed; a radar silent for over 7 days drops out of
+    // this list, and the silo cards (30-day window) still show it.
+    silos: silo.status === "fulfilled"
+      ? silo.value
+        .map((r) => ({ deviceId: String(r.device_id ?? "").trim(), ms: toMs(r.last) }))
+        .filter((r) => r.deviceId && !NON_PHYSICAL_DEVICE.test(r.deviceId))
+        .sort((a, b) => a.deviceId.localeCompare(b.deviceId))
+        .slice(0, 2)
+        .map((r, i) => ({ name: `Silo ${i + 1}`, lastSeen: r.ms == null ? null : new Date(r.ms).toISOString() }))
+      : undefined,
     // `lastSeen: undefined` (omitted in JSON) = couldn't check; `null` = no reading in 7 days.
     water: meters.map((m) => {
       if (!waterRows) return { name: m.name };
