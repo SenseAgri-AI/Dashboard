@@ -36,8 +36,10 @@ Every prompt is worded as a suggestion ("consider …") with a one-line "why"; n
 ## After sunset
 
 The Day box always shows the next daylight period. After sunset that is tomorrow, which has no inside
-readings yet, so the page used to show "inside so far –" every evening. Now the heading reads
-"Tomorrow · outside vs inside" and the Day box shows "inside today (measured)", the range from the day that
-just ended, the same way the Night box uses last night. If an inside figure is still blank it says why:
+readings yet, so the page used to show "inside so far –" every evening. Now the Day box shows the range from the day that
+just ended (measured), the same way the Night box uses last night. Labels follow farm-local calendar
+dates: from sunset to midnight the heading reads "Tomorrow · outside vs inside" and the range is "inside
+today (measured)"; from midnight to sunrise the heading is "Today & tonight" and the range is "inside
+yesterday (measured)". If an inside figure is still blank it says why:
 "No inside reading since 1 Nov, 12:41" (sensor quiet over 90 min), "Day just started", or "No inside
 readings in this period".

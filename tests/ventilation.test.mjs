@@ -223,6 +223,8 @@ test('after sunset the Day box is tomorrow and shows the day that just ended (no
     .map((t) => ({ t, tempC: localHour(t) >= 12 && localHour(t) < 16 ? 28 : 20, rhPct: 60, co2: 900 }));
   const v = V.buildVentilation({ now: evening, outside: outside(() => 20), sun, inside: pts, offsetHours: 2 });
   assert.equal(v.today.upcoming, true);
+  assert.equal(v.today.when, 'tomorrow');
+  assert.equal(v.today.insideWhen, 'today');
   assert.ok(v.today.period.start > evening);
   assert.deepEqual(plain(v.today.inside), { min: 20, max: 28 }); // 1 Nov daytime, measured
   // the live sensor is not reported as quiet
@@ -230,4 +232,21 @@ test('after sunset the Day box is tomorrow and shows the day that just ended (no
   assert.equal(v.insideLastAt, pts.at(-1).t);
   // during the day it is still "so far"
   assert.equal(view(outside(sine(14, 24))).today.upcoming, false);
+});
+
+test('after midnight, before sunrise: the Day box is today and the inside range is yesterday', () => {
+  for (const at of ['2026-11-01T23:00:00Z', '2026-11-02T01:30:00Z']) { // 01:00 and 03:30 SAST, 2 Nov
+    const now = Date.parse(at);
+    const pts = Array.from({ length: Math.floor((now - DAY0) / (H / 2)) + 1 }, (_, i) => DAY0 + i * H / 2)
+      .map((t) => ({ t, tempC: localDay(t) === 8 && localHour(t) >= 12 && localHour(t) < 16 ? 30 : 20, rhPct: 60, co2: 900 }));
+    const v = V.buildVentilation({ now, outside: outside(() => 20), sun, inside: pts, offsetHours: 2 });
+    assert.equal(v.today.upcoming, true);
+    assert.equal(v.today.when, 'today');
+    assert.equal(v.today.insideWhen, 'yesterday');
+    assert.deepEqual(plain(v.today.inside), { min: 20, max: 30 }); // 1 Nov daytime
+  }
+  // midday: today, so far
+  const mid = view(outside(sine(14, 24))).today;
+  assert.equal(mid.when, 'today');
+  assert.equal(mid.insideWhen, 'today');
 });

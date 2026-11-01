@@ -84,9 +84,9 @@ export default function VentilationView({ data, now, narrow = false }: { data: V
 
       {/* Today & tonight */}
       <section style={card} aria-label="Today and tonight">
-        <h2 style={h2}>{v.today?.upcoming ? "Tomorrow" : "Today & tonight"} · outside vs inside</h2>
+        <h2 style={h2}>{v.today?.when === "tomorrow" ? "Tomorrow" : "Today & tonight"} · outside vs inside</h2>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <PeriodBox title="Day" row={v.today} offset={data.offsetHours} insideLabel={v.today?.upcoming ? "inside today (measured)" : "inside so far"} usualLabel="usual day" lastAt={v.insideLastAt} now={now} />
+          <PeriodBox title="Day" row={v.today} offset={data.offsetHours} insideLabel={!v.today?.upcoming ? "inside so far" : v.today.insideWhen === "yesterday" ? "inside yesterday (measured)" : "inside today (measured)"} usualLabel="usual day" lastAt={v.insideLastAt} now={now} />
           <PeriodBox title="Night" row={v.tonight} offset={data.offsetHours} insideLabel="inside last night" usualLabel="usual night" lastAt={v.insideLastAt} now={now} />
         </div>
       </section>

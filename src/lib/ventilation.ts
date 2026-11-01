@@ -88,8 +88,10 @@ export type VentInput = {
 export type Period = { kind: "day" | "night"; start: number; end: number; label: string };
 export type Range = { min: number; max: number } | null;
 export type Prompt = { id: string; level: "act" | "plan"; text: string; why: string };
-/** `upcoming`: the day box is the next day (it is night now), so `inside` is the day that just ended. */
-export type PeriodRow = { period: Period; outside: Range; inside: Range; insideUsual: Range; partial: boolean; upcoming?: boolean };
+/** `upcoming`: the day hasn't started (it is night now), so `inside` is the previous day, measured.
+ *  `when`: the period's farm-local date vs now. `insideWhen`: the date of the `inside` range. */
+export type PeriodRow = { period: Period; outside: Range; inside: Range; insideUsual: Range; partial: boolean; upcoming?: boolean;
+  when?: "today" | "tomorrow"; insideWhen?: "today" | "yesterday" };
 export type DayOutlook = { label: string; dayMax: number | null; nightMin: number | null; hot: boolean; cold: boolean };
 
 export type VentView = {
@@ -205,6 +207,10 @@ export function buildVentilation(input: VentInput): VentView {
     outside: rangeOf(outsideIn(hours, day)),
     inside: rangeOf(upcoming ? (prevDay ? insideIn(inside, prevDay) : []) : insideIn(inside, { ...day, end: Math.min(day.end, now) })),
     upcoming,
+    // Calendar dates, not "before/after sunset": between midnight and sunrise the next day IS today,
+    // and the day that just ended is yesterday.
+    when: localDate(day.start, offsetHours) === localDate(now, offsetHours) ? "today" : "tomorrow",
+    insideWhen: !upcoming || (prevDay && localDate(prevDay.start, offsetHours) === localDate(now, offsetHours)) ? "today" : "yesterday",
     insideUsual: usualDayMax != null && usualDayMin != null ? { min: r1(usualDayMin), max: r1(usualDayMax) } : null,
     partial: day.start < now,
   } : null;
