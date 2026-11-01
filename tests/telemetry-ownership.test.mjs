@@ -85,3 +85,14 @@ test('a failed lookup is not cached', async () => {
   await assert.rejects(own.farmOwnsDevice(FARM, CLIMATE));
   assert.equal(await own.farmOwnsDevice(FARM, CLIMATE), true);
 });
+
+test('checkDeviceOwnership: ok, 404 for a foreign device, 503 when the lookup fails', async () => {
+  const plain = (v) => JSON.parse(JSON.stringify(v));
+  const { own } = setup([[{ device_id: CLIMATE }]]);
+  assert.deepEqual(plain(await own.checkDeviceOwnership(FARM, CLIMATE)), { ok: true });
+  assert.deepEqual(plain(await own.checkDeviceOwnership(FARM, 'ffffffffffffffff')),
+    { ok: false, status: 404, error: 'Device not found for this farm' });
+  const down = load('src/lib/telemetryOwnership.ts', { '@/lib/influxdb': { queryInflux: async () => { throw new Error('down'); } }, '@/lib/telemetryParams': params });
+  assert.deepEqual(plain(await down.checkDeviceOwnership(FARM, CLIMATE)),
+    { ok: false, status: 503, error: 'temporarily unavailable' });
+});

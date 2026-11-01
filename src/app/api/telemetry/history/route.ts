@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { queryInflux } from "@/lib/influxdb";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
 import { checkTelemetryParams } from "@/lib/telemetryParams";
-import { farmOwnsDevice } from "@/lib/telemetryOwnership";
+import { checkDeviceOwnership } from "@/lib/telemetryOwnership";
 
 const RANGE_MAP: Record<string, string> = {
   "24h": "24 hours",
@@ -83,9 +83,8 @@ export async function GET(req: NextRequest) {
   if (!params.ok) return NextResponse.json({ error: params.error }, { status: params.status });
   const { deviceId, deviceType } = params;
   const metric = params.metric as string;
-  if (!(await farmOwnsDevice(farm, deviceId))) {
-    return NextResponse.json({ error: "Device not found for this farm" }, { status: 404 });
-  }
+  const owned = await checkDeviceOwnership(farm, deviceId);
+  if (!owned.ok) return NextResponse.json({ error: owned.error }, { status: owned.status });
 
   const interval   = RANGE_MAP[range] ?? "24 hours";
   const bucketSize = RESOLUTION_MAP[resolution] ?? "1 hour";

@@ -11,7 +11,11 @@ export function clearDeviceCache(): void {
   deviceCache.clear();
 }
 
-/** Device ids that reported under this farm's farm_id in the last 90 days, cached per farm. */
+/**
+ * Device ids that reported under this farm's farm_id in the last 90 days, cached per farm.
+ * The whole list is cached, so a "not ours" answer is cached too: a newly installed device can take
+ * up to DEVICE_CACHE_TTL_MS (10 min) to become reachable. Failed lookups are not cached.
+ */
 async function reportingDeviceIds(farmId: string): Promise<string[]> {
   const hit = deviceCache.get(farmId);
   if (hit && Date.now() - hit.at < DEVICE_CACHE_TTL_MS) return hit.ids;
@@ -34,4 +38,16 @@ export async function farmOwnsDevice(farm: FarmConfig, deviceId: string): Promis
   if (!isValidFarmId(farm.farmId) || !isValidDeviceId(deviceId)) return false;
   if (deviceBelongsToFarm(deviceId, configDeviceIds(farm))) return true;
   return deviceBelongsToFarm(deviceId, await reportingDeviceIds(farm.farmId));
+}
+
+export type OwnershipResult = { ok: true } | { ok: false; status: 404 | 503; error: string };
+
+/** Ownership check mapped to an HTTP outcome: 404 for someone else's device, 503 if the lookup fails. */
+export async function checkDeviceOwnership(farm: FarmConfig, deviceId: string): Promise<OwnershipResult> {
+  try {
+    if (await farmOwnsDevice(farm, deviceId)) return { ok: true };
+    return { ok: false, status: 404, error: "Device not found for this farm" };
+  } catch {
+    return { ok: false, status: 503, error: "temporarily unavailable" };
+  }
 }

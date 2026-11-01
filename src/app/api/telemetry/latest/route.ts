@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { queryInflux } from "@/lib/influxdb";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
 import { checkTelemetryParams, LATEST_FIELDS } from "@/lib/telemetryParams";
-import { farmOwnsDevice } from "@/lib/telemetryOwnership";
+import { checkDeviceOwnership } from "@/lib/telemetryOwnership";
 
 export async function GET(req: NextRequest) {
   let farm;
@@ -22,9 +22,8 @@ export async function GET(req: NextRequest) {
   );
   if (!params.ok) return NextResponse.json({ error: params.error }, { status: params.status });
   const { deviceId, deviceType } = params;
-  if (!(await farmOwnsDevice(farm, deviceId))) {
-    return NextResponse.json({ error: "Device not found for this farm" }, { status: 404 });
-  }
+  const owned = await checkDeviceOwnership(farm, deviceId);
+  if (!owned.ok) return NextResponse.json({ error: owned.error }, { status: owned.status });
 
   const selectFields = LATEST_FIELDS[deviceType];
 
