@@ -66,3 +66,10 @@ fans on before 12:00" / "Forecast 28 °C outside around 15:00, and on 7 warm day
 peaked about 5 °C above outside." Replay of the last 8 days: it would have fired on the 30 Oct – 2 Nov hot
 spell (inside reached 32–34 °C) and stayed quiet on 28 Oct (24 °C outside, inside 30 °C). All thresholds
 PROVISIONAL and per-farm.
+
+## Cooler outside now: dry-heat backstop
+
+The flush-heat prompt needed inside to *feel* 27.8 °C+. In dry heat the felt index reads low: on 1 Nov at
+17:00 the house was 29.1 °C at 33 % RH ("feels" 26 °C) with 25.6 °C outside, and no prompt showed. It now
+also fires when inside air is at least `warmInsideC` (29 °C, PROVISIONAL) and outside is 3 °C+ cooler; the
+"why" says the air is dry but the heat is still there.

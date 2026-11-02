@@ -125,6 +125,11 @@ test('cooler outside now while warm inside → flush heat', () => {
   const v = view(outside(() => 22), inside(() => ({ tempC: 31, rhPct: 60, co2: 800 })));
   assert.equal(v.prompts.find((x) => x.id === 'cooler-outside').text, 'Cooler outside now (22 °C vs 31 °C inside): consider opening up or fans on to flush heat');
   assert.ok(!ids(view(outside(() => 22), inside(() => ({ tempC: 24, rhPct: 60, co2: 800 })))).includes('cooler-outside'));
+  // dry heat (real 1 Nov 17:00: 29 °C at 33 % RH "feels" 26) still counts as warm
+  const dry = view(outside(() => 25.6), inside(() => ({ tempC: 29.1, rhPct: 33, co2: 500 })));
+  assert.equal(dry.prompts.find((x) => x.id === 'cooler-outside').text, 'Cooler outside now (26 °C vs 29 °C inside): consider opening up or fans on to flush heat');
+  assert.match(dry.prompts.find((x) => x.id === 'cooler-outside').why, /dry air/);
+  assert.ok(!ids(view(outside(() => 25.6), inside(() => ({ tempC: 28.5, rhPct: 33, co2: 500 })))).includes('cooler-outside'));
 });
 
 test('best window to air out: mildest dry daylight hours, only when the house will be closed', () => {

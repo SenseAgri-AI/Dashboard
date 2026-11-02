@@ -31,6 +31,9 @@ export type VentThresholds = {
   /** "Cooler outside now": inside minus outside at least this, while inside feels at least `warmInsideFeltC`. */
   coolerOutsideDeltaC: number;
   warmInsideFeltC: number;
+  /** Dry-heat backstop for "cooler outside now": inside air at or above this also counts as warm (the
+   *  felt index reads low in dry heat, e.g. 29 °C at 33 % RH feels 26). */
+  warmInsideC: number;
   /** Airing-out window: daylight hours with outside in this band and rain chance below `airOutMaxRainPct`. */
   airOutMinC: number;
   airOutMaxC: number;
@@ -61,6 +64,7 @@ export const DEFAULT_VENT_THRESHOLDS: VentThresholds = {
   dampAboveUsualPts: 10,
   coolerOutsideDeltaC: 3,
   warmInsideFeltC: 27.8,   // THI_COMFORT
+  warmInsideC: 29,         // PROVISIONAL
   airOutMinC: 16,          // PROVISIONAL
   airOutMaxC: 28,
   airOutMaxRainPct: 50,
@@ -317,10 +321,12 @@ export function buildVentilation(input: VentInput): VentView {
   }
 
   // Cooler outside right now while it's warm inside: flush heat.
-  if (insideNow?.feltC != null && outsideNow != null && insideNow.feltC >= t.warmInsideFeltC && insideNow.tempC - outsideNow >= t.coolerOutsideDeltaC) {
+  const warmInside = insideNow != null && ((insideNow.feltC != null && insideNow.feltC >= t.warmInsideFeltC) || insideNow.tempC >= t.warmInsideC);
+  if (insideNow && warmInside && outsideNow != null && insideNow.tempC - outsideNow >= t.coolerOutsideDeltaC) {
     prompts.push({ id: "cooler-outside", level: "act",
       text: `Cooler outside now (${r0(outsideNow)} °C vs ${r0(insideNow.tempC)} °C inside): consider opening up or fans on to flush heat`,
-      why: `Inside feels ${r0(insideNow.feltC)} °C.` });
+      why: insideNow.feltC != null && insideNow.feltC >= t.warmInsideFeltC ? `Inside feels ${r0(insideNow.feltC)} °C.`
+        : `Inside is ${r0(insideNow.tempC)} °C (dry air, so it "feels" ${insideNow.feltC != null ? `${r0(insideNow.feltC)} °C` : "less"}, but the heat is still there).` });
   }
 
   // Best window to air out today, only when there's a reason to stay closed otherwise.
