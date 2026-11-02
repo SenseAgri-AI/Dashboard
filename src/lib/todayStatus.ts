@@ -486,7 +486,7 @@ export function nightLine(input: TodayInput, t: TodayThresholds): TodayLine {
   const yesterday = new Date(input.now + off - 86_400_000).toISOString().slice(0, 10);
   const n = (input.nights ?? []).find((x) => x.date === yesterday);
   if (!n || !(n.score < t.nightScore.amber)) return { ...base, rag: "green", text: "", action: "" };
-  return { ...base, rag: "amber", text: `Disturbed night: flock sleep score ${Math.round(n.score)}/100`, action: "Early warning: check for lights, predators or people in the night" };
+  return { ...base, rag: "amber", text: `Disturbed: flock sleep score ${Math.round(n.score)}/100`, action: "Early warning: check for lights, predators or people in the night" };
 }
 
 /** Story: when sensors stop reporting, tell me plainly so I don't trust old numbers. Shown only on a problem. */
