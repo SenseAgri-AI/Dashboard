@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 
-// Route mapping: /api/freshness per house climate sensor list; /api/ventilation warmest reading (hotC).
+// Route mapping: /api/freshness per house climate sensor list; /api/ventilation warmest reading (hotC); /api/sleep-score ?days.
 function load(file, mocks) {
   const js = ts.transpileModule(fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const m = { exports: {} };
-  vm.runInNewContext(js, { module: m, exports: m.exports, require: (n) => { if (!(n in mocks)) throw Error(`Unexpected import ${n}`); return mocks[n]; }, Date, URL, console: { error() {} } });
+  vm.runInNewContext(js, { module: m, exports: m.exports, require: (n) => { if (!(n in mocks)) throw Error(`Unexpected import ${n}`); return mocks[n]; }, Date, URL, Request, console: { error() {} } });
   return m.exports;
 }
 class FarmAccessError extends Error {}
@@ -50,4 +50,19 @@ test('ventilation route: inside points carry the warmest reading as hotC', async
   const { body } = await api.GET();
   assert.match(sql, /MAX\(temperature\) AS temperature_max/);
   assert.deepEqual(JSON.parse(JSON.stringify(body.inside)), [{ t: T0, tempC: 30.2, rhPct: 50, co2: 800, hotC: 32.1 }]);
+});
+
+test('sleep-score route: ?days=2 for the Today card, default and out-of-range give 15', async () => {
+  const sqls = [];
+  const api = load('src/app/api/sleep-score/route.ts', {
+    'next/server': { NextResponse: { json: (body) => ({ body }) } },
+    '@/lib/farms': { FarmAccessError, getFarmForRequest: async () => ({ farmId: 'f1' }) },
+    '@/lib/sleepScore': { nightScores: () => [] },
+    '@/lib/influxdb': { queryInflux: async (q) => { sqls.push(q); return []; } },
+  });
+  const days = async (qs) => { sqls.length = 0; await api.GET(new Request(`http://x/api/sleep-score${qs}`)); return sqls.map((s) => s.match(/interval '(\d+) days'/)[1]); };
+  assert.deepEqual(await days('?days=2'), ['2', '2']);
+  assert.deepEqual(await days(''), ['15', '15']);
+  assert.deepEqual(await days('?days=99'), ['15', '15']);
+  assert.deepEqual(await days("?days=2'; DROP"), ['15', '15']);
 });
