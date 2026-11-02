@@ -276,13 +276,27 @@ export function buildVentilation(input: VentInput): VentView {
   // (≥ 4 °C in ~2 h), sits well below the forecast outside temperature, AND there is a rain signal
   // (rain forecast ≥ stormRainPct within ±2 h, or inside humidity up ≥ stormRhRise points). Fans/pads
   // pulling a hot house down give the first two but not the third, so their hot prompt stays.
-  const recent = inside.filter((x) => x.t >= now - 2.5 * H && x.t <= now - 0.5 * H);
-  const recentMax = Math.max(-Infinity, ...recent.filter((x) => x.tempC != null).map((x) => x.tempC as number));
-  const recentMinRh = Math.min(Infinity, ...recent.filter((x) => x.rhPct != null).map((x) => x.rhPct as number));
-  const rainNear = hours.some((h) => Math.abs(h.t - now) <= 2 * H && (h.rainPct ?? 0) >= t.stormRainPct);
-  const rhJump = insideNow?.rhPct != null && insideNow.rhPct - recentMinRh >= t.stormRhRise;
-  const stormCooled = insideNow != null && outsideNow != null && insideNow.tempC <= outsideNow - t.forecastOffC
-    && recentMax - insideNow.tempC >= 4 && (rainNear || rhJump);
+  // Checked at a given time `tn` against the inside reading `cur` then; returns the pre-drop max when it holds.
+  const stormAt = (tn: number, cur: { tempC: number; rhPct: number | null }) => {
+    const recent = inside.filter((x) => x.t >= tn - 2.5 * H && x.t <= tn - 0.5 * H);
+    const recentMax = Math.max(-Infinity, ...recent.filter((x) => x.tempC != null).map((x) => x.tempC as number));
+    const recentMinRh = Math.min(Infinity, ...recent.filter((x) => x.rhPct != null).map((x) => x.rhPct as number));
+    const rainNear = hours.some((h) => Math.abs(h.t - tn) <= 2 * H && (h.rainPct ?? 0) >= t.stormRainPct);
+    const rhJump = cur.rhPct != null && cur.rhPct - recentMinRh >= t.stormRhRise;
+    // Compare with the warmest forecast hour within ±1 h, not just the nearest one: on 2 Nov the forecast put
+    // the storm's drop in the next hour, so the nearest hour already read cool while the house was cool.
+    const nearOut = hours.filter((h) => Math.abs(h.t - tn) <= H).map((h) => h.tempC);
+    if (!nearOut.length) return null;
+    const ok = cur.tempC <= Math.max(...nearOut) - t.forecastOffC && recentMax - cur.tempC >= 4 && (rainNear || rhJump);
+    return ok ? { recentMax, rainNear } : null;
+  };
+  const stormNow = insideNow ? stormAt(now, insideNow) : null;
+  const stormCooled = stormNow != null;
+  // Story: the storm came at 14:30; at 17:00 don't tell me "Rain likely today around 16:00" or "fans on now".
+  // Any 30-min reading today (farm-local) that met the check counts for the rest of the day.
+  const todayKey = localDate(now, offsetHours);
+  const stormedToday = stormCooled || inside.some((x) => x.tempC != null && x.t <= now && x.t >= now - 18 * H
+    && localDate(x.t, offsetHours) === todayKey && stormAt(x.t, { tempC: x.tempC, rhPct: x.rhPct }) != null);
   const insideMax = (dayMax: number | null) => (houseGain != null && dayMax != null && dayMax >= t.gainMinOutsideC ? r0(dayMax + houseGain) : null);
   const outlook: DayOutlook[] = [];
   for (let i = Math.max(dayIdx, 0); dayIdx >= 0 && i < all.length && outlook.length < 3; i++) {
@@ -299,7 +313,7 @@ export function buildVentilation(input: VentInput): VentView {
     const dayHours = hours.filter((h) => h.t >= p.start && h.t < p.end);
     const peakT = dayHours.length ? dayHours.reduce((a, b) => (b.tempC > a.tempC ? b : a)).t : null;
     const soFar = insideIn(inside, { ...p, end: Math.min(p.end, now + 1) });
-    const measured = dDate === today0 && insideNow != null && soFar.length >= 6 && ((peakT != null && now > peakT + H) || stormCooled);
+    const measured = dDate === today0 && insideNow != null && soFar.length >= 6 && ((peakT != null && now > peakT + H) || stormedToday);
     const inMax = measured ? r0(Math.max(...soFar)) : insideMax(dayMax);
     outlook.push({ label: dDate === today0 ? "Today" : dDate === tomorrow0 ? "Tomorrow" : p.label, dayMax, nightMin,
       hot: dayMax != null && dayMax >= t.hotDayC, cold: nightMin != null && nightMin <= t.coldNightC,
@@ -314,8 +328,8 @@ export function buildVentilation(input: VentInput): VentView {
   // First, as the most urgent. Story: a storm has just hit and the house is chilling fast; if I'm away from the house I want to know
   // now, while closing curtains still helps. Only with a rain signal, so ordinary evening cooling stays quiet.
   if (stormCooled) prompts.push({ id: "storm-now", level: "act",
-    text: `House cooled fast (${r0(recentMax)} → ${r0(insideNow!.tempC)} °C in about 2 h): if a storm is passing, check curtains`,
-    why: `${rainNear ? "Rain is forecast around now" : "Inside humidity jumped"}; an open house can chill fast in wind and rain. Early warning, not a cause.` });
+    text: `House cooled fast (${r0(stormNow!.recentMax)} → ${r0(insideNow!.tempC)} °C in about 2 h): if a storm is passing, check curtains`,
+    why: `${stormNow!.rainNear ? "Rain is forecast around now" : "Inside humidity jumped"}; an open house can chill fast in wind and rain. Early warning, not a cause.` });
 
   // Hot afternoon (today if the heat is still ahead, otherwise tomorrow). Two triggers: the outside
   // forecast alone is hot, or a warm forecast plus this house's own usual afternoon gain over outside
@@ -328,7 +342,7 @@ export function buildVentilation(input: VentInput): VentView {
     // Story: after a storm the house is cool but the forecast still says hot; don't tell me "fans on now".
     // A house this far below the forecast outside temperature means today's forecast is out of date.
     const today = localDate(p.start, offsetHours) === localDate(now, offsetHours);
-    if (today && stormCooled) continue;
+    if (today && stormedToday) continue;
     const peak = ahead.reduce((a, b) => (b.tempC > a.tempC ? b : a));
     const hotOutside = peak.tempC >= t.hotDayC;
     const insideLikely = houseGain != null && houseGain > 0 && peak.tempC >= t.heatStartC && r0(peak.tempC + houseGain) >= t.insideHotC; // the "about N °C" we show, so text and trigger agree
@@ -354,7 +368,7 @@ export function buildVentilation(input: VentInput): VentView {
   for (const p of hotDays) {
     const wet = hours.find((h) => h.t >= p.start && h.t < p.end && h.t >= now - H && h.rainPct != null && h.rainPct >= t.stormRainPct);
     if (!wet) continue;
-    if (stormCooled && localDate(wet.t, offsetHours) === localDate(now, offsetHours)) continue; // the storm has already come
+    if (stormedToday && localDate(wet.t, offsetHours) === todayKey) continue; // the storm has already come today
     const before = hours.filter((h) => h.t >= wet.t - 2 * H && h.t < wet.t).map((h) => h.tempC);
     const after = hours.filter((h) => h.t >= wet.t && h.t <= wet.t + 2 * H).map((h) => h.tempC);
     const from = before.length ? Math.max(...before) : null, to = after.length ? Math.min(...after) : null;

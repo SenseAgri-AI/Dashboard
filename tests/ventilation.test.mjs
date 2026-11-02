@@ -348,6 +348,16 @@ test('fans/pads cooled a hot house (no rain signal): the hot prompt stays; a hum
   assert.ok(!ids(view(dry, cooled((h, d) => (d === 8 && h >= 11 ? 80 : 45)))).includes('hot-day'));
 });
 
+test('storm came earlier today: later the same day, no "Rain likely today" or "fans on now" either', () => {
+  // inside 31 until 08:00 local, 19 °C from 08:30 with humidity up; rain forecast 09:00 and 14:00; NOW = 12:00
+  const o = outside((h, d) => (d === 8 ? (h >= 7 && h <= 16 ? 33 : 20) : 22), (h, d) => (d === 8 && (h === 9 || h === 14) ? 90 : 0));
+  const early = inside((h, d) => ({ tempC: d === 8 && h >= 8.5 ? 19 : d === 8 && h >= 6 ? 31 : 24, rhPct: d === 8 && h >= 8.5 ? 85 : 45, co2: 800 }));
+  const v = view(o, early);
+  assert.ok(!ids(v).includes('storm-now')); // the sharp drop is now > 2 h old
+  assert.ok(!ids(v).includes('hot-day'));
+  assert.ok(!ids(v).includes('storm'));
+});
+
 test('"(peak)" only while the inside sensor is still reporting', () => {
   const o = outside((h, d) => (d === 8 ? (h >= 8 && h <= 9 ? 33 : 20) : 22)); // peak passed by NOW
   const stormed = inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 19 : d === 8 && h >= 9 ? 31 : 24, rhPct: 70, co2: 800 }));
