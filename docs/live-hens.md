@@ -6,3 +6,4 @@ Farmer story: *"When I glance at Home I want to see how many birds I actually ha
 - **Live hens** = `houseHens` − every death in the daily log (`/api/production` → `liveHens`). Before, the tile showed `houseHens` for ever.
 - **Deaths since housed (N %)** = cumulative logged deaths (value) and `deaths ÷ houseHens × 100` (in the label, so it fits a phone tile). Before, the rate was `deaths ÷ (houseHens + deaths)`, which treats `houseHens` as the *current* flock. Analytics "Cumulative mortality" and the assistant's `mortality_rate_pct` already used `÷ houseHens`, so all three now agree.
 - If `houseHens` is ever changed to a mid-flock head count, deaths logged before that would be counted twice; change it only with a new flock (new daily-log start).
+- Analytics "Cumulative mortality" is now "Deaths since housed" (%), matching Home.

@@ -117,7 +117,7 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
   { key: "eggs_total", label: "Eggs / day", unit: "", env: false },
   { key: "egg_sizes", label: "Egg sizes (all)", unit: "", env: false },
   { key: "avg_egg_weight", label: "Egg weight", unit: "g", env: false },
-  { key: "cum_mortality", label: "Cumulative mortality", unit: "%", env: false },
+  { key: "cum_mortality", label: "Deaths since housed", unit: "%", env: false },
   { key: "eggs_damaged", label: "Eggs broken / day", unit: "", env: false },
   { key: "breakage_rate", label: "Breakage rate", unit: "%", env: false },
   { key: "hdep", label: "Lay rate (hen-day)", unit: "%", env: false },
