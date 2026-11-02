@@ -385,3 +385,22 @@ test('"(peak)" only while the inside sensor is still reporting', () => {
   assert.equal(view(o, stormed).outlook[0].insideMeasured, true);
   assert.equal(view(o, stale).outlook[0].insideMeasured, false);
 });
+
+test('house gain follows the wind: calm days run hotter, windy days cooler', () => {
+  const W = [5, 20, 5, 20, 5, 20, 5, 20]; // past days' 09–17 h wind (km/h)
+  const withWind = (today) => outside((h, d) => sine(18, 28)(h)).map((x) => {
+    const d = localDay(x.t);
+    return { ...x, windKmh: d < 8 ? W[d] : d === 8 ? today : 10 };
+  });
+  // past days: inside peak = 28 + (6 − 0.2 × wind) → 5 °C on calm days, 2 °C on windy days
+  const ins = inside((h, d) => ({ tempC: d < 8 ? sine(18, 28 + 6 - 0.2 * W[d])(h) : 24, rhPct: 60, co2: 900 }));
+  const calm = view(withWind(4), ins);
+  const p = calm.prompts.find((x) => x.id === 'hot-day');
+  assert.ok(p, 'calm day: hot prompt expected');
+  assert.match(p.text, /^Hot inside likely this afternoon \(about 33 °C\)/);
+  assert.match(p.why, /calmer than usual forecast, so likely a bit more\./);
+  assert.equal(calm.outlook[0].insideMax, 33);
+  const windy = view(withWind(25), ins);
+  assert.ok(!windy.prompts.some((x) => x.id === 'hot-day' && /this afternoon/.test(x.text))); // ~29 °C inside today
+  assert.equal(windy.outlook[0].insideMax, 29);
+});

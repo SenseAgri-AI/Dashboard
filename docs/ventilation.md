@@ -107,6 +107,14 @@ Today's card shows the measured peak "(peak)" only while the inside sensor is st
 - **Outlook, cold nights (2 Nov):** in the 3-day outlook a night is blue (cold) by the same rule, and when the likely inside low is ≤ `coldNightC` a blue "inside ~N°C" sits under ☾. Each day now reads ☀ high → inside peak → ☾ low → inside low → ☂, so each inside figure sits under its own outside figure.
 - **Cold night by the house (2 Nov):** the prompt also fires when that likely inside low is ≤ `coldNightC`, even if the outside forecast is milder: "Cold night inside likely (about N °C): consider closing curtains and reducing fans by dusk (HH:MM)", why "Forecast outside minimum N °C, and on recent nights the house ran about N °C below outside." Farmer story: *"In the warm season the house is left open and can run colder than outside at night; warn me by the house, not only the forecast."* A replay over recent weeks caught most nights the house actually went to 10 °C or below, which the outside-only rule mostly missed (figures in the private findings).
 
+### Wind-adjusted house gain (2 Nov)
+
+*As a farmer, on a still, mild day I want to be warned that the house will still get hot, because those were the days the warning missed.*
+
+The likely inside peak is no longer just the median gain. Over the same recent warm days it fits gain ≈ mean gain + slope × (forecast wind 09:00–16:59 − mean wind), with the slope clamped between −`windGainMax` (0.3 °C per km/h, provisional) and 0, so calm days run hotter and windy days cooler. If wind is missing it falls back to the median gain. The hot-day "why" adds "; calmer than usual forecast, so likely a bit more" (or "windier… a bit less") when the adjustment moves the estimate by 0.5 °C or more.
+
+Also: the outlook's "inside ~N" now uses the unrounded outside maximum, the same as the prompt, so the outlook can't show a hot inside day without the prompt. The inside-gain trigger now needs only `gainMinOutsideC` (24 °C) outside, not `heatStartC`, matching the outlook. A replay over recent weeks reduced the inside-peak error by about a fifth and caught one more hot day with no extra false alarms (figures in the private findings). Two mild-outside misses remain, about 1 °C short.
+
 ### Threshold calls (2 Nov)
 
 Dylan asked for these to be decided, not left provisional:
