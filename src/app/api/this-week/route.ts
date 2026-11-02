@@ -25,7 +25,9 @@ export async function GET() {
     if (err instanceof FarmAccessError) return NextResponse.json({ error: err.message }, { status: 403 });
     return NextResponse.json({ error: "Failed to resolve farm" }, { status: 500 });
   }
-  const offset = Number.isInteger(farm.timezoneOffset) ? Number(farm.timezoneOffset) : 2;
+  // Whole hours, -12..+14 (same bound as fetchWaterDaily); anything else falls back to SAST. A fixed offset doesn't follow DST.
+  const tz = Number(farm.timezoneOffset);
+  const offset = Number.isInteger(tz) && tz >= -12 && tz <= 14 ? tz : 2;
   const origin = new Date(-offset * 3_600_000).toISOString().replace(".000Z", "Z"); // farm-local midnight
   const f = farm.farmId.replace(/'/g, "''");
   try {

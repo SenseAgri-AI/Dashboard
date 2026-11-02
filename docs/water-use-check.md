@@ -67,3 +67,4 @@ Farmer story: *"When I look at today's drinking rate, I want it to be the whole 
 - The card now sums every meter in `farm.waterMeters` (each differenced on its own counter, then added per 30-min bucket, `src/lib/meterPoints.ts`). Without `waterMeters` it falls back to `waterDeviceId` alone and says **"One water meter only"**.
 - On 2 Nov at 14:05 SAST Meter 1 had 170 L and Meter 2 180 L since midnight, so the single-meter card showed about half the house. **Adding `waterMeters` (both A-frame meters) to the farm config fixes this with no code change.**
 - The subtitle also says *"Compare with other days, not a target"*: the meters under-read at low flow (see `docs/data-findings.md`), so ml/hen targets would mislead.
+- Day boundaries use the farm's fixed `timezoneOffset`; a fixed offset doesn't follow daylight saving.

@@ -168,7 +168,7 @@ export async function GET() {
   try {
     // Latest AM308 reading
     const waterIds = (farm.waterMeters?.length ? farm.waterMeters.map((m) => m.deviceId) : [farm.waterDeviceId])
-      .filter((id): id is string => typeof id === "string" && DEVICE_ID.test(id));
+      .filter((id, i, all): id is string => typeof id === "string" && DEVICE_ID.test(id) && all.indexOf(id) === i); // de-duplicated, so a meter listed twice isn't counted twice
     const [latestRows, sparkRows, waterSparkRows, feedSparkRows, pmSparkRows, lightRows] = await Promise.all([
       queryInflux<Record<string, unknown>>(`
         SELECT
