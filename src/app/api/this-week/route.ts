@@ -5,7 +5,7 @@ import { queryInflux } from "@/lib/influxdb";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// Daily inside maximum (°C, from 30-min averages so one odd reading can't set it) for the last 15
+// Daily inside maximum and minimum (°C, from 30-min averages so one odd reading can't set it) for the last 15
 // farm-local days, for the Home "This week" card. Read-only, farm-scoped. Water comes from
 // /api/water-use and eggs/deaths from the DailyLog Home already loads. Docs: docs/this-week.md.
 function toMs(t: unknown): number | null {
@@ -31,8 +31,8 @@ export async function GET() {
   const origin = new Date(-offset * 3_600_000).toISOString().replace(".000Z", "Z"); // farm-local midnight
   const f = farm.farmId.replace(/'/g, "''");
   try {
-    const rows = await queryInflux<{ day: unknown; tmax: unknown }>(`
-      SELECT date_bin(INTERVAL '1 day', bucket, TIMESTAMP '${origin}') AS day, MAX(t) AS tmax
+    const rows = await queryInflux<{ day: unknown; tmax: unknown; tmin: unknown }>(`
+      SELECT date_bin(INTERVAL '1 day', bucket, TIMESTAMP '${origin}') AS day, MAX(t) AS tmax, MIN(t) AS tmin
       FROM (
         SELECT date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01T00:00:00Z') AS bucket, AVG(temperature) AS t
         FROM sensors
@@ -43,8 +43,8 @@ export async function GET() {
       GROUP BY 1 ORDER BY 1`);
     const inside = rows.map((r) => {
       const ms = toMs(r.day);
-      const t = r.tmax == null ? null : Number(r.tmax);
-      return ms == null ? null : { date: new Date(ms + offset * 3_600_000).toISOString().slice(0, 10), maxC: t != null && Number.isFinite(t) ? t : null };
+      const n = (v: unknown) => { const x = v == null ? NaN : Number(v); return Number.isFinite(x) ? x : null; };
+      return ms == null ? null : { date: new Date(ms + offset * 3_600_000).toISOString().slice(0, 10), maxC: n(r.tmax), minC: n(r.tmin) };
     }).filter((x) => x != null);
     return NextResponse.json({ inside, timezoneOffset: offset }, { headers: { "Cache-Control": "private, max-age=600" } });
   } catch {

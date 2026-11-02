@@ -15,6 +15,7 @@ changes get the amber "Early warning" note, worded as something to check, never 
 | Deaths | total in the week | "last week N" | at least 7 and at least double last week (same as the Today card's week rule) → "Early warning: check the birds" |
 | Water | average litres/day over **complete** days (both meters ≥ 22 hourly rows) | as eggs | down 30 %+ (same 70 % as the Today card) → "Early warning: check drinkers, pressure and the birds" |
 | Hottest inside | hottest day's max (30-min averages) and date | "last week N °C" | none; adds "N days at 32 °C+ (last week M)" |
+| Coldest inside | lowest 30-min average and date (a farm-local day's low is usually its early hours, so "Mon 26 Oct" means the night into Monday) | "last week N °C" | none; adds "N nights at 10 °C or below (last week M)". **Only shown when either week had such a night**, so warm fortnights keep the card short. Story: *"After a run of cold nights I want to see whether closing up is keeping the house warmer week on week."* |
 
 Data states:
 
@@ -25,7 +26,7 @@ Data states:
 
 Sources (all read-only): eggs and deaths from the DailyLog rows Home already loads (`/api/production`);
 water from `/api/water-use` (silver `meters_hourly`, now farm-local days, shared with the Today card's
-water check); inside daily max from `/api/this-week` (InfluxDB, 16-day lookback).
+water check); inside daily max and min from `/api/this-week` (InfluxDB, 16-day lookback).
 
 Left out on purpose:
 

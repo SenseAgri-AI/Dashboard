@@ -3,11 +3,11 @@
 // User stories and rules: docs/this-week.md.
 
 export type WeekRag = "neutral" | "amber" | "unknown";
-export type WeekLine = { key: "eggs" | "deaths" | "water" | "heat"; label: string; value: string; change: string; rag: WeekRag; note?: string };
+export type WeekLine = { key: "eggs" | "deaths" | "water" | "heat" | "cold"; label: string; value: string; change: string; rag: WeekRag; note?: string };
 
 export type WeekDaily = { date: string; eggs: number; hdep: number | null; mortality: number };
 export type WeekWaterDay = { date: string; meters: (number | null)[] };
-export type WeekInsideDay = { date: string; maxC: number | null };
+export type WeekInsideDay = { date: string; maxC: number | null; minC?: number | null };
 
 export type WeekInput = {
   now: number;
@@ -34,6 +34,9 @@ export const WEEK_RULES = {
   deathsFactor: 2,
   /** Inside "hot day" for the count. Same 32 °C as the Today card's dry-bulb backstop. */
   hotC: 32,
+  /** Inside "cold night" for the count, and the level at which the Coldest line shows at all (same 10 °C as
+   *  Ventilation's cold-night prompt). Warm fortnights skip the line to keep the card short. */
+  coldC: 10,
 } as const;
 
 const DAY = 86_400_000;
@@ -125,9 +128,24 @@ function heatLine(inside: WeekInput["inside"], w: { last: string[]; prev: string
     rag: "neutral", note: hot || prevHot ? `${hot} day${hot === 1 ? "" : "s"} at ${WEEK_RULES.hotC}°C+ (last week ${prevHot})` : undefined };
 }
 
+// Story: after a run of cold nights I want to see whether closing up is keeping the house warmer week on week.
+function coldLine(inside: WeekInput["inside"], w: { last: string[]; prev: string[] }): WeekLine | null {
+  if (inside === "loading" || inside === undefined) return null; // the heat line already says "couldn't load"
+  const pick = (days: string[]) => inside.filter((d) => days.includes(d.date) && d.minC != null && Number.isFinite(d.minC)) as { date: string; minC: number }[];
+  const a = pick(w.last), b = pick(w.prev);
+  if (a.length < WEEK_RULES.minDays) return null;
+  const cold = a.filter((d) => d.minC <= WEEK_RULES.coldC).length, prevCold = b.filter((d) => d.minC <= WEEK_RULES.coldC).length;
+  if (!cold && !prevCold) return null;
+  const low = a.reduce((x, y) => (y.minC < x.minC ? y : x));
+  const prevLow = b.length >= WEEK_RULES.minDays ? Math.min(...b.map((d) => d.minC)) : null;
+  return { key: "cold", label: "Coldest inside", value: `${Math.round(low.minC)}°C on ${dayLabel(low.date)}`,
+    change: prevLow == null ? "no full week before to compare" : `last week ${Math.round(prevLow)}°C`,
+    rag: "neutral", note: `${cold} night${cold === 1 ? "" : "s"} at ${WEEK_RULES.coldC}°C or below (last week ${prevCold})` };
+}
+
 export function buildThisWeek(input: WeekInput): { lines: WeekLine[]; range: string } {
   const w = weekWindows(input.now, input.offsetHours ?? 2);
-  const lines = [eggsLine(input.daily, w), deathsLine(input.daily, w), waterLine(input.water, w), heatLine(input.inside, w)]
+  const lines = [eggsLine(input.daily, w), deathsLine(input.daily, w), waterLine(input.water, w), heatLine(input.inside, w), coldLine(input.inside, w)]
     .filter((l): l is WeekLine => l != null);
   const short = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "short" });
   return { lines, range: `${short(w.last[0])} – ${short(w.last[6])}` };

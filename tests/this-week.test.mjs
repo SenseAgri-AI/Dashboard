@@ -82,3 +82,17 @@ test('hottest inside day, with the count of 32 °C+ days', () => {
   assert.equal(h.note, '4 days at 32°C+ (last week 0)');
   assert.equal(h.rag, 'neutral');
 });
+
+test('coldest inside: only shown when a night reached 10 °C or below in either week', () => {
+  const warm = [...PREV, ...LAST].map((d) => ({ date: d, maxC: 30, minC: 15 }));
+  assert.equal(line(build({ inside: warm }), 'cold'), undefined); // warm fortnight: no clutter
+  const ins = [...PREV.map((d, i) => ({ date: d, maxC: 25, minC: i < 3 ? 7.6 : 12 })), ...LAST.map((d, i) => ({ date: d, maxC: 25, minC: i === 1 ? 9.4 : 13 }))];
+  const c = line(build({ inside: ins }), 'cold');
+  assert.equal(c.label, 'Coldest inside');
+  assert.equal(c.value, '9°C on Tue 27 Oct');
+  assert.equal(c.change, 'last week 8°C');
+  assert.equal(c.note, '1 night at 10°C or below (last week 3)');
+  // old rows without minC (or a failed load) never break the card
+  assert.equal(line(build({ inside: [...PREV, ...LAST].map((d) => ({ date: d, maxC: 30 })) }), 'cold'), undefined);
+  assert.equal(line(build({ inside: undefined }), 'cold'), undefined);
+});
