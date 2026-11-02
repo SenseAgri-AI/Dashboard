@@ -50,7 +50,8 @@ export default function TodayCard({ ready, daily, lastLogDate, climate, extras, 
   const [nights, setNights] = useState<{ date: string; score: number }[] | undefined>(undefined);
 
   useEffect(() => {
-    const json = (url: string) => fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))));
+    // A hung check counts as failed after 30 s ("Some checks didn't load"), so the rest of the card still shows.
+    const json = (url: string) => fetch(url, { signal: AbortSignal.timeout(30_000) }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))));
     Promise.allSettled([json("/api/alerts"), json("/api/silo-levels"), json("/api/freshness")]).then(([a, s, f]) => {
       if (a.status === "fulfilled" && Array.isArray(a.value.alerts)) setAlerts({ list: a.value.alerts, stale: a.value.stale === true });
       if (s.status === "fulfilled" && Array.isArray(s.value.silos)) {

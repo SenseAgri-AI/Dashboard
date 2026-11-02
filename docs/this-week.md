@@ -37,3 +37,5 @@ Also on Home: the "Houses" tile only shows on farms with more than one house (on
 Houses panel below), and the egg-count date reads "1 Nov".
 
 - Days use the farm's fixed `timezoneOffset` (whole hours, −12..+14; otherwise SAST). A fixed offset doesn't follow daylight saving, so a DST farm's day boundary would be an hour off for part of the year.
+
+Each request gives up after 30 s (2 Nov); that line then reads "couldn't load" instead of loading forever.

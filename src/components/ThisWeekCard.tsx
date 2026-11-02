@@ -16,7 +16,8 @@ export default function ThisWeekCard({ ready, daily, narrow }: { ready: boolean;
   const [now] = useState<number>(() => Date.now());
 
   useEffect(() => {
-    const json = (url: string) => fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))));
+    // A hung request gives up after 30 s and its line reads "couldn't load", instead of "Loading…" forever.
+    const json = (url: string) => fetch(url, { signal: AbortSignal.timeout(30_000) }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))));
     json("/api/water-use").then((w) => setWater(Array.isArray(w.days) ? w.days : undefined)).catch(() => setWater(undefined));
     json("/api/this-week").then((d) => {
       setInside(Array.isArray(d.inside) ? d.inside : undefined);

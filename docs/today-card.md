@@ -28,7 +28,7 @@ New read-only endpoint: `/api/freshness` (latest reading time for climate, each 
    - **Feed silo**: the existing silo-levels `low` flag. "Silo N running low", no percentage, no days-left.
    - **Sensors**: climate, water meters or silo radar stale, a power alert, or delayed farm-alert checks. Windows (minutes, amber / red): climate 30 / 90 (sensors report every 10 min; 15 was too twitchy), water 90 / 360, silo 2880 / 5760 **per radar** (radars report about every 3 h; a combined check hid radar `…ccc2b` going silent on 29 Oct). Also one silent house climate sensor while the other still reports (amber; see docs/stale-data.md).
    - **Other attention items** from `src/lib/attention.ts` at warning/danger. The daily-log item is already covered by Birds; the info-level "check schedules" reminder is left for a future weekly summary.
-4. **Footer** "Some checks didn't load" when any source failed. Failed checks never show as green or stale.
+4. **Footer** "Some checks didn't load" when any source failed. Failed checks never show as green or stale. Each request gives up after 30 s, so one hung check can't hold the whole card on loading.
 
 A firing alert can raise a line's colour, never lower it. Info-level alerts don't count as problems.
 
