@@ -433,3 +433,11 @@ test('warm end: the warmest sensor shows when it usually peaks ≥ 1 °C above t
   const small = view(o, plain.map((x) => ({ ...x, hotC: x.tempC == null ? null : x.tempC + 0.5 })));
   assert.equal(small.outlook[0].warmEndMax, null);
 });
+
+test('warm end note also on the hot-outside prompt', () => {
+  const o = outside((h) => sine(18, 34)(h));
+  const ins = inside((h, d) => ({ tempC: d < 8 ? sine(18, 37)(h) : 24, rhPct: 60, co2: 900 })).map((x) => ({ ...x, hotC: x.tempC == null ? null : x.tempC + (x.tempC > 30 ? 2 : 0.5) }));
+  const p = view(o, ins).prompts.find((x) => x.id === 'hot-day');
+  assert.match(p.text, /^Hot afternoon forecast/);
+  assert.match(p.why, /warmest sensor usually peaks about 2 °C above the house average/);
+});

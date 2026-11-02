@@ -436,12 +436,13 @@ export function buildVentilation(input: VentInput): VentView {
     const by = warmFrom.t - t.fansLeadHours * H;
     // Label by the farm's local date (before sunrise, today's daylight is still "today").
     const when = localDate(p.start, offsetHours) === localDate(now, offsetHours) ? "afternoon" : "tomorrow";
+    const warmNote = warmEnd != null ? ` The warmest sensor usually peaks about ${r0(warmEnd)} °C above the house average.` : "";
     const fans = `consider opening up and fans on ${by > now ? `before ${hhmm(by)}` : "now"}`;
     prompts.push(hotOutside ? { id: "hot-day", level: by - now < 12 * H ? "act" : "plan",
       text: `Hot ${when} forecast (${r0(peak.tempC)} °C around ${hhmm(peak.t)}): ${fans}`,
-      why: `Outside reaches ${t.heatStartC} °C from about ${hhmm(warmFrom.t)}. ${DRINKERS}` } : { id: "hot-day", level: by - now < 12 * H ? "act" : "plan",
+      why: `Outside reaches ${t.heatStartC} °C from about ${hhmm(warmFrom.t)}.${warmNote} ${DRINKERS}` } : { id: "hot-day", level: by - now < 12 * H ? "act" : "plan",
       text: `Hot inside likely ${when === "afternoon" ? "this afternoon" : "tomorrow"} (about ${r0(peak.tempC + gain!)} °C): ${fans}`,
-      why: `Forecast ${r0(peak.tempC)} °C outside around ${hhmm(peak.t)}, and on ${gains.length} warm days this past week the house peaked about ${r0(houseGain!)} °C above outside${windNote(p)}.${warmEnd != null ? ` The warmest sensor usually peaks about ${r0(warmEnd)} °C above the house average.` : ""} ${DRINKERS}` });
+      why: `Forecast ${r0(peak.tempC)} °C outside around ${hhmm(peak.t)}, and on ${gains.length} warm days this past week the house peaked about ${r0(houseGain!)} °C above outside${windNote(p)}.${warmNote} ${DRINKERS}` });
     break;
   }
 
