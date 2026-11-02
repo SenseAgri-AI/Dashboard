@@ -107,7 +107,9 @@ export type Prompt = { id: string; level: "act" | "plan"; text: string; why: str
  *  `when`: the period's farm-local date vs now. `insideWhen`: the date of the `inside` range. */
 export type PeriodRow = { period: Period; outside: Range; inside: Range; insideUsual: Range; partial: boolean; upcoming?: boolean;
   when?: "today" | "tomorrow"; insideWhen?: "today" | "yesterday" };
-export type DayOutlook = { label: string; dayMax: number | null; nightMin: number | null; hot: boolean; cold: boolean };
+export type DayOutlook = { label: string; dayMax: number | null; nightMin: number | null; hot: boolean; cold: boolean;
+  /** Likely inside peak (outside high + this house's usual warm-day gain); null on cool days or without enough history. */
+  insideMax: number | null; insideHot: boolean };
 
 export type VentView = {
   insideNow: { tempC: number; rhPct: number | null; feltC: number | null; chillEstC: number | null; co2: number | null; at: number } | null;
@@ -238,7 +240,17 @@ export function buildVentilation(input: VentInput): VentView {
     partial: false,
   } : null;
 
-  // 3-day outlook (outside only), today first.
+  // House gain = median (inside max − outside max) over recent warm days. Houses here peak ~3–6 °C above
+  // outside, so a 28 °C day can mean ~33 °C inside. Only warm days count: on cool days birds' own heat
+  // makes the difference look bigger than it is for a hot afternoon.
+  const gains = pastDays.map((p) => {
+    const iv = insideIn(inside, p), ov = outsideIn(hours, p);
+    return iv.length >= 6 && ov.length >= 6 && Math.max(...ov) >= t.gainMinOutsideC ? Math.max(...iv) - Math.max(...ov) : null;
+  }).filter((g): g is number => g != null);
+  const houseGain = gains.length >= t.minGainDays ? Math.max(0, median(gains)!) : null;
+
+  // 3-day outlook, today first: outside high/low, plus the likely inside peak on warm days.
+  const insideMax = (dayMax: number | null) => (houseGain != null && dayMax != null && dayMax >= t.gainMinOutsideC ? r0(dayMax + houseGain) : null);
   const outlook: DayOutlook[] = [];
   for (let i = Math.max(dayIdx, 0); dayIdx >= 0 && i < all.length && outlook.length < 3; i++) {
     const p = all[i];
@@ -250,7 +262,8 @@ export function buildVentilation(input: VentInput): VentView {
     // Label by farm-local date: in the evening the next daylight is tomorrow's.
     const dDate = localDate(p.start, offsetHours), today0 = localDate(now, offsetHours), tomorrow0 = localDate(now + 24 * H, offsetHours);
     outlook.push({ label: dDate === today0 ? "Today" : dDate === tomorrow0 ? "Tomorrow" : p.label, dayMax, nightMin,
-      hot: dayMax != null && dayMax >= t.hotDayC, cold: nightMin != null && nightMin <= t.coldNightC });
+      hot: dayMax != null && dayMax >= t.hotDayC, cold: nightMin != null && nightMin <= t.coldNightC,
+      insideMax: insideMax(dayMax), insideHot: (insideMax(dayMax) ?? -Infinity) >= t.insideHotC });
   }
 
   // ── Prompts ─────────────────────────────────────────────────────────────────
@@ -260,11 +273,6 @@ export function buildVentilation(input: VentInput): VentView {
   // Hot afternoon (today if the heat is still ahead, otherwise tomorrow). Two triggers: the outside
   // forecast alone is hot, or a warm forecast plus this house's own usual afternoon gain over outside
   // (houses here peak ~3–6 °C above outside, so a 28 °C day can mean ~33 °C inside).
-  const gains = pastDays.map((p) => {
-    const iv = insideIn(inside, p), ov = outsideIn(hours, p);
-    return iv.length >= 6 && ov.length >= 6 && Math.max(...ov) >= t.gainMinOutsideC ? Math.max(...iv) - Math.max(...ov) : null;
-  }).filter((g): g is number => g != null);
-  const houseGain = gains.length >= t.minGainDays ? Math.max(0, median(gains)!) : null;
   const hotDays = all.filter((p) => p.kind === "day" && p.end > now).slice(0, 2);
   for (const p of hotDays) {
     const dh = hours.filter((h) => h.t >= p.start && h.t < p.end);

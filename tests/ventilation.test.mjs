@@ -55,6 +55,7 @@ test('mild weather: no prompts; day/night rows and a 3-day outlook', () => {
   assert.deepEqual(plain(v.outlook.map((d) => d.label)), ['Today', 'Tomorrow', 'Tue']);
   assert.ok(v.today.outside.max >= 23 && v.today.outside.max <= 24);
   assert.equal(v.tonight.inside.min, 24); // last night, measured
+  assert.ok(v.outlook.every((d) => !d.insideHot)); // a house that tracks outside on a mild day: never flagged hot
 });
 
 test('inside now: felt temperature and the chill estimate (felt − 3 °C)', () => {
@@ -266,9 +267,12 @@ test('hot inside likely: a warm (not hot) forecast plus the house\'s own afterno
   assert.ok(p, 'expected a hot-inside prompt');
   assert.match(p.text, /^Hot inside likely this afternoon \(about 33 °C\): consider opening up and fans on before \d\d:00$/);
   assert.match(p.why, /warm days this past week the house peaked about 5 °C above outside/);
+  // 3-day outlook carries the likely inside peak (outside high + gain), flagged when 32 °C+
+  assert.deepEqual(plain(v.outlook.map((d) => [d.insideMax, d.insideHot])), [[33, true], [33, true], [33, true]]);
   // a house that stays at or below outside: no prompt for the same forecast
   assert.ok(!ids(V.buildVentilation({ now: morning, outside: warm, sun, inside: inside(calmInside).filter((x) => x.t <= morning), offsetHours: 2 })).includes('hot-day'));
   // too few days of history: no gain, no prompt
   const short = hotHouse.filter((x) => x.t > morning - 2 * 24 * H && x.t <= morning);
   assert.ok(!ids(V.buildVentilation({ now: morning, outside: warm, sun, inside: short, offsetHours: 2 })).includes('hot-day'));
+  assert.ok(V.buildVentilation({ now: morning, outside: warm, sun, inside: short, offsetHours: 2 }).outlook.every((d) => d.insideMax == null)); // no history → no inside guess
 });

@@ -73,3 +73,10 @@ The flush-heat prompt needed inside to *feel* 27.8 °C+. In dry heat the felt in
 17:00 the house was 29.1 °C at 33 % RH ("feels" 26 °C) with 25.6 °C outside, and no prompt showed. It now
 also fires when inside air is at least `warmInsideC` (29 °C, PROVISIONAL) and outside is 3 °C+ cooler; the
 "why" says the air is dry but the heat is still there.
+
+## Next 3 days: likely inside peak
+
+Farmer story: *"Looking at the next three days, I want to know which afternoons the house itself will get hot, not just the weather, so I can plan fans, water and work around them."*
+
+- Each outlook day shows **inside ~N °C** = outside forecast high + this house's usual warm-day gain (the same median gain as "Hot inside likely": past complete days with outside max ≥ `gainMinOutsideC`, at least `minGainDays` of them). It turns red and bold at `insideHotC` (32 °C).
+- Hidden on days whose outside high is below `gainMinOutsideC` (the gain isn't valid there) and when there isn't enough history. A one-line legend says the inside figure is a likely peak from recent warm days.
