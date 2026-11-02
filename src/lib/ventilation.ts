@@ -38,6 +38,10 @@ export type VentThresholds = {
   airOutMinC: number;
   airOutMaxC: number;
   airOutMaxRainPct: number;
+  /** Daylight hour with at least this rain chance (today's rest or tomorrow) → "Rain likely … be ready to close curtains". */
+  stormRainPct: number;
+  /** Inside this far below the forecast outside temperature now → today's forecast is out of date (e.g. a storm came early): skip today's hot prompt. */
+  forecastOffC: number;
   airOutMinHours: number;
   /** The suggested window is the warmest stretch of at most this many hours. */
   airOutMaxHours: number;
@@ -68,6 +72,8 @@ export const DEFAULT_VENT_THRESHOLDS: VentThresholds = {
   airOutMinC: 16,          // PROVISIONAL
   airOutMaxC: 28,
   airOutMaxRainPct: 50,
+  stormRainPct: 70,        // PROVISIONAL
+  forecastOffC: 5,         // houses here run at or above outside by day
   airOutMinHours: 2,
   airOutMaxHours: 4,
   colderThanUsualC: 3,
@@ -276,11 +282,20 @@ export function buildVentilation(input: VentInput): VentView {
   // Hot afternoon (today if the heat is still ahead, otherwise tomorrow). Two triggers: the outside
   // forecast alone is hot, or a warm forecast plus this house's own usual afternoon gain over outside
   // (houses here peak ~3–6 °C above outside, so a 28 °C day can mean ~33 °C inside).
+  // Signs today's forecast is out of date: the house has just dropped sharply (≥ 4 °C in ~2 h) and sits
+  // well below the forecast outside temperature. Both are needed, so a pad-cooled house that simply runs
+  // below outside still gets its hot-day prompt.
+  const recentMax = Math.max(-Infinity, ...inside.filter((x) => x.tempC != null && x.t >= now - 2.5 * H && x.t <= now - 0.5 * H).map((x) => x.tempC as number));
+  const stormCooled = insideNow != null && outsideNow != null && insideNow.tempC <= outsideNow - t.forecastOffC && recentMax - insideNow.tempC >= 4;
   const hotDays = all.filter((p) => p.kind === "day" && p.end > now).slice(0, 2);
   for (const p of hotDays) {
     const dh = hours.filter((h) => h.t >= p.start && h.t < p.end);
     const ahead = dh.filter((h) => h.t >= now - H); // the heat still to come (current hour included)
     if (!ahead.length) continue;
+    // Story: after a storm the house is cool but the forecast still says hot; don't tell me "fans on now".
+    // A house this far below the forecast outside temperature means today's forecast is out of date.
+    const today = localDate(p.start, offsetHours) === localDate(now, offsetHours);
+    if (today && stormCooled) continue;
     const peak = ahead.reduce((a, b) => (b.tempC > a.tempC ? b : a));
     const hotOutside = peak.tempC >= t.hotDayC;
     const insideLikely = houseGain != null && houseGain > 0 && peak.tempC >= t.heatStartC && r0(peak.tempC + houseGain) >= t.insideHotC; // the "about N °C" we show, so text and trigger agree
@@ -297,6 +312,25 @@ export function buildVentilation(input: VentInput): VentView {
       why: `Outside reaches ${t.heatStartC} °C from about ${hhmm(warmFrom.t)}. ${DRINKERS}` } : { id: "hot-day", level: by - now < 12 * H ? "act" : "plan",
       text: `Hot inside likely ${when === "afternoon" ? "this afternoon" : "tomorrow"} (about ${r0(peak.tempC + houseGain!)} °C): ${fans}`,
       why: `Forecast ${r0(peak.tempC)} °C outside around ${hhmm(peak.t)}, and on ${gains.length} warm days this past week the house peaked about ${r0(houseGain!)} °C above outside. ${DRINKERS}` });
+    break;
+  }
+
+  // Story: on a hot day the house is wide open; when a storm is coming I want time to close up before
+  // wind and rain blow in and the house chills fast. First daylight hour (rest of today or tomorrow)
+  // at or above stormRainPct.
+  for (const p of hotDays) {
+    const wet = hours.find((h) => h.t >= p.start && h.t < p.end && h.t >= now - H && h.rainPct != null && h.rainPct >= t.stormRainPct);
+    if (!wet) continue;
+    if (stormCooled && localDate(wet.t, offsetHours) === localDate(now, offsetHours)) continue; // the storm has already come
+    const before = hours.filter((h) => h.t >= wet.t - 2 * H && h.t < wet.t).map((h) => h.tempC);
+    const after = hours.filter((h) => h.t >= wet.t && h.t <= wet.t + 2 * H).map((h) => h.tempC);
+    const from = before.length ? Math.max(...before) : null, to = after.length ? Math.min(...after) : null;
+    const day0 = localDate(wet.t, offsetHours) === localDate(now, offsetHours) ? "today" : "tomorrow";
+    prompts.push({ id: "storm", level: wet.t - now < 3 * H ? "act" : "plan",
+      text: `Rain likely ${day0} around ${hhmm(wet.t)} (${r0(wet.rainPct!)}% chance): be ready to close curtains`,
+      why: from != null && to != null && from - to >= 4
+        ? `Forecast outside drops from about ${r0(from)} °C to ${r0(to)} °C around then; storms can chill an open house fast.`
+        : "Forecast rain chance for that hour; storms can chill an open house fast." });
     break;
   }
 
@@ -388,7 +422,7 @@ export function parseOpenMeteo(j: unknown): { outside: OutsideHour[]; sun: SunDa
   return { outside, sun };
 }
 
-/** The one prompt worth a line on Home: an "act" hot afternoon or cold night ahead, or null. */
+/** The one prompt worth a line on Home: an "act" hot afternoon, storm within 3 h or cold night ahead, or null. */
 export function headsUpPrompt(prompts: Prompt[]): Prompt | null {
-  return prompts.find((p) => p.level === "act" && (p.id === "hot-day" || p.id === "cold-night")) ?? null;
+  return prompts.find((p) => p.level === "act" && (p.id === "hot-day" || p.id === "storm" || p.id === "cold-night")) ?? null;
 }

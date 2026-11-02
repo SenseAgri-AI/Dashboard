@@ -282,6 +282,8 @@ test('Home heads-up: only an "act" hot-day or cold-night prompt', () => {
   assert.equal(V.headsUpPrompt([P('air-out', 'act'), P('hot-day', 'plan')]), null);
   assert.equal(V.headsUpPrompt([P('cooler-outside', 'act'), P('hot-day', 'act')]).id, 'hot-day');
   assert.equal(V.headsUpPrompt([P('cold-night', 'act')]).id, 'cold-night');
+  assert.equal(V.headsUpPrompt([P('storm', 'act')]).id, 'storm');
+  assert.equal(V.headsUpPrompt([P('storm', 'plan')]), null);
 });
 
 test('hot inside likely: fires when the shown "about N °C" reaches 32 (rounded), not below', () => {
@@ -291,4 +293,31 @@ test('hot inside likely: fires when the shown "about N °C" reaches 32 (rounded)
   const at = (peakC) => V.buildVentilation({ now: morning, outside: warm, sun, inside: house(peakC), offsetHours: 2 });
   assert.match(at(31.5).prompts.find((x) => x.id === 'hot-day').text, /about 32 °C/);
   assert.ok(!ids(at(31.4)).includes('hot-day'));
+});
+
+test('storm: rain likely in daylight → be ready to close curtains; none for night rain or low chance', () => {
+  // tomorrow (day 9) 15:00 local: 90 % rain and outside drops from 28 to 20 °C
+  const temp = (h, d) => (d === 9 && h >= 15 && h <= 17 ? 20 : sine(16, 28)(h));
+  const v = view(outside(temp, (h, d) => (d === 9 && h === 15 ? 90 : 10)));
+  const p = v.prompts.find((x) => x.id === 'storm');
+  assert.ok(p, 'expected a storm prompt');
+  assert.equal(p.text, 'Rain likely tomorrow around 15:00 (90% chance): be ready to close curtains');
+  assert.match(p.why, /drops from about 28 °C to 20 °C/);
+  assert.equal(p.level, 'plan');
+  // today 14:00, two hours from NOW (12:00) → act
+  assert.equal(view(outside(sine(16, 28), (h, d) => (d === 8 && h === 14 ? 80 : 0))).prompts.find((x) => x.id === 'storm').level, 'act');
+  // night-time rain or 60 %: no prompt
+  assert.ok(!ids(view(outside(sine(16, 28), (h, d) => (d === 9 && h === 22 ? 95 : 0)))).includes('storm'));
+  assert.ok(!ids(view(outside(sine(16, 28), () => 60))).includes('storm'));
+});
+
+test('storm came early: house just dropped and sits well below the forecast → no "fans on now" today', () => {
+  const o = outside((h, d) => (d === 8 ? (h >= 11 && h <= 16 ? 33 : 20) : 22), (h, d) => (d === 8 && h === 13 ? 90 : 0));
+  // inside 31 until 10:30 local, then 19 °C (storm) at NOW = 12:00
+  const stormed = inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 19 : d === 8 && h >= 9 ? 31 : 24, rhPct: 70, co2: 800 }));
+  const v = view(o, stormed);
+  assert.ok(!ids(v).includes('hot-day'));
+  assert.ok(!ids(v).includes('storm'));
+  // a house that simply runs cool (no sudden drop) still gets the hot prompt
+  assert.ok(ids(view(o, inside(() => ({ tempC: 19, rhPct: 60, co2: 800 })))).includes('hot-day'));
 });

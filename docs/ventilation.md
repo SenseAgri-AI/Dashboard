@@ -88,3 +88,12 @@ Farmer story: *"When I open Home in the morning, warn me about a hot afternoon o
 - `WeatherHeadsUp` (Home, under the Today card) runs the same `buildVentilation` rules on `/api/ventilation` and shows one line only for an **act-level** "Hot …" or "Cold night ahead" prompt (`headsUpPrompt`), linking to Ventilation. Plan-level and other prompts (air out, CO₂, damp) stay on the Ventilation page.
 - Silent when nothing needs doing or the forecast can't load; the Ventilation page shows those states.
 - The "Hot inside likely" trigger compares the **rounded** estimate (the "about N °C" shown) with `insideHotC`, so the prompt and the outlook's red "inside ~32 °C" always agree. A backtest on the pilot house caught one more hot day this way with no extra false alarms (numbers kept out of the public repo).
+
+## Rain likely: be ready to close curtains
+
+Farmer story: *"On a hot day the house is wide open. When a storm is coming I want time to close up before wind and rain blow in and the house chills fast."*
+
+- The first daylight hour, for the rest of today or tomorrow, with forecast rain chance ≥ `stormRainPct` (70 %, provisional) gives "Rain likely today|tomorrow around HH:00 (N% chance): be ready to close curtains". It is **act** within 3 h (and then also shows as the Home heads-up), otherwise **plan**.
+- The why line gives the forecast outside drop around then when it is ≥ 4 °C. Night rain doesn't trigger it.
+- Open-Meteo's storm timing can be an hour or two out, so the wording is "around" and "be ready", never a time to close.
+- **Storm already came:** when the house has just dropped ≥ 4 °C in about 2 h *and* sits ≥ `forecastOffC` (5 °C) below the forecast outside temperature, today's forecast is treated as out of date: no "Hot … fans on now" and no "Rain likely today" for today (tomorrow's prompts still show). Both signs are needed, so a pad-cooled house that simply runs below outside still gets its hot-day prompt. Farmer story: *"After the storm the house is cool; don't tell me to put the fans on."*
