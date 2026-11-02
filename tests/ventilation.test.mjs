@@ -328,6 +328,9 @@ test('storm came early: house just dropped and sits well below the forecast → 
   const v = view(o, stormed);
   assert.ok(!ids(v).includes('hot-day'));
   assert.ok(!ids(v).includes('storm'));
+  const now = v.prompts.find((x) => x.id === 'storm-now');
+  assert.equal(now.text, 'House cooled fast (31 → 19 °C in about 2 h): if a storm is passing, check curtains');
+  assert.equal(V.headsUpPrompt(v.prompts).id, 'storm-now');
   assert.deepEqual(plain([v.outlook[0].insideMax, v.outlook[0].insideMeasured]), [31, true]); // today's card shows the measured peak
   // a house that simply runs cool (no sudden drop) still gets the hot prompt
   assert.ok(ids(view(o, inside(() => ({ tempC: 19, rhPct: 60, co2: 800 })))).includes('hot-day'));
@@ -338,6 +341,7 @@ test('fans/pads cooled a hot house (no rain signal): the hot prompt stays; a hum
   const cooled = (rh) => inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 19 : d === 8 && h >= 9 ? 31 : 24, rhPct: rh(h, d), co2: 800 }));
   // same sharp drop, humidity steady: fans/pads, not a storm → still told about the afternoon
   assert.ok(ids(view(dry, cooled(() => 45))).includes('hot-day'));
+  assert.ok(!ids(view(dry, cooled(() => 45))).includes('storm-now'));
   // humidity up ~35 points with the drop: rain has come even though the forecast missed it
   assert.ok(!ids(view(dry, cooled((h, d) => (d === 8 && h >= 11 ? 80 : 45)))).includes('hot-day'));
 });

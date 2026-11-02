@@ -342,6 +342,12 @@ export function buildVentilation(input: VentInput): VentView {
     break;
   }
 
+  // Story: a storm has just hit and the house is chilling fast; if I'm away from the house I want to know
+  // now, while closing curtains still helps. Only with a rain signal, so ordinary evening cooling stays quiet.
+  if (stormCooled) prompts.push({ id: "storm-now", level: "act",
+    text: `House cooled fast (${r0(recentMax)} → ${r0(insideNow!.tempC)} °C in about 2 h): if a storm is passing, check curtains`,
+    why: `${rainNear ? "Rain is forecast around now" : "Inside humidity jumped"}; an open house can chill fast in wind and rain. Early warning, not a cause.` });
+
   // Story: on a hot day the house is wide open; when a storm is coming I want time to close up before
   // wind and rain blow in and the house chills fast. First daylight hour (rest of today or tomorrow)
   // at or above stormRainPct.
@@ -465,5 +471,5 @@ export function parseOpenMeteo(j: unknown): { outside: OutsideHour[]; sun: SunDa
 
 /** The one prompt worth a line on Home: an "act" hot afternoon, storm within 3 h or cold night ahead, or null. */
 export function headsUpPrompt(prompts: Prompt[]): Prompt | null {
-  return prompts.find((p) => p.level === "act" && (p.id === "hot-day" || p.id === "storm" || p.id === "cold-night")) ?? null;
+  return prompts.find((p) => p.level === "act" && (p.id === "storm-now" || p.id === "hot-day" || p.id === "storm" || p.id === "cold-night")) ?? null;
 }

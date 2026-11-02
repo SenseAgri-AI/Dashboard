@@ -24,10 +24,11 @@ export default function WeatherHeadsUp({ style }: { style?: React.CSSProperties 
     return () => { live = false; };
   }, []);
   if (!p) return null;
-  const hot = p.id === "hot-day" || p.id === "storm"; // warm colours for "act before the afternoon"
+  const wet = p.id === "storm" || p.id === "storm-now";
+  const hot = p.id === "hot-day" || wet; // warm colours: act before the afternoon / the storm
   return (
     <Link href="/ventilation" role="status" style={{ ...style, display: "flex", alignItems: "center", gap: 8, textDecoration: "none", background: hot ? "#FFF7ED" : "#EFF6FF", border: `1px solid ${hot ? "#FED7AA" : "#BFDBFE"}`, color: hot ? "#9A3412" : "#1E40AF", borderRadius: 10, padding: "9px 12px", fontSize: 13, fontWeight: 600 }}>
-      <span aria-hidden>{hot ? "☀" : p.id === "storm" ? "☂" : "☾"}</span>
+      <span aria-hidden>{wet ? "☂" : hot ? "☀" : "☾"}</span>
       <span style={{ flex: 1, minWidth: 0 }}>{p.text}</span>
       <span style={{ fontWeight: 800, whiteSpace: "nowrap" }}>Ventilation →</span>
     </Link>
