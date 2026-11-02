@@ -1,7 +1,8 @@
 "use client";
 
 // Story: when I open Home in the morning, warn me about a hot afternoon, a storm or a cold night ahead
-// without having to open Ventilation. Only the "act" hot-day / cold-night prompt, one line; silent
+// without having to open Ventilation. Only the most urgent "act" prompt (storm now, storm soon, hot day,
+// cold night), one line; silent
 // when there is nothing to do or the forecast can't load (the Ventilation page shows those states).
 import type React from "react";
 import Link from "next/link";
@@ -11,9 +12,11 @@ import type { VentData } from "@/components/VentilationView";
 
 export default function WeatherHeadsUp({ style }: { style?: React.CSSProperties }) {
   const [p, setP] = useState<Prompt | null>(null);
+  // Story: Home left open on a phone in the shed should still show "House cooled fast" when a storm hits,
+  // so re-check every 10 min (the route caches the forecast for 30 min; inside readings are 30-min means).
   useEffect(() => {
     let live = true;
-    fetch("/api/ventilation")
+    const load = () => fetch("/api/ventilation")
       .then((r) => (r.ok ? (r.json() as Promise<VentData>) : null))
       .then((d) => {
         if (!live || !d?.outside) return;
@@ -21,7 +24,9 @@ export default function WeatherHeadsUp({ style }: { style?: React.CSSProperties 
         setP(headsUpPrompt(v.prompts));
       })
       .catch(() => {});
-    return () => { live = false; };
+    load();
+    const id = setInterval(load, 10 * 60_000);
+    return () => { live = false; clearInterval(id); };
   }, []);
   if (!p) return null;
   const wet = p.id === "storm" || p.id === "storm-now";
