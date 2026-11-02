@@ -304,6 +304,7 @@ test('storm: rain likely in daylight → be ready to close curtains; none for ni
   assert.equal(p.text, 'Rain likely tomorrow around 15:00 (90% chance): be ready to close curtains');
   assert.match(p.why, /drops from about 28 °C to 20 °C/);
   assert.equal(p.level, 'plan');
+  assert.deepEqual(plain(v.outlook.map((d) => d.rainPct)), [10, 90, 10]); // outlook carries the day's highest rain chance
   // today 14:00, two hours from NOW (12:00) → act
   assert.equal(view(outside(sine(16, 28), (h, d) => (d === 8 && h === 14 ? 80 : 0))).prompts.find((x) => x.id === 'storm').level, 'act');
   // night-time rain or 60 %: no prompt

@@ -101,11 +101,14 @@ export default function VentilationView({ data, now, narrow = false }: { data: V
                 <div style={{ fontSize: 11, fontWeight: 800, color: "var(--t2)" }}>{d.label}</div>
                 <div style={{ fontSize: 13, marginTop: 4, color: d.hot ? "#B45309" : INK, fontWeight: d.hot ? 800 : 600 }}>☀ {fmt(d.dayMax)}</div>
                 <div style={{ fontSize: 13, color: d.cold ? "#1D4ED8" : INK, fontWeight: d.cold ? 800 : 600 }}>☾ {fmt(d.nightMin)}</div>
+                {d.rainPct != null && d.rainPct >= t.stormRainPct && <div title="Highest daytime rain chance" style={{ fontSize: 12, marginTop: 2, color: "#1D4ED8", fontWeight: 700 }}>☂ {d.rainPct}%</div>}
                 {d.insideMax != null && <div title="Likely inside peak" style={{ fontSize: 12, marginTop: 2, color: d.insideHot ? "#B91C1C" : "var(--t2)", fontWeight: d.insideHot ? 800 : 600 }}>inside ~{fmt(d.insideMax)}</div>}
               </div>
             ))}
           </div>
-          {v.outlook.some((d) => d.insideMax != null) && <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 6 }}>☀ high and ☾ low are outside. “inside ~” is the likely house peak, from how it ran on recent warm days.</div>}
+          {(v.outlook.some((d) => d.insideMax != null) || v.outlook.some((d) => (d.rainPct ?? 0) >= t.stormRainPct)) && <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 6 }}>
+            ☀ high and ☾ low are outside.{v.outlook.some((d) => d.insideMax != null) && " “inside ~” is the likely house peak, from how it ran on recent warm days."}{v.outlook.some((d) => (d.rainPct ?? 0) >= t.stormRainPct) && " ☂ = highest daytime rain chance."}
+          </div>}
         </section>
       )}
 

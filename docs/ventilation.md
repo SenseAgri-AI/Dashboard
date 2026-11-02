@@ -97,3 +97,4 @@ Farmer story: *"On a hot day the house is wide open. When a storm is coming I wa
 - The why line gives the forecast outside drop around then when it is ≥ 4 °C. Night rain doesn't trigger it.
 - Open-Meteo's storm timing can be an hour or two out, so the wording is "around" and "be ready", never a time to close.
 - **Storm already came:** when the house has just dropped ≥ 4 °C in about 2 h *and* sits ≥ `forecastOffC` (5 °C) below the forecast outside temperature, today's forecast is treated as out of date: no "Hot … fans on now" and no "Rain likely today" for today (tomorrow's prompts still show). Both signs are needed, so a pad-cooled house that simply runs below outside still gets its hot-day prompt. Farmer story: *"After the storm the house is cool; don't tell me to put the fans on."*
+- The 3-day outlook shows "☂ N%" (blue) on days whose highest daytime rain chance is ≥ `stormRainPct`, with a legend note.

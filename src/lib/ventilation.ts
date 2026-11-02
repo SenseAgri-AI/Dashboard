@@ -118,7 +118,9 @@ const DRINKERS = "Birds drink more in the heat: check drinkers are flowing.";
 
 export type DayOutlook = { label: string; dayMax: number | null; nightMin: number | null; hot: boolean; cold: boolean;
   /** Likely inside peak (outside high + this house's usual warm-day gain); null on cool days or without enough history. */
-  insideMax: number | null; insideHot: boolean };
+  insideMax: number | null; insideHot: boolean;
+  /** Highest daylight rain chance (%), or null without rain data. */
+  rainPct: number | null };
 
 export type VentView = {
   insideNow: { tempC: number; rhPct: number | null; feltC: number | null; chillEstC: number | null; co2: number | null; at: number } | null;
@@ -272,7 +274,8 @@ export function buildVentilation(input: VentInput): VentView {
     const dDate = localDate(p.start, offsetHours), today0 = localDate(now, offsetHours), tomorrow0 = localDate(now + 24 * H, offsetHours);
     outlook.push({ label: dDate === today0 ? "Today" : dDate === tomorrow0 ? "Tomorrow" : p.label, dayMax, nightMin,
       hot: dayMax != null && dayMax >= t.hotDayC, cold: nightMin != null && nightMin <= t.coldNightC,
-      insideMax: insideMax(dayMax), insideHot: (insideMax(dayMax) ?? -Infinity) >= t.insideHotC });
+      insideMax: insideMax(dayMax), insideHot: (insideMax(dayMax) ?? -Infinity) >= t.insideHotC,
+      rainPct: (() => { const r = hours.filter((h) => h.t >= p.start && h.t < p.end && h.rainPct != null).map((h) => h.rainPct as number); return r.length ? r0(Math.max(...r)) : null; })() });
   }
 
   // ── Prompts ─────────────────────────────────────────────────────────────────
