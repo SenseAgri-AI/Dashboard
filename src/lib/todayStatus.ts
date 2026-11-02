@@ -23,6 +23,7 @@ export type TodayThresholds = {
   dryBulbC: { amber: number; dwellMinutes: number };
   /** Cold house: inside at or below `amber` °C for `dwellMinutes` (same 10 °C as the Live tile's "Cold night" and Ventilation's cold night). */
   coldC: { amber: number; dwellMinutes: number };
+  nightScore: { amber: number };
   /** CO₂ is only shown once readings stay at or above `ppm` for `dwellMinutes`. */
   co2Sustained: { ppm: number; dwellMinutes: number };
   /** Early warning while still below amber: the 30-min average temperature rose at least `riseC` over
@@ -64,6 +65,8 @@ export const DEFAULT_TODAY_THRESHOLDS: TodayThresholds = {
   feltTempC: { amber: THI_SEVERE, red: THI_EXTREME },
   // PROVISIONAL backstop (Dylan, 2026-10-31): the backtest saw 34 °C / 24 % RH read as "feels 29.5".
   dryBulbC: { amber: 32, dwellMinutes: 30 },
+  /** Last night's flock sleep score below this = "Disturbed" (same 60 as the sleep tile's red band). */
+  nightScore: { amber: 60 },
   coldC: { amber: 10, dwellMinutes: 60 }, // PROVISIONAL (2 Nov): several October nights went to 5–8 °C inside
   // 1400 ppm = the existing danger band in thresholds.ts. Backtest: ~15 episodes in 6 months, real.
   co2Sustained: { ppm: 1400, dwellMinutes: 60 },
@@ -157,7 +160,7 @@ export function logFreshness(lastLogDate: string | null | undefined, now: number
 
 // ── Lines ────────────────────────────────────────────────────────────────────
 
-export type LineKey = "birds" | "climate" | "water" | "silo" | "data" | `extra:${string}`;
+export type LineKey = "birds" | "climate" | "water" | "silo" | "night" | "data" | `extra:${string}`;
 export type TodayLine = { key: LineKey; label: string; rag: Rag; text: string; action: string };
 
 export type DailyRow = { date: string; eggs: number; hdep: number | null; mortality: number; liveHens?: number };
@@ -188,6 +191,8 @@ export type TodayInput = {
   waterMeters?: WaterMeterFreshness[];
   /** undefined = silo endpoint failed. */
   silos?: SiloState[];
+  /** Flock sleep scores by night (date = the evening it starts), from /api/sleep-score. Optional: a failure just hides the line. */
+  nights?: { date: string; score: number }[];
   /** Firing alerts from /api/alerts; undefined = feed unavailable. */
   alerts?: FarmAlert[];
   alertsStale?: boolean;
@@ -473,6 +478,17 @@ export function siloLine(input: TodayInput): TodayLine {
   return { key: "silo", label: "Feed silo", rag: "amber", text: `${low.map((s) => s.name).join(" & ")} running low`, action: "Order feed" };
 }
 
+/** Story: in the morning I want to know if the flock had a disturbed night (lights, a predator, people),
+ *  so I check the house. Shown only when last night scored below `nightScore.amber`. Early warning, not a cause. */
+export function nightLine(input: TodayInput, t: TodayThresholds): TodayLine {
+  const base = { key: "night" as const, label: "Last night" };
+  const off = (input.offsetHours ?? 2) * 3_600_000;
+  const yesterday = new Date(input.now + off - 86_400_000).toISOString().slice(0, 10);
+  const n = (input.nights ?? []).find((x) => x.date === yesterday);
+  if (!n || !(n.score < t.nightScore.amber)) return { ...base, rag: "green", text: "", action: "" };
+  return { ...base, rag: "amber", text: `Disturbed night: flock sleep score ${Math.round(n.score)}/100`, action: "Early warning: check for lights, predators or people in the night" };
+}
+
 /** Story: when sensors stop reporting, tell me plainly so I don't trust old numbers. Shown only on a problem. */
 export function dataLine(input: TodayInput, t: TodayThresholds): TodayLine {
   const base = { key: "data" as const, label: "Sensors" };
@@ -501,7 +517,7 @@ export type TodayResult = {
 export function buildToday(input: TodayInput, overrides?: unknown): TodayResult {
   const t = mergeThresholds(overrides);
   const always = [birdsLine(input, t), climateLine(input, t)].filter((l) => l.rag !== "unknown");
-  const onProblem = [waterLine(input, t), siloLine(input), dataLine(input, t)].filter((l) => needsYou(l.rag));
+  const onProblem = [waterLine(input, t), siloLine(input), nightLine(input, t), dataLine(input, t)].filter((l) => needsYou(l.rag));
   const extras: TodayLine[] = (input.extras ?? [])
     .filter((e) => e.severity !== "info" && e.id !== "daily-log") // the Birds line already nudges the log
     .map((e) => ({ key: `extra:${e.id}`, label: "Farm", rag: e.severity === "danger" ? "red" : "amber", text: e.title, action: e.detail }));

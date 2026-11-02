@@ -375,3 +375,15 @@ test('climate: cold house early warning (10 °C or below for 60+ min), never one
   assert.equal(c(co2(9, 8)).rag, 'green');              // too few buckets
   assert.equal(c([], 8).rag, 'green');                  // a single reading never fires
 });
+
+test('last night: a disturbed flock-sleep score shows once, in the morning check', () => {
+  // NOW = 31 Oct 12:00 SAST → last night = the evening of 30 Oct
+  const n = line(today({ nights: [{ date: '2026-10-29', score: 100 }, { date: '2026-10-30', score: 35.3 }] }), 'night');
+  assert.equal(n.rag, 'amber');
+  assert.equal(n.text, 'Disturbed night: flock sleep score 35/100');
+  assert.equal(n.action, 'Early warning: check for lights, predators or people in the night');
+  assert.equal(line(today({ nights: [{ date: '2026-10-30', score: 64.8 }] }), 'night'), undefined); // "some disruption" isn't flagged
+  assert.equal(line(today({ nights: [{ date: '2026-10-29', score: 20 }] }), 'night'), undefined);   // an older night isn't today's news
+  assert.equal(line(today({}), 'night'), undefined);                                                 // no data → no line, no failure footer
+  assert.equal(today({}).someChecksFailed, today({ nights: [] }).someChecksFailed);
+});

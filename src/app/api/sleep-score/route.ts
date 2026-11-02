@@ -15,7 +15,7 @@ function toMs(t: unknown): number {
     : new Date(String(t)).getTime();
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   let farm;
   try {
     farm = await getFarmForRequest();
@@ -24,15 +24,18 @@ export async function GET() {
     return NextResponse.json({ error: "Failed to resolve farm" }, { status: 500 });
   }
 
+  // ?days=2 for the Today card's "last night" check (default 15 for the trend tile). Whole days, 2–15.
+  const d = Number(new URL(req.url).searchParams.get("days"));
+  const days = Number.isInteger(d) && d >= 2 && d <= 15 ? d : 15;
   try {
     const [noiseRows, climateRows] = await Promise.all([
       queryInflux<Record<string, unknown>>(`
         SELECT time, noise_db_mean FROM audio_noise
-        WHERE farm_id = '${farm.farmId}' AND time > now() - interval '15 days'
+        WHERE farm_id = '${farm.farmId}' AND time > now() - interval '${days} days'
         ORDER BY time ASC`),
       queryInflux<Record<string, unknown>>(`
         SELECT time, temperature, humidity, light_level FROM sensors
-        WHERE farm_id = '${farm.farmId}' AND device_type = 'AM308-1' AND time > now() - interval '15 days'
+        WHERE farm_id = '${farm.farmId}' AND device_type = 'AM308-1' AND time > now() - interval '${days} days'
         ORDER BY time ASC`),
     ]);
     const samples: NoiseSample[] = noiseRows.map((r) => {

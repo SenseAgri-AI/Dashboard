@@ -45,6 +45,8 @@ export default function TodayCard({ ready, daily, lastLogDate, climate, extras, 
   // "loading" = still waiting (the card renders without it); null = failed. The water query hits Athena
   // (a few seconds when not cached), so it never holds up the rest of the card.
   const [water, setWater] = useState<{ days: WaterDay[]; names: string[] } | null | "loading">("loading");
+  // Optional: last night's flock sleep score (2-day query). A failure just hides the "Last night" line.
+  const [nights, setNights] = useState<{ date: string; score: number }[] | undefined>(undefined);
 
   useEffect(() => {
     const json = (url: string) => fetch(url).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))));
@@ -56,13 +58,16 @@ export default function TodayCard({ ready, daily, lastLogDate, climate, extras, 
       if (f.status === "fulfilled" && f.value.streams) setFresh(f.value);
       setNow(Date.now());
     });
+    json("/api/sleep-score?days=2")
+      .then((r) => setNights(Array.isArray(r.nights) ? r.nights.map((x: { date: string; score: number }) => ({ date: x.date, score: x.score })) : undefined))
+      .catch(() => {});
     json("/api/water-use")
       .then((w) => setWater(Array.isArray(w.days) ? { days: w.days, names: Array.isArray(w.names) ? w.names : [] } : null))
       .catch(() => setWater(null));
   }, []);
 
   const result: TodayResult | null = !ready || now == null ? null : buildToday({
-    now, daily, lastLogDate, climate, silos, extras,
+    now, daily, lastLogDate, climate, silos, extras, nights,
     alerts: alerts.list, alertsStale: alerts.stale,
     climateLastMs: fresh ? ms(fresh.streams.climate) : undefined, // omitted key = that query failed
     siloRadars: fresh?.silos?.map((r) => ({ name: r.name, lastMs: ms(r.lastSeen) })),

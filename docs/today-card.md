@@ -80,3 +80,9 @@ Farmer story: *"If the Today card says the house is fine and the Live dashboard 
 *As a farmer checking my phone before dawn after a cold night, I want the Today card to say the house is cold, not "All good".*
 
 Climate turns amber with "Cold: 10°C or below for 60+ min" and "Early warning: check curtains and draughts" when every 30-min inside average over the last hour (three buckets) is at or below `coldC.amber` (10 °C, provisional, same as the Live tile's cold-night level and Ventilation's cold night). It never fires on one reading, and only while Climate is otherwise green. A replay over recent weeks gave a handful of cold nights, each amber from after midnight to about 06:00, and nothing in warm spells (figures in the private findings). Per-farm override: `today.coldC`.
+
+## Last night (2 Nov)
+
+*As a farmer doing my morning check, I want to know if the flock had a disturbed night (lights, a predator, people), so I go and look.*
+
+A "Last night" line appears only when last night's flock sleep score (the night that started yesterday evening, farm-local) is below `nightScore.amber` (60, the sleep tile's "Disturbed" band): "Disturbed night: flock sleep score N/100", action "Early warning: check for lights, predators or people in the night". "Some disruption" (60–84) is not flagged. The card asks `/api/sleep-score?days=2` (a 2-day query instead of the tile's 15). If it fails the line is simply left out; it never adds the "some checks failed" footer. In a recent two-week replay one night scored below 60.
