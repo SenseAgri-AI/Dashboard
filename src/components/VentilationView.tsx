@@ -101,6 +101,7 @@ export default function VentilationView({ data, now, narrow = false }: { data: V
                 <div style={{ fontSize: 11, fontWeight: 800, color: "var(--t2)" }}>{d.label}</div>
                 <div style={{ fontSize: 13, marginTop: 4, color: d.hot ? "#B45309" : INK, fontWeight: d.hot ? 800 : 600 }}>☀ {fmt(d.dayMax)}</div>
                 {d.insideMax != null && <div title={d.insideMeasured ? "Measured inside peak today" : "Likely inside peak"} style={{ fontSize: 12, marginBottom: 2, color: d.insideHot ? "#B91C1C" : "var(--t2)", fontWeight: d.insideHot ? 800 : 600 }}>{d.insideMeasured ? `inside ${fmt(d.insideMax)} (peak)` : `inside ~${fmt(d.insideMax)}`}</div>}
+                {d.warmEndMax != null && <div title={d.insideMeasured ? "Warmest sensor's peak today" : "Likely peak at the warmest sensor"} style={{ fontSize: 11, marginBottom: 2, color: d.warmEndMax >= t.insideHotC ? "#B91C1C" : "var(--t3)", fontWeight: 600 }}>{d.insideMeasured ? `warm end ${fmt(d.warmEndMax)}` : `warm end ~${fmt(d.warmEndMax)}`}</div>}
                 <div style={{ fontSize: 13, color: d.cold ? "#1D4ED8" : INK, fontWeight: d.cold ? 800 : 600 }}>☾ {fmt(d.nightMin)}</div>
                 {d.insideMinLikely != null && <div title="Likely inside low tonight, from how the house ran on recent nights" style={{ fontSize: 12, color: "#1D4ED8", fontWeight: 800 }}>inside ~{fmt(d.insideMinLikely)}</div>}
                 {d.rainPct != null && d.rainPct >= t.stormRainPct && <div title="Highest daytime rain chance" style={{ fontSize: 12, marginTop: 2, color: "#1D4ED8", fontWeight: 700 }}>☂ {d.rainPct}%</div>}
@@ -108,7 +109,7 @@ export default function VentilationView({ data, now, narrow = false }: { data: V
             ))}
           </div>
           {(v.outlook.some((d) => d.insideMax != null || d.insideMinLikely != null) || v.outlook.some((d) => (d.rainPct ?? 0) >= t.stormRainPct)) && <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 6 }}>
-            ☀ high and ☾ low are outside.{v.outlook.some((d) => d.insideMax != null) && " “inside ~” is the likely house peak, from how it ran on recent warm days."}{v.outlook.some((d) => d.insideMinLikely != null) && " Blue “inside ~” under ☾ is the likely house low on a cold night."}{v.outlook.some((d) => (d.rainPct ?? 0) >= t.stormRainPct) && " ☂ = highest daytime rain chance."}
+            ☀ high and ☾ low are outside.{v.outlook.some((d) => d.insideMax != null) && " “inside ~” is the likely house peak, from how it ran on recent warm days."}{v.outlook.some((d) => d.warmEndMax != null) && " “warm end” is the warmest sensor, which usually runs hotter than the house average."}{v.outlook.some((d) => d.insideMinLikely != null) && " Blue “inside ~” under ☾ is the likely house low on a cold night."}{v.outlook.some((d) => (d.rainPct ?? 0) >= t.stormRainPct) && " ☂ = highest daytime rain chance."}
           </div>}
         </section>
       )}

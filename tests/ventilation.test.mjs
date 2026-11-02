@@ -416,3 +416,20 @@ test('house gain follows the wind: calm days run hotter, windy days cooler', () 
   assert.ok(!windy.prompts.some((x) => x.id === 'hot-day' && /this afternoon/.test(x.text))); // ~29 °C inside today
   assert.equal(windy.outlook[0].insideMax, 29);
 });
+
+test('warm end: the warmest sensor shows when it usually peaks ≥ 1 °C above the average', () => {
+  const o = outside((h) => sine(18, 28)(h));
+  const plain = inside((h, d) => ({ tempC: d < 8 ? sine(18, 33)(h) : 24, rhPct: 60, co2: 900 }));
+  const withHot = plain.map((x) => ({ ...x, hotC: x.tempC == null ? null : x.tempC + (x.tempC > 30 ? 2 : 0.5) }));
+  const v = view(o, withHot);
+  assert.equal(v.outlook[0].insideMax, 33);
+  assert.equal(v.outlook[0].warmEndMax, 35);
+  const p = v.prompts.find((x) => x.id === 'hot-day');
+  assert.match(p.why, /warmest sensor usually peaks about 2 °C above the house average/);
+  // no per-sensor data (old API) or a small gap → nothing extra
+  const none = view(o, plain);
+  assert.equal(none.outlook[0].warmEndMax, null);
+  assert.doesNotMatch(none.prompts.find((x) => x.id === 'hot-day').why, /warmest sensor/);
+  const small = view(o, plain.map((x) => ({ ...x, hotC: x.tempC == null ? null : x.tempC + 0.5 })));
+  assert.equal(small.outlook[0].warmEndMax, null);
+});

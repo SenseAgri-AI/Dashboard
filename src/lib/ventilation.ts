@@ -23,6 +23,8 @@ export type VentThresholds = {
   gainMinOutsideC: number;
   /** Steepest allowed fall in house gain per km/h of daytime wind (°C per km/h). */
   windGainMax: number;
+  /** Show the warm end of the house when its usual peak runs at least this far above the house average. */
+  warmEndMinC: number;
   /** Inside CO₂ held at or above this for `co2DwellMinutes` while outside is at or below `co2ColdOutsideC`. */
   co2Ppm: number;
   co2DwellMinutes: number;
@@ -76,6 +78,7 @@ export const DEFAULT_VENT_THRESHOLDS: VentThresholds = {
   minGainDays: 4,
   gainMinOutsideC: 24,     // PROVISIONAL
   windGainMax: 0.3,        // PROVISIONAL (2 Nov): calm days ran hotter; clamp keeps a short week sane
+  warmEndMinC: 1,          // PROVISIONAL (2 Nov)
   co2Ppm: 1400,            // same as the Today card (existing danger band)
   co2DwellMinutes: 60,
   co2ColdOutsideC: 15,     // PROVISIONAL
@@ -116,7 +119,8 @@ export function mergeVentThresholds(o?: unknown): VentThresholds {
 }
 
 export type OutsideHour = { t: number; tempC: number; rhPct: number | null; rainPct: number | null; windKmh: number | null; gustKmh?: number | null };
-export type InsidePoint = { t: number; tempC: number | null; rhPct: number | null; co2: number | null };
+/** `hotC`: the warmest single reading in the bucket (the house has more than one sensor; `tempC` is their average). */
+export type InsidePoint = { t: number; tempC: number | null; rhPct: number | null; co2: number | null; hotC?: number | null };
 export type SunDay = { sunrise: number; sunset: number };
 export type VentInput = {
   now: number;
@@ -142,6 +146,8 @@ export type DayOutlook = { label: string; dayMax: number | null; nightMin: numbe
   insideMax: number | null; insideHot: boolean;
   /** True when `insideMax` is today's measured maximum so far (after the forecast peak), not an estimate. */
   insideMeasured: boolean;
+  /** Likely (or, when measured, actual) peak of the warmest sensor; only when it usually runs ≥ warmEndMinC above the average. */
+  warmEndMax: number | null;
   /** Likely inside low for the night after this day, shown only when cold (≤ coldNightC); else null. */
   insideMinLikely: number | null;
   /** Highest daylight rain chance (%), or null without rain data. */
@@ -290,6 +296,14 @@ export function buildVentilation(input: VentInput): VentView {
     return iv.length >= 6 && ov.length >= 6 && Math.max(...ov) >= t.gainMinOutsideC ? { g: Math.max(...iv) - Math.max(...ov), w: dayWind(p) } : null;
   }).filter((g): g is { g: number; w: number | null } => g != null);
   const gains = gainRows.map((r) => r.g);
+  // Story: the house average looks fine but one end of the house can run hotter, and that is where birds
+  // pant first. Usual gap between the warmest sensor's peak and the average's peak on the same warm days.
+  const warmGaps = pastDays.map((p) => {
+    const iv = insideIn(inside, p), ov = outsideIn(hours, p);
+    const hv = inside.filter((x) => x.t >= p.start && x.t < p.end && x.hotC != null && Number.isFinite(x.hotC)).map((x) => x.hotC as number);
+    return iv.length >= 6 && hv.length >= 6 && ov.length >= 6 && Math.max(...ov) >= t.gainMinOutsideC ? Math.max(...hv) - Math.max(...iv) : null;
+  }).filter((g): g is number => g != null);
+  const warmEnd = warmGaps.length >= t.minGainDays && median(warmGaps)! >= t.warmEndMinC ? median(warmGaps)! : null;
   const houseGain = gains.length >= t.minGainDays ? Math.max(0, median(gains)!) : null;
   // Story: on calm days the house runs hotter than its usual gain suggests (mild-outside hot days were
   // the misses). Fit gain ≈ mean + slope × (wind − mean wind) over the same warm days; the slope is
@@ -377,12 +391,15 @@ export function buildVentilation(input: VentInput): VentView {
     const measured = dDate === today0 && insideNow != null && soFar.length >= 6 && ((peakT != null && now > peakT + H) || stormedToday);
     // Unrounded outside max, so the outlook's "inside ~N" and the hot-day prompt always agree.
     const inMax = measured ? r0(Math.max(...soFar)) : insideMax(dv.length ? Math.max(...dv) : null, p);
+    const hotSoFar = inside.filter((x) => x.t >= p.start && x.t <= now && x.hotC != null && Number.isFinite(x.hotC)).map((x) => x.hotC as number);
+    const warmEndMax = warmEnd == null || inMax == null ? null : measured ? (hotSoFar.length ? r0(Math.max(...hotSoFar)) : null) : r0(inMax + warmEnd);
     outlook.push({ label: dDate === today0 ? "Today" : dDate === tomorrow0 ? "Tomorrow" : p.label, dayMax, nightMin,
       hot: dayMax != null && dayMax >= t.hotDayC,
       // Cold by the outside forecast or by the house's likely low (same rule as the cold-night prompt).
       cold: nightMin != null && (nightMin <= t.coldNightC || (nightOff != null && r0(nightMin + nightOff) <= t.coldNightC)),
       insideMinLikely: nightMin != null && nightOff != null && r0(nightMin + nightOff) <= t.coldNightC ? r0(nightMin + nightOff) : null,
       insideMax: inMax, insideHot: (inMax ?? -Infinity) >= t.insideHotC, insideMeasured: measured,
+      warmEndMax: warmEndMax != null && warmEndMax > (inMax ?? Infinity) ? warmEndMax : null,
       rainPct: (() => { const r = hours.filter((h) => h.t >= p.start && h.t < p.end && h.rainPct != null).map((h) => h.rainPct as number); return r.length ? r0(Math.max(...r)) : null; })() });
   }
 
@@ -424,7 +441,7 @@ export function buildVentilation(input: VentInput): VentView {
       text: `Hot ${when} forecast (${r0(peak.tempC)} °C around ${hhmm(peak.t)}): ${fans}`,
       why: `Outside reaches ${t.heatStartC} °C from about ${hhmm(warmFrom.t)}. ${DRINKERS}` } : { id: "hot-day", level: by - now < 12 * H ? "act" : "plan",
       text: `Hot inside likely ${when === "afternoon" ? "this afternoon" : "tomorrow"} (about ${r0(peak.tempC + gain!)} °C): ${fans}`,
-      why: `Forecast ${r0(peak.tempC)} °C outside around ${hhmm(peak.t)}, and on ${gains.length} warm days this past week the house peaked about ${r0(houseGain!)} °C above outside${windNote(p)}. ${DRINKERS}` });
+      why: `Forecast ${r0(peak.tempC)} °C outside around ${hhmm(peak.t)}, and on ${gains.length} warm days this past week the house peaked about ${r0(houseGain!)} °C above outside${windNote(p)}.${warmEnd != null ? ` The warmest sensor usually peaks about ${r0(warmEnd)} °C above the house average.` : ""} ${DRINKERS}` });
     break;
   }
 

@@ -43,7 +43,7 @@ export async function GET() {
   const [insideRes, outsideRes] = await Promise.allSettled([
     queryInflux<Record<string, unknown>>(`
       SELECT date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
-        AVG(temperature) AS temperature, AVG(humidity) AS humidity, AVG(co2) AS co2
+        AVG(temperature) AS temperature, AVG(humidity) AS humidity, AVG(co2) AS co2, MAX(temperature) AS temperature_max
       FROM sensors
       WHERE farm_id = '${String(farm.farmId).replace(/'/g, "''")}' AND device_type = 'AM308-1' AND time > now() - INTERVAL '8 days'
       GROUP BY bucket ORDER BY bucket ASC
@@ -59,7 +59,7 @@ export async function GET() {
     // `null` = couldn't load (vs `[]` = no readings)
     inside: insideRes.status === "fulfilled"
       ? insideRes.value
-        .map((r) => ({ t: toMs(r.bucket), tempC: num(r.temperature), rhPct: num(r.humidity), co2: num(r.co2) }))
+        .map((r) => ({ t: toMs(r.bucket), tempC: num(r.temperature), rhPct: num(r.humidity), co2: num(r.co2), hotC: num(r.temperature_max) }))
         .filter((r) => r.t != null)
       : null,
     outside: outside?.outside ?? null,
