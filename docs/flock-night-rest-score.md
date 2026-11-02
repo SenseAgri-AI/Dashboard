@@ -257,3 +257,9 @@ and a [temperature/humidity performance review](https://pmc.ncbi.nlm.nih.gov/art
   night predict a production dip? — the link the paper asserts but doesn't quantify).
 - A dedicated **pre-dawn red-mite** flag (the `predawn` component is already computed per night).
 - Per-farm calibration of `DISRUPT_DB` if a different site's background sits at a different absolute level.
+
+## Cold-night flag (2 Nov, not scored)
+
+*As a farmer, I don't want a freezing night to look "Restful" just because the birds were quiet.*
+
+Cold birds huddle and go quiet, so on the coldest recent nights the score read 100. The score is unchanged (it is the validated model). Instead each night carries `coldMinC`, the lowest inside reading over 20:00–05:00 when at least three readings were at or below `COLD_NIGHT_C` (10 °C, provisional, the same level as the Today card and Ventilation). The tile then shows, in amber: "Cold night: inside down to N°C. Quiet birds may have been huddling, so check the house was closed up." Early warning only.

@@ -41,6 +41,8 @@ export type NightScore = {
   darknessHours: number | null; // hours of darkness over the dusk→dawn scan (null if no light coverage)
   breakdown: ScoreBreakdown;
   points: number;      // acoustic samples that scored the night
+  /** Lowest inside °C over the night when it was cold (3+ readings ≤ COLD_NIGHT_C), else null. Not scored. */
+  coldMinC: number | null;
 };
 
 // A night is labelled by the evening it starts (subtract the night-start hours, take the date).
@@ -101,6 +103,15 @@ function nightDarkness(pts: ClimateSample[]): number | null {
 
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
+/** Story: on the coldest October nights (inside 4–7 °C) the flock was quiet, so the score read 100
+ *  "Restful"; cold birds huddle and go quiet. Flag the cold next to the score instead of changing the
+ *  validated score. Same 10 °C as the Today card and Ventilation. PROVISIONAL (2 Nov). */
+export const COLD_NIGHT_C = 10;
+function nightColdMin(pts: ClimateSample[]): number | null {
+  const cold = pts.filter((c) => c.temp != null && c.temp > -20 && c.temp < 60 && c.temp <= COLD_NIGHT_C).map((c) => c.temp as number);
+  return cold.length >= 3 ? r1(Math.min(...cold)) : null;
+}
+
 /** Score each night in the series, oldest → newest. Nights with too few acoustic points are skipped.
  *  `climate` is optional — without it the heat factor is simply zero. */
 export function nightScores(samples: NoiseSample[], climate: ClimateSample[] = []): NightScore[] {
@@ -159,6 +170,7 @@ export function nightScores(samples: NoiseSample[], climate: ClimateSample[] = [
       darknessHours: darknessHours == null ? null : r1(darknessHours),
       breakdown,
       points: m.points,
+      coldMinC: nightColdMin(climateByNight.get(date) ?? []),
     });
   }
   return out.sort((a, b) => a.date.localeCompare(b.date));
