@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { usesDailyLog } from "@/lib/logFreshness";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
-import { fetchSilverDaily, isSilverMetric, fetchMetersDaily, type DailyRow, type MeterDay } from "@/lib/silverSource";
+import { fetchLastLogDay, fetchSilverDaily, isSilverMetric, fetchMetersDaily, type DailyRow, type MeterDay } from "@/lib/silverSource";
 import { queryInflux } from "@/lib/influxdb";
 import { nightScores, type NoiseSample, type ClimateSample } from "@/lib/sleepScore";
 import { feltTemp, plausibleClimate } from "@/lib/thi";
@@ -204,7 +205,9 @@ export async function GET(req: NextRequest) {
     }
 
     const series = [...byDay.values()].sort((a, b) => String(a.time).localeCompare(String(b.time)));
-    return NextResponse.json({ series, metrics, grain: "daily", house: houseId });
+    // When daily-log metrics are shown, say how fresh the analytics copy of the log is (null = unknown).
+    const logLastDay = usesDailyLog(metrics) ? await fetchLastLogDay(farm.farmId, houseId).catch(() => null) : undefined;
+    return NextResponse.json({ series, metrics, grain: "daily", house: houseId, logLastDay });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Silver query failed" }, { status: 500 });
   }

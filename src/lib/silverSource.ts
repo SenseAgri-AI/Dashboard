@@ -94,6 +94,16 @@ async function runAthenaRaw(sql: string): Promise<(string | undefined)[][]> {
   return out;
 }
 
+/** Latest day (YYYY-MM-DD, UTC bucket) with a daily-log egg count in the analytics copy, or null. */
+export async function fetchLastLogDay(farmId: string, houseId: string): Promise<string | null> {
+  if (!ID_RE.test(farmId) || !ID_RE.test(houseId)) throw new Error("Invalid farm/house id");
+  const y = new Date().getUTCFullYear();
+  const rows = await runAthenaRaw(`SELECT max(bucket_start) FROM ${DATABASE}.${TABLE}
+    WHERE farm_id = '${farmId}' AND house_id = '${houseId}' AND year BETWEEN ${y - 1} AND ${y} AND eggs_total IS NOT NULL`);
+  const v = rows[0]?.[0];
+  return v ? athenaTsToIso(v).slice(0, 10) : null;
+}
+
 /** Daily aggregates for the given columns over [from, to): mean (`c`) plus the day's
  *  min (`c__lo`) and max (`c__hi`), one row per day. */
 export async function fetchSilverDaily(

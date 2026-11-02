@@ -25,3 +25,10 @@ Farmer story: *"I'm not a data engineer; tell me what the line is, and don't tel
 - Analytics series: "Air quality (TVOC)", "Dust (PM2.5/PM10)", "Felt temperature". Captions drop "InfluxDB" / "AWS silver layer" ("Last month, at N resolution", "One point per day").
 - Noise: "spike anomalies" → "sudden loud sounds" / "loud spikes". The Dashboard noise badge no longer says "Stressed flock" for one spike (a tractor or door gives the same spike): it says "Loud spike: listen to the clip" (amber), "Noisier than usual" (red, louder than baseline by >4 dB) takes priority, and the calm state reads "Usual noise level". Early warning, never a cause.
 - Live dashboard Production: "Hen-day %" → "Lay rate" (sub "hen-day · hen-housed N%"), matching Home and Analytics. The **Egg weight** tile hides when no eggs were weighed in the 30-day window (the daily log's last weight is 9 Aug, so it showed an empty "—"), and says "weighed D Mon" when the latest weight is older than the latest log day. Farmer story: *"Don't show me an empty tile, and don't pass off an old weight as today's."*
+
+## Analytics daily-log notice (2 Nov)
+
+Farmer story: *"If the egg or deaths chart in Analytics just stops, tell me the copy is behind, so I don't think I stopped laying or forgot to log."*
+- Analytics daily-log metrics (eggs, sizes, weight, broken eggs, deaths, lay rate, cumulative mortality, breakage) come from the analytics copy of the log (silver), which can fall behind; Home and the Live dashboard read the live log.
+- `/api/analytics/series` returns `logLastDay` (latest day with an egg count) when a daily-log metric is shown. Analytics shows "Daily-log figures here last updated D Mon (N days ago). Home shows the latest log." when it is more than 2 days old (`src/lib/logFreshness.ts`). Climate, water and feed charts don't trigger it.
+- The assistant's history tool already reports the last egg-log date.

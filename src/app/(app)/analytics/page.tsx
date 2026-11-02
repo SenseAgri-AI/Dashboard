@@ -8,6 +8,7 @@ import { chartWindow } from "@/lib/chartWindow";
 import { standardHdepForWeek } from "@/lib/henStandard";
 import { THI_COMFORT, THI_SEVERE, THI_EXTREME } from "@/lib/thi";
 import { withFlockAge } from "@/lib/flockAge";
+import { logStaleNotice } from "@/lib/logFreshness";
 import { RECHARTS_TIP, TIP_BOX, TIP_LABEL } from "@/components/ChartTooltip";
 
 // Heat-stress reference bands for the felt-temperature (THI) axis — comfort (< 27.8 °C) stays clear;
@@ -423,6 +424,7 @@ function SilverExplorer() {
   const [overlays, setOverlays] = useState(false);
   const [showRange, setShowRange] = useState(false);
   const [raw, setRaw] = useState<Frame[]>([]);
+  const [logNotice, setLogNotice] = useState<string | null>(null);
   const [house, setHouse] = useState<House | null>(null);
   const [sched, setSched] = useState<SchedVersion[]>([]);
   const [events, setEvents] = useState<FarmEvent[]>([]);
@@ -455,8 +457,10 @@ function SilverExplorer() {
     const metrics = [...new Set([...expandKeys(left), ...expandKeys(right)])];
     const q = new URLSearchParams({ metrics: metrics.join(","), from: fromIso, to: toIso });
     const res = await fetch(`/api/analytics/series?${q}`);
-    if (!res.ok) { setErr((await res.json().catch(() => ({}))).error ?? "Failed to load"); setRaw([]); setLoading(false); return; }
-    setRaw((await res.json()).series ?? []);
+    if (!res.ok) { setErr((await res.json().catch(() => ({}))).error ?? "Failed to load"); setRaw([]); setLogNotice(null); setLoading(false); return; }
+    const body = await res.json();
+    setRaw(body.series ?? []);
+    setLogNotice(logStaleNotice(body.logLastDay, new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Johannesburg" }).format(new Date())));
     setLoading(false);
   }, [left, right, rangeKey]);
   useEffect(() => { load(); }, [load]);
@@ -526,6 +530,7 @@ function SilverExplorer() {
               labelFormat={(ms) => new Date(ms).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "2-digit" })} house={house} />}
       </div>
       <div className="sa-chart-note" style={NOTE_PAD}>
+        {logNotice && <div role="status" style={{ background: "#FFF7ED", border: "1px solid #FED7AA", color: "#9A3412", borderRadius: 8, padding: "6px 10px", marginBottom: 6, fontWeight: 600 }}>{logNotice}</div>}
         One point per day. Drag across the plot to zoom.
         {overlays && <> Markers: <span style={{ color: PRIMARY, fontWeight: 700 }}>schedule change</span> · <span style={{ color: DANGER, fontWeight: 700 }}>event</span> · <span style={{ color: STD, fontWeight: 700 }}>feed</span>.</>}
       </div>
