@@ -267,6 +267,7 @@ test('hot inside likely: a warm (not hot) forecast plus the house\'s own afterno
   assert.ok(p, 'expected a hot-inside prompt');
   assert.match(p.text, /^Hot inside likely this afternoon \(about 33 °C\): consider opening up and fans on before \d\d:00$/);
   assert.match(p.why, /warm days this past week the house peaked about 5 °C above outside\. Birds drink more in the heat: check drinkers are flowing\.$/);
+  assert.equal(v.outlook[0].insideMeasured, false); // morning: still an estimate
   // 3-day outlook carries the likely inside peak (outside high + gain), flagged when 32 °C+
   assert.deepEqual(plain(v.outlook.map((d) => [d.insideMax, d.insideHot])), [[33, true], [33, true], [33, true]]);
   // a house that stays at or below outside: no prompt for the same forecast
@@ -319,6 +320,7 @@ test('storm came early: house just dropped and sits well below the forecast → 
   const v = view(o, stormed);
   assert.ok(!ids(v).includes('hot-day'));
   assert.ok(!ids(v).includes('storm'));
+  assert.deepEqual(plain([v.outlook[0].insideMax, v.outlook[0].insideMeasured]), [31, true]); // today's card shows the measured peak
   // a house that simply runs cool (no sudden drop) still gets the hot prompt
   assert.ok(ids(view(o, inside(() => ({ tempC: 19, rhPct: 60, co2: 800 })))).includes('hot-day'));
 });

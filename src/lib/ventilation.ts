@@ -119,6 +119,8 @@ const DRINKERS = "Birds drink more in the heat: check drinkers are flowing.";
 export type DayOutlook = { label: string; dayMax: number | null; nightMin: number | null; hot: boolean; cold: boolean;
   /** Likely inside peak (outside high + this house's usual warm-day gain); null on cool days or without enough history. */
   insideMax: number | null; insideHot: boolean;
+  /** True when `insideMax` is today's measured maximum so far (after the forecast peak), not an estimate. */
+  insideMeasured: boolean;
   /** Highest daylight rain chance (%), or null without rain data. */
   rainPct: number | null };
 
@@ -261,6 +263,11 @@ export function buildVentilation(input: VentInput): VentView {
   const houseGain = gains.length >= t.minGainDays ? Math.max(0, median(gains)!) : null;
 
   // 3-day outlook, today first: outside high/low, plus the likely inside peak on warm days.
+  // Signs today's forecast is out of date: the house has just dropped sharply (≥ 4 °C in ~2 h) and sits
+  // well below the forecast outside temperature. Both are needed, so a pad-cooled house that simply runs
+  // below outside still gets its hot-day prompt.
+  const recentMax = Math.max(-Infinity, ...inside.filter((x) => x.tempC != null && x.t >= now - 2.5 * H && x.t <= now - 0.5 * H).map((x) => x.tempC as number));
+  const stormCooled = insideNow != null && outsideNow != null && insideNow.tempC <= outsideNow - t.forecastOffC && recentMax - insideNow.tempC >= 4;
   const insideMax = (dayMax: number | null) => (houseGain != null && dayMax != null && dayMax >= t.gainMinOutsideC ? r0(dayMax + houseGain) : null);
   const outlook: DayOutlook[] = [];
   for (let i = Math.max(dayIdx, 0); dayIdx >= 0 && i < all.length && outlook.length < 3; i++) {
@@ -272,9 +279,16 @@ export function buildVentilation(input: VentInput): VentView {
     const nightMin = nv.length ? r0(Math.min(...nv)) : null;
     // Label by farm-local date: in the evening the next daylight is tomorrow's.
     const dDate = localDate(p.start, offsetHours), today0 = localDate(now, offsetHours), tomorrow0 = localDate(now + 24 * H, offsetHours);
+    // Today, once the forecast peak hour has passed (or a storm has cooled the house): the measured inside
+    // maximum so far replaces the estimate, so the card shows what happened rather than a guess.
+    const dayHours = hours.filter((h) => h.t >= p.start && h.t < p.end);
+    const peakT = dayHours.length ? dayHours.reduce((a, b) => (b.tempC > a.tempC ? b : a)).t : null;
+    const soFar = insideIn(inside, { ...p, end: Math.min(p.end, now + 1) });
+    const measured = dDate === today0 && soFar.length >= 6 && ((peakT != null && now > peakT + H) || stormCooled);
+    const inMax = measured ? r0(Math.max(...soFar)) : insideMax(dayMax);
     outlook.push({ label: dDate === today0 ? "Today" : dDate === tomorrow0 ? "Tomorrow" : p.label, dayMax, nightMin,
       hot: dayMax != null && dayMax >= t.hotDayC, cold: nightMin != null && nightMin <= t.coldNightC,
-      insideMax: insideMax(dayMax), insideHot: (insideMax(dayMax) ?? -Infinity) >= t.insideHotC,
+      insideMax: inMax, insideHot: (inMax ?? -Infinity) >= t.insideHotC, insideMeasured: measured,
       rainPct: (() => { const r = hours.filter((h) => h.t >= p.start && h.t < p.end && h.rainPct != null).map((h) => h.rainPct as number); return r.length ? r0(Math.max(...r)) : null; })() });
   }
 
@@ -285,11 +299,6 @@ export function buildVentilation(input: VentInput): VentView {
   // Hot afternoon (today if the heat is still ahead, otherwise tomorrow). Two triggers: the outside
   // forecast alone is hot, or a warm forecast plus this house's own usual afternoon gain over outside
   // (houses here peak ~3–6 °C above outside, so a 28 °C day can mean ~33 °C inside).
-  // Signs today's forecast is out of date: the house has just dropped sharply (≥ 4 °C in ~2 h) and sits
-  // well below the forecast outside temperature. Both are needed, so a pad-cooled house that simply runs
-  // below outside still gets its hot-day prompt.
-  const recentMax = Math.max(-Infinity, ...inside.filter((x) => x.tempC != null && x.t >= now - 2.5 * H && x.t <= now - 0.5 * H).map((x) => x.tempC as number));
-  const stormCooled = insideNow != null && outsideNow != null && insideNow.tempC <= outsideNow - t.forecastOffC && recentMax - insideNow.tempC >= 4;
   const hotDays = all.filter((p) => p.kind === "day" && p.end > now).slice(0, 2);
   for (const p of hotDays) {
     const dh = hours.filter((h) => h.t >= p.start && h.t < p.end);
