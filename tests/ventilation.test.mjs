@@ -141,7 +141,7 @@ test('cooler outside now while warm inside → flush heat', () => {
   const v = view(outside(() => 22), inside(() => ({ tempC: 31, rhPct: 60, co2: 800 })));
   assert.equal(v.prompts.find((x) => x.id === 'cooler-outside').text, 'Cooler outside now (22 °C vs 31 °C inside): consider opening up or fans on to flush heat');
   assert.ok(!ids(view(outside(() => 22), inside(() => ({ tempC: 24, rhPct: 60, co2: 800 })))).includes('cooler-outside'));
-  // dry heat (real 1 Nov 17:00: 29 °C at 33 % RH "feels" 26) still counts as warm
+  // dry heat (29 °C at 33 % RH "feels" 26) still counts as warm
   const dry = view(outside(() => 25.6), inside(() => ({ tempC: 29.1, rhPct: 33, co2: 500 })));
   assert.equal(dry.prompts.find((x) => x.id === 'cooler-outside').text, 'Cooler outside now (26 °C vs 29 °C inside): consider opening up or fans on to flush heat');
   assert.match(dry.prompts.find((x) => x.id === 'cooler-outside').why, /dry air/);
@@ -214,7 +214,7 @@ test('3-day outlook labels by local date: in the evening the first day is tomorr
 
 test('farmId format is checked before it can reach SQL', () => {
   const F = load('src/lib/farms.ts', { '@aws-sdk/client-ssm': {}, '@clerk/nextjs/server': {} });
-  for (const ok of ['farm_anike_001', 'farm-x-2', 'a']) assert.equal(F.isValidFarmId(ok), true, ok);
+  for (const ok of ['farm_example_001', 'farm-x-2', 'a']) assert.equal(F.isValidFarmId(ok), true, ok);
   for (const bad of ["farm' OR 1=1 --", 'Farm_A', 'farm id', '', null, 42, 'x'.repeat(65)]) assert.equal(F.isValidFarmId(bad), false, String(bad));
 });
 

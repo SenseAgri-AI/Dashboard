@@ -39,7 +39,7 @@ Secrets used by the app:
 | Setting | Value |
 |---------|-------|
 | Host / URL | `https://us-east-1-1.aws.cloud2.influxdata.com` |
-| Org ID | `a7a2592ed15637b2` |
+| Org ID | from the team password manager / SSM |
 | Bucket (database) | `senseagri-telemetry` |
 | Token | from SSM `/senseagri/dev/influxdb/token` |
 | Query language | **SQL** (InfluxDB 3 / FlightSQL) |
@@ -74,7 +74,7 @@ df = client.query(
     """
     SELECT time, device_id, device_type, temperature, humidity, co2
     FROM sensors
-    WHERE farm_id = 'farm_anike_001'
+    WHERE farm_id = 'farm_example_001'
       AND device_type = 'AM308-1'
       AND time > now() - INTERVAL '7 days'
     ORDER BY time DESC
@@ -92,8 +92,8 @@ Everything lives in one measurement/table: **`sensors`**.
 
 | Tag | Notes |
 |-----|-------|
-| `farm_id` | Currently only `farm_anike_001` (the one live farm — see `FARM_ID` in [src/lib/influxdb.ts](src/lib/influxdb.ts)) |
-| `device_id` | Hardware ID, e.g. `24e124136f451854` |
+| `farm_id` | Currently only `farm_example_001` (the one live farm — see `FARM_ID` in [src/lib/influxdb.ts](src/lib/influxdb.ts)) |
+| `device_id` | Hardware ID, e.g. `<water-meter-1-id>` |
 | `device_type` | Sensor model — distinguishes which fields are populated |
 
 **Device types & their fields:**
@@ -116,21 +116,21 @@ feed times). See `pulse-profiles.png`.
 
 | Device | `device_id` | Role | Status | Notes |
 |--------|-------------|------|--------|-------|
-| Water meter 1 | `24e124136f451854` | `water_meter` | ✅ confirmed | 1 pulse = **10 litres** (`WATER_LITRES_PER_PULSE`). Broad daytime drinking curve. **The dashboard reads only this meter today.** |
-| Water meter 2 | `24e124136f456303` | `water_meter` | ✅ confirmed | Identical drinking-curve profile to WM1 — a genuine 2nd water meter. **Not yet summed** by the app, so drinking is under-counted by ~half. |
-| Feed meter 1 (auger) | `24e124136f458449` | `feed_meter` | ✅ confirmed | Live. Counts auger rotations; two sharp bursts (~8am & ~2pm) = the auger running at feed times, ~8× the pulse volume of the water meters. |
-| Feed meter 2 (auger) | `24e124136f452271` | `feed_meter` | ⚠️ dead / frozen | The originally-documented feed meter (the other auger's rotation counter). `pulse_total` frozen at 864,891 with zero movement (6 Aug–5 Sep 2026) — it has **stopped counting** (faulty/detached pickup). Role is from the repo docs; can't be re-confirmed from behaviour while it's frozen. Needs a hardware check. |
-| Phantom | `24e124136f455672` | — | ❓ likely phantom | Appeared **3 Sep 2026**, single ~5pm burst, no known install. With the four physical sensors accounted for above, this is the leftover 5th ID — probably a stray/duplicate registration. Worth a quick check at the device console. |
+| Water meter 1 | `<water-meter-1-id>` | `water_meter` | ✅ confirmed | 1 pulse = **10 litres** (`WATER_LITRES_PER_PULSE`). Broad daytime drinking curve. **The dashboard reads only this meter today.** |
+| Water meter 2 | `<water-meter-2-id>` | `water_meter` | ✅ confirmed | Identical drinking-curve profile to WM1 — a genuine 2nd water meter. **Not yet summed** by the app, so drinking is under-counted by ~half. |
+| Feed meter 1 (auger) | `<feed-meter-1-id>` | `feed_meter` | ✅ confirmed | Live. Counts auger rotations; two sharp bursts (~8am & ~2pm) = the auger running at feed times, ~8× the pulse volume of the water meters. |
+| Feed meter 2 (auger) | `<feed-meter-2-id>` | `feed_meter` | ⚠️ dead / frozen | The originally-documented feed meter (the other auger's rotation counter). `pulse_total` frozen with zero movement over the profiled month — it has **stopped counting** (faulty/detached pickup). Role is from the repo docs; can't be re-confirmed from behaviour while it's frozen. Needs a hardware check. |
+| Phantom | `<unmapped-device-id>` | — | ❓ likely phantom | Appeared recently, single burst, no known install. With the four physical sensors accounted for above, this is the leftover 5th ID — probably a stray/duplicate registration. Worth a quick check at the device console. |
 
 > **Retention caveat:** InfluxDB keeps only ~1 month, so the hour-of-day profiles above
-> cover ~30 days (6 Aug–5 Sep 2026), not "many months".
+> cover ~30 days, not "many months".
 
 To discover everything that's actually reporting:
 
 ```sql
 SELECT device_id, device_type, COUNT(*) AS n, MAX(time) AS last_seen
 FROM sensors
-WHERE farm_id = 'farm_anike_001'
+WHERE farm_id = 'farm_example_001'
 GROUP BY device_id, device_type
 ORDER BY device_type, device_id;
 ```
@@ -148,7 +148,7 @@ SELECT
   AVG(humidity)    AS humidity,
   AVG(co2)         AS co2
 FROM sensors
-WHERE farm_id = 'farm_anike_001'
+WHERE farm_id = 'farm_example_001'
   AND device_type = 'AM308-1'
   AND time > now() - INTERVAL '24 hours'
 GROUP BY bucket
@@ -163,8 +163,8 @@ SELECT
   date_bin(INTERVAL '1 hour', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
   MAX(pulse_total) AS cumulative
 FROM sensors
-WHERE farm_id = 'farm_anike_001'
-  AND device_id = '24e124136f451854'   -- water meter
+WHERE farm_id = 'farm_example_001'
+  AND device_id = '<water-meter-1-id>'   -- water meter
   AND time > now() - INTERVAL '7 days'
 GROUP BY bucket
 ORDER BY bucket ASC;
@@ -186,7 +186,7 @@ hand-entered into a Google Sheet and read read-only via a service account.
 
 | Setting | Value |
 |---------|-------|
-| Spreadsheet ID | `1KjAr1wjfptYbE0n3qCWY_7gTVnR-XMTRy8xzRgCDpkA` |
+| Spreadsheet ID | per farm, `spreadsheetId` in SSM `/senseagri/farms/<slug>/config` |
 | Range used | `DailyLog!A:J` |
 | Auth | Service-account JSON in SSM `/senseagri/dev/google/service-account` |
 | Scope | `spreadsheets.readonly` |
@@ -236,7 +236,7 @@ creds = Credentials.from_service_account_info(
 )
 gc = gspread.authorize(creds)
 
-ws = gc.open_by_key("1KjAr1wjfptYbE0n3qCWY_7gTVnR-XMTRy8xzRgCDpkA").worksheet("DailyLog")
+ws = gc.open_by_key(SPREADSHEET_ID)  # from the farm config.worksheet("DailyLog")
 rows = ws.get("A:J")   # list of lists, same shape the dashboard reads
 ```
 
@@ -249,7 +249,7 @@ rows = ws.get("A:J")   # list of lists, same shape the dashboard reads
 
 Hard-coded in [src/app/api/production/route.ts](src/app/api/production/route.ts) — useful for reproducing the dashboard's KPIs:
 
-- **Flock size:** house1 = **4479 hens** (`HOUSE_HENS` / `TOTAL_HENS`).
+- **Flock size:** house1 = **N hens** (from `houseHens` in the farm config) (`HOUSE_HENS` / `TOTAL_HENS`).
 - **Live hens** = `TOTAL_HENS − cumulative mortality`.
 - **HDEP (Hen-Day Egg %)** = `total eggs / live hens × 100`.
 - **FCR (Feed Conversion Ratio)** = `feed consumed Day N-1 / eggs collected Day N`.
@@ -270,7 +270,7 @@ Hard-coded in [src/app/api/production/route.ts](src/app/api/production/route.ts)
   down in the code — confirm the per-pulse weight before reporting absolute feed mass.
 - **Token TTL:** the app caches the InfluxDB token for 1h; for ad-hoc scripts just re-pull
   from SSM each run.
-- **One farm today:** `farm_id = 'farm_anike_001'` is the only live farm. Keep the filter
+- **One farm today:** `farm_id = 'farm_example_001'` is the only live farm. Keep the filter
   in queries so things still work when more farms are added.
 - The dashboard's read paths are the source of truth for schema — see
   [src/lib/influxdb.ts](src/lib/influxdb.ts), [src/lib/sheets.ts](src/lib/sheets.ts), and the routes under

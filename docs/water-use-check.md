@@ -37,20 +37,16 @@ Read-only, farm-scoped, Athena-cached.
 
 A firing platform water alert still overrides the line, as before.
 
-## Backtest (14 Apr – 31 Oct 2026, 185 evaluable days)
+## Backtest (pilot farm, several months)
 
-11 days flagged (farm rule 5 amber + 4 red, line rule 2):
+A small number of days a month were flagged at most. They included two-day farm dips, one meter reading
+zero while the other was normal (the kind of event the line rule is for), and a sustained drop in use during
+hot weather, when hens should drink more, not less. That needs checking with the farm (pressure, regulator,
+valves, filters, or the meters under-reading; see the questions in devices/water-meters.md). The baseline then
+adapts to the new level, so the card stops flagging after about two weeks of low use. Figures are in the
+private findings.
 
-- 4 Jul, 14 Aug: two-day farm dips (amber).
-- 9 Jul: Meter 2 at 40 L against ~140 L (low-flow winter period, lower confidence).
-- **18 Sep: Meter 1 read 0 L on 17 Sep while Meter 2 was normal.** The kind of event the line rule is for.
-- **11–15 Oct (amber, then red), 21 Oct, 24 Oct:** farm use fell from about 1 900 L/day to about 1 000,
-  then about 550 L/day, **while the house was at 30–34 °C**. In heat, hens should drink more, not less.
-  This needs checking with the farm (pressure, regulator, valves, filters, or the meters under-reading;
-  see the questions in devices/water-meters.md). The baseline then adapts to the new level, so the card
-  stops flagging after about two weeks of low use.
-
-A single-day farm rule at 70 % flagged 21 days, mostly normal day-to-day swings; two days is the minimum
+A single-day farm rule at 70 % flagged many more days, mostly normal day-to-day swings; two days is the minimum
 that stays quiet on normal weeks.
 
 ## Limits and follow-ups
@@ -65,6 +61,6 @@ that stays quiet on normal weeks.
 Farmer story: *"When I look at today's drinking rate, I want it to be the whole house, not one A-frame, so a dip means something."*
 
 - The card now sums every meter in `farm.waterMeters` (each differenced on its own counter, then added per 30-min bucket, `src/lib/meterPoints.ts`). Without `waterMeters` it falls back to `waterDeviceId` alone and says **"One water meter only"**.
-- On 2 Nov at 14:05 SAST Meter 1 had 170 L and Meter 2 180 L since midnight, so the single-meter card showed about half the house. **Adding `waterMeters` (both A-frame meters) to the farm config fixes this with no code change.**
+- With two meters and only one configured, the single-meter card shows about half the house. **Adding `waterMeters` (both A-frame meters) to the farm config fixes this with no code change.**
 - The subtitle also says *"Compare with other days, not a target"*: the meters under-read at low flow (see `docs/data-findings.md`), so ml/hen targets would mislead.
 - Day boundaries use the farm's fixed `timezoneOffset`; a fixed offset doesn't follow daylight saving.

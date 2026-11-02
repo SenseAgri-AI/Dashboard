@@ -157,14 +157,11 @@ Full alert entry: [alerts-spec.md → Welfare → Poor flock sleep](../alerts-sp
 
 Tuned and checked on real farm audio (see the notebook). Behaviour on the backtest window:
 
-- **~15 quiet nights → 100.** The quiet baseline correctly scores clean; fans and rain do *not* drag it
-  down (the −32 line sits above them).
-- **The 08 Aug night → 72** (its real ~8-min disturbance lands in the early hours of 09 Aug). This is the
-  worst night in the window and the score reflects it.
-- **09 Aug / 12 Aug → 84** — genuine but milder disturbance.
+- **Quiet nights → 100.** The quiet baseline scores clean; fans and rain do *not* drag it down (the −32 line
+  sits above them).
+- **The worst disturbed night in the window scored lowest**, and milder disturbances scored in between.
 
-This mirrors the night-disturbance alert's own backtest (09 Aug mean −29.7 for ~8 min; 10 Aug mean −29.9)
-— the same events that trip the instantaneous alert are the ones that pull the nightly score down.
+This mirrors the night-disturbance alert's own backtest — the same events that trip the instantaneous alert are the ones that pull the nightly score down.
 
 ## Constants (all tunable, in `src/lib/sleepScore.ts`)
 

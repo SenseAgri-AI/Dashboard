@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { buildToday, type DailyRow, type ExtraItem, type FarmAlert, type Rag, type SeriesPoint, type SiloState, type TodayResult, type TodayThresholds, type WaterDay } from "@/lib/todayStatus";
+import { timeoutSignal } from "@/lib/timeoutSignal";
 
 // "Today" card — a headline, two always-on lines (Birds, Climate) and lines that appear only on a
 // problem (Water, Feed silo, Sensors). One footer when any check failed to load. Rules and the user
@@ -51,7 +52,7 @@ export default function TodayCard({ ready, daily, lastLogDate, climate, extras, 
 
   useEffect(() => {
     // A hung check counts as failed after 30 s ("Some checks didn't load"), so the rest of the card still shows.
-    const json = (url: string) => fetch(url, { signal: AbortSignal.timeout(30_000) }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))));
+    const json = (url: string) => fetch(url, { signal: timeoutSignal(30_000) }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))));
     Promise.allSettled([json("/api/alerts"), json("/api/silo-levels"), json("/api/freshness")]).then(([a, s, f]) => {
       if (a.status === "fulfilled" && Array.isArray(a.value.alerts)) setAlerts({ list: a.value.alerts, stale: a.value.stale === true });
       if (s.status === "fulfilled" && Array.isArray(s.value.silos)) {

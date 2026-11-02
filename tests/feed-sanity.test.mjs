@@ -30,7 +30,7 @@ test('delivery weights: kg, tonnes, thousands separators; bags need a bag size',
 });
 
 test('save-time warning catches unit slips', () => {
-  const hens = 4479; // ~500 kg/day at 112 g
+  const hens = 4000; // ~450 kg/day at 112 g
   assert.equal(F.deliveryWarning('25 000 kg', hens), null);
   assert.match(F.deliveryWarning('500 kg', hens), /about 1 days?|less than a day/);
   assert.match(F.deliveryWarning('25', hens), /check the units/);           // tonnes typed as kg
@@ -41,12 +41,12 @@ test('save-time warning catches unit slips', () => {
 });
 
 test('intake between deliveries: normal, low, and a missed delivery flagged as looks wrong', () => {
-  const hens = 4479;
+  const hens = 4000;
   const rows = [
-    { date: '2025-12-10', weight: '25000 kg' },
-    { date: '2026-01-29', weight: '25000 kg' }, // 50 days → ~112 g
-    { date: '2026-04-04', weight: '25000 kg' }, // 65 days → ~86 g (low)
-    { date: '2026-09-03', weight: '16000 kg' }, // 152 days → ~37 g: a delivery wasn't logged
+    { date: '2025-12-10', weight: '22400 kg' },
+    { date: '2026-01-29', weight: '22400 kg' }, // 50 days → ~112 g
+    { date: '2026-04-04', weight: '22400 kg' }, // 65 days → ~86 g (low)
+    { date: '2026-09-03', weight: '14300 kg' }, // 152 days → ~37 g: a delivery wasn't logged
     { date: '2026-10-29', weight: '25 t' },
   ];
   const out = plain(F.intakeBetweenDeliveries(rows, hens));
@@ -57,7 +57,7 @@ test('intake between deliveries: normal, low, and a missed delivery flagged as l
     ['2026-09-03', 56, 64, 'looks-wrong'],
   ]);
   // same-day deliveries add up; unreadable weights break the chain instead of guessing
-  const split = plain(F.intakeBetweenDeliveries([{ date: '2026-01-01', weight: '12500 kg' }, { date: '2026-01-01', weight: '12.5t' }, { date: '2026-02-20', weight: '?' }, { date: '2026-03-01', weight: '1 kg' }], hens));
+  const split = plain(F.intakeBetweenDeliveries([{ date: '2026-01-01', weight: '11200 kg' }, { date: '2026-01-01', weight: '11.2t' }, { date: '2026-02-20', weight: '?' }, { date: '2026-03-01', weight: '1 kg' }], hens));
   assert.deepEqual(split.map((x) => x.gPerHenDay), [112]);
   assert.deepEqual(plain(F.intakeBetweenDeliveries(rows, 0)), []);
 });

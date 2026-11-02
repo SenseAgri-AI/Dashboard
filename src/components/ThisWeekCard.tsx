@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { buildThisWeek, type WeekDaily, type WeekInsideDay, type WeekLine, type WeekWaterDay } from "@/lib/thisWeek";
+import { timeoutSignal } from "@/lib/timeoutSignal";
 
 // Home "This week" card: last 7 complete days vs the 7 before (eggs, deaths, water, hottest inside day).
 // Rules and user stories: lib/thisWeek.ts and docs/this-week.md. Each source loads on its own, so a slow
@@ -17,7 +18,7 @@ export default function ThisWeekCard({ ready, daily, narrow }: { ready: boolean;
 
   useEffect(() => {
     // A hung request gives up after 30 s and its line reads "couldn't load", instead of "Loading…" forever.
-    const json = (url: string) => fetch(url, { signal: AbortSignal.timeout(30_000) }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))));
+    const json = (url: string) => fetch(url, { signal: timeoutSignal(30_000) }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))));
     json("/api/water-use").then((w) => setWater(Array.isArray(w.days) ? w.days : undefined)).catch(() => setWater(undefined));
     json("/api/this-week").then((d) => {
       setInside(Array.isArray(d.inside) ? d.inside : undefined);

@@ -4,7 +4,7 @@
 **Purpose:** (1) how to reach the analytics data in AWS Athena, (2) what's in it and its
 gotchas, (3) a working **egg-count forecast** baseline (Meta **Prophet**) you can run and build on.
 
-Verified live against AWS account **336814727818**, region **af-south-1**, on 2026-07-10.
+Verified live against dev AWS account, region **af-south-1**, on 2026-07-10.
 
 > The data model, S3 layout, and ETL are documented in **[SILVER_LAYER_SPEC.md](SILVER_LAYER_SPEC.md)** —
 > read that for the full pipeline picture. This doc is the *consumer's* view: query it and model it.
@@ -49,10 +49,10 @@ Partitions `farm_id` and `house_id` are **injected** — every query **must** pu
 or a scan error). Always:
 
 ```sql
-WHERE farm_id = 'farm_anike_001' AND house_id = 'house1' AND year = 2026 …
+WHERE farm_id = 'farm_example_001' AND house_id = 'house1' AND year = 2026 …
 ```
 
-Only farm live today: **`farm_anike_001`**, house **`house1`** (4,479 hens at flock start).
+Only farm live today: **`farm_example_001`**, house **`house1`** (hen count from `houseHens` in the farm config).
 
 ---
 
@@ -81,7 +81,7 @@ figures **broadcast** across that day's 24 rows — so to get a daily series, gr
 ```sql
 SELECT date(bucket_start) AS d, max(eggs_total) AS eggs, max(mortality) AS deaths
 FROM senseagri_silver.aligned_hourly
-WHERE farm_id='farm_anike_001' AND house_id='house1' AND year IN (2025,2026)
+WHERE farm_id='farm_example_001' AND house_id='house1' AND year IN (2025,2026)
 GROUP BY date(bucket_start) ORDER BY d;
 ```
 
@@ -90,20 +90,20 @@ GROUP BY date(bucket_start) ORDER BY d;
 ## 3. Egg data — caveats before you model
 
 The egg columns are **manually logged** on the farm's Google Sheet, so they behave like human data,
-not sensor data. What we verified in the live table (274 daily rows, 2025-10-09 → 2026-07-09):
+not sensor data. What we verified in the live table:
 
-1. **Flock lay curve.** Lay begins ~2025-10-11 and ramps over ~4 weeks to a plateau of
-   ~4,000–4,500 eggs/day. The ramp is a **different regime** from steady lay — don't fit one linear
+1. **Flock lay curve.** Lay begins at point of lay and ramps over a few weeks to a
+   plateau. The ramp is a **different regime** from steady lay — don't fit one linear
    trend across both (or use logistic growth; see §5).
 2. **Nulls mean "not logged", not zero.** When manual logging stops, the hourly *sensor* rows still
    exist so the day is present, but `eggs_total` is **null**. **Never coalesce egg nulls to 0** — a
-   missed count is not a production crash. In this dataset **egg logging stopped after 2026-06-28**
-   (the last ~11 days are null).
-3. **Logging-gap outliers.** Some logged days are partial/catch-up counts — e.g. **2025-12-01 → -06**
-   dropped to ~100–1,200/day then jumped back to ~4,000. Treat these as outliers (blank them), don't
+   missed count is not a production crash. In this dataset egg logging stopped for a stretch at the end
+   (those days are null).
+3. **Logging-gap outliers.** Some logged days are partial/catch-up counts — e.g. a run of days
+   dropped to a small fraction of normal, then jumped back. Treat these as outliers (blank them), don't
    trust them as real dips.
-4. **Some totals exceed the flock size.** A few early days log **>4,479** eggs (e.g. 5,220 on
-   2025-11-08) — i.e. >100% lay rate, physically impossible in a day. This is **batched logging** (one
+4. **Some totals exceed the flock size.** A few early days log more eggs than hens
+   — i.e. >100% lay rate, physically impossible in a day. This is **batched logging** (one
    entry covering more than one day's collection). So `eggs_total` is not a clean per-calendar-day
    physical count on every row. Robust models / outlier handling matter.
 5. **`avg_egg_weight` is sparsely logged** (many null days) — usable as a slow-moving covariate, not a
@@ -132,7 +132,7 @@ cur = connect(
 df = cur.execute("""
     SELECT date(bucket_start) AS ds, max(eggs_total) AS y
     FROM senseagri_silver.aligned_hourly
-    WHERE farm_id='farm_anike_001' AND house_id='house1' AND year IN (2025,2026)
+    WHERE farm_id='farm_example_001' AND house_id='house1' AND year IN (2025,2026)
     GROUP BY date(bucket_start) ORDER BY ds
 """).as_pandas()
 ```
@@ -155,12 +155,11 @@ AWS_REGION=af-south-1 python egg_forecast_prophet.py
 ```
 Outputs `egg_forecast.csv` (full forecast + intervals) and `egg_forecast.png`.
 
-### Result on the live Anike data (2026-07-10)
-- Training on the mature laying period (from 2025-11-10), 225 usable days after cleaning.
-- **21-day holdout: MAPE ≈ 3.2%, MAE ≈ 120 eggs/day** — solidly accurate for a first pass.
-- 30-day forward forecast ≈ **4,090 eggs/day** mean (80% interval ≈ 3,300–5,000).
+### Result on the live pilot data
+- Trained on the mature laying period after cleaning; the holdout error and the forecast are in the private
+  findings, not here.
 - Sample fit: [analysis/egg_forecast_sample.png](analysis/egg_forecast_sample.png) — trend + weekly
-  seasonality (the sawtooth) and the 80% interval; the 2025-12 logging-gap days are excluded from the
+  seasonality (the sawtooth) and the 80% interval; logging-gap days are excluded from the
   fit (blanked), so they don't appear as points and the y-axis auto-scales to the plateau.
 
 ### Modelling choices (and why)
@@ -189,11 +188,11 @@ Outputs `egg_forecast.csv` (full forecast + intervals) and `egg_forecast.png`.
 ---
 
 ## 6. Open questions / dependencies
-1. **Data continuity:** manual egg logging lapsed after 2026-06-28 — any live/forecasting product
+1. **Data continuity:** manual egg logging lapsed for a stretch — any live/forecasting product
    needs the farm to log consistently (or the camera egg-count source, kept in raw but not yet in
    silver — see SILVER_LAYER_SPEC §"Camera egg counts").
 2. **Batched-logging days** (totals > flock size): confirm with the farm how collection is recorded,
    so we can de-batch rather than just outlier-drop.
 3. **Meters** (`water_litres`, `feed_kg`) are currently unreliable (hardware) — don't build FCR on
    them yet.
-4. **More history / more farms** improves everything here — this baseline is one house, ~8 months.
+4. **More history / more farms** improves everything here — this baseline is one house, a few months.

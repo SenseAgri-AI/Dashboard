@@ -20,7 +20,7 @@ Example farmer wording:
 
 > **Water use is unusually low in A-frame 1**
 >
-> A-frame 1 recorded 0 L while A-frame 2 recorded 180 L in the last 3 hours. Please check the water supply and pressure in A-frame 1. The normal difference range is 0–60 L.
+> A-frame 1 recorded 0 L while A-frame 2 recorded N L in the last 3 hours. Please check the water supply and pressure in A-frame 1. The normal difference range is 0–M L.
 
 ## 2. Six-hour divergence alert
 
@@ -30,7 +30,7 @@ Example farmer wording:
 
 > **Large difference in water use**
 >
-> The two A-frames differed by 240 L in the last 6 hours. The normal difference range is 0–110 L. Please check both water lines and pressure.
+> The two A-frames differed by N L in the last 6 hours. The normal difference range is 0–M L. Please check both water lines and pressure.
 
 ## 3. Daily divergence alert
 
@@ -40,7 +40,7 @@ Example farmer wording:
 
 > **Yesterday's water difference was unusually high**
 >
-> The two A-frames differed by 620 L yesterday. The normal daily difference range is 0–290 L. Please check the water system and compare the two frames.
+> The two A-frames differed by N L yesterday. The normal daily difference range is 0–M L. Please check the water system and compare the two frames.
 
 The numbers above illustrate message structure only. Production messages must use the evaluated interval and its actual baseline.
 

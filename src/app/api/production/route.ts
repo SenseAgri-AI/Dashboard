@@ -100,7 +100,7 @@ export async function GET(request: Request) {
     const flock = flockCounts(TOTAL_HENS, cumulativeMortality);
     const liveHens = flock.liveHens ?? 1; // only used as a divisor below, guarded by TOTAL_HENS > 0
     const hdep = TOTAL_HENS > 0 ? (totalEggs / liveHens) * 100 : null;
-    // houseHens is the flock housed when the daily log began (Oct 2025, point of lay); live hens and the
+    // houseHens is the flock housed when the daily log began; live hens and the
     // mortality rate both count logged deaths against it (docs/live-hens.md).
     const mortalityRate = flock.mortalityPct;
 

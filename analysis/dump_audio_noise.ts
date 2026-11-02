@@ -1,7 +1,7 @@
 // One-off: dump the farm's audio_noise history to CSV for the night-acoustics investigation.
 // Reuses the app's proven InfluxDB client (src/lib/influxdb) so we connect exactly like the app does.
 //   run:  npx tsx analysis/dump_audio_noise.ts     (from the repo root)
-//   env:  FARM_ID (default farm_anike_001), DAYS (default 30)
+//   env:  FARM_ID (required), DAYS (default 30)
 import { readFileSync, writeFileSync } from "fs";
 
 // Load .env.local so the influx client sees the same config/credentials the app uses.
@@ -12,7 +12,7 @@ try {
   }
 } catch { /* no .env.local — rely on defaults + ~/.aws creds */ }
 
-const FARM = process.env.FARM_ID ?? "farm_anike_001";
+const FARM = process.env.FARM_ID ?? (() => { throw new Error("set FARM_ID"); })();
 const DAYS = Number(process.env.DAYS ?? 30);
 
 async function main() {

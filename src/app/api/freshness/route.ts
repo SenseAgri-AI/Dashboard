@@ -53,8 +53,9 @@ export async function GET() {
     meters.length
       ? queryInflux<{ device_id: unknown; last: unknown }>(`SELECT device_id, MAX(time) AS last FROM sensors WHERE farm_id = '${f}' AND device_id IN (${ids}) AND pulse_total IS NOT NULL AND time > now() - ${LOOKBACK} GROUP BY device_id`)
       : Promise.resolve([]),
-    // Per house climate sensor (30 days, so a sensor that died last week still shows as silent).
-    queryInflux<{ device_id: unknown; last: unknown }>(`SELECT device_id, MAX(time) AS last FROM sensors WHERE farm_id = '${f}' AND device_type = 'AM308-1' AND time > now() - interval '30 days' GROUP BY device_id`),
+    // Per house climate sensor, same 7-day window: a silent sensor is flagged for up to a week, and one that
+    // was replaced or removed drops out after that instead of nagging for a month.
+    queryInflux<{ device_id: unknown; last: unknown }>(`SELECT device_id, MAX(time) AS last FROM sensors WHERE farm_id = '${f}' AND device_type = 'AM308-1' AND time > now() - ${LOOKBACK} GROUP BY device_id`),
   ]);
   const val = (r: PromiseSettledResult<number | null>) => (r.status === "fulfilled" ? r.value : undefined);
 

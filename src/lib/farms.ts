@@ -19,7 +19,7 @@ export interface PriceTier {
 }
 
 export interface FarmConfig {
-  /** InfluxDB `farm_id` tag value, e.g. "farm_anike_001". */
+  /** InfluxDB `farm_id` tag value, e.g. "farm_example_001". */
   farmId: string;
   /** Google Sheet ID backing this farm's DailyLog / Houses / Prices tabs. */
   spreadsheetId: string;
@@ -27,7 +27,7 @@ export interface FarmConfig {
   sheetRange: string;
   waterDeviceId: string;
   feedDeviceId: string;
-  /** Hens per house, e.g. { house1: 4479 }. */
+  /** Hens per house, e.g. { house1: 1000 }. */
   houseHens: Record<string, number>;
   priceTiers: PriceTier[];
   waterLitresPerPulse: number;
@@ -44,7 +44,7 @@ export interface FarmConfig {
 }
 
 /** Allowed `farmId` format. Every Influx/Athena query interpolates farmId, so it is checked once here
- *  when the config is loaded (e.g. "farm_anike_001"; underscores are allowed because real ids use them). */
+ *  when the config is loaded (e.g. "farm_example_001"; underscores are allowed because real ids use them). */
 export const FARM_ID_RE = /^[a-z0-9_-]+$/;
 export function isValidFarmId(id: unknown): id is string {
   return typeof id === "string" && id.length > 0 && id.length <= 64 && FARM_ID_RE.test(id);

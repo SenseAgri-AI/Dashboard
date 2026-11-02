@@ -41,7 +41,7 @@ just ended (measured), the same way the Night box uses last night. Labels follow
 dates: from sunset to midnight the heading reads "Tomorrow · outside vs inside" and the range is "inside
 today (measured)"; from midnight to sunrise the heading is "Today & tonight" and the range is "inside
 yesterday (measured)". If an inside figure is still blank it says why:
-"No inside reading since 1 Nov, 12:41" (sensor quiet over 90 min), "Day just started", or "No inside
+"No inside reading since D Mon, HH:MM" (sensor quiet over 90 min), "Day just started", or "No inside
 readings in this period".
 
 ## Hot inside likely (house's own afternoon gain)
@@ -49,9 +49,8 @@ readings in this period".
 *As a farmer, when a warm (not hot) day will still make my house hot, I want to be told in the morning, so I
 open up and start fans before the heat builds.*
 
-On 2 Nov the forecast peak was 28 °C, below the 30 °C "hot afternoon" trigger, yet the house reached
-32–34 °C on most of the previous 8 days (about 3–6 °C above outside at peak). The hot-day prompt now also
-fires when:
+A warm day can stay below the 30 °C "hot afternoon" trigger outside while the house, a few degrees above
+outside at peak, still passes 32 °C. The hot-day prompt now also fires when:
 
 - the outside forecast peak is at least `heatStartC` (27 °C), and
 - that peak plus the house's usual gain reaches `insideHotC` (32 °C, the Today card's dry-bulb amber).
@@ -61,16 +60,15 @@ outside max of at least `gainMinOutsideC` (24 °C; cool days overstate it becaus
 needing at least `minGainDays` (4). Fans are suggested `fansLeadHours` before outside reaches
 `insideHotC − gain`. Since 2 Nov the gain for a coming day is wind-adjusted (see "Wind-adjusted house gain" below); the median is still what the "why" line quotes and the fallback when wind is missing.
 
-Example (real data, 2 Nov 08:00): "Hot inside likely this afternoon (about 33 °C): consider opening up and
-fans on before 12:00" / "Forecast 28 °C outside around 15:00, and on 7 warm days this past week the house
-peaked about 5 °C above outside." Replay of the last 8 days: it would have fired on the 30 Oct – 2 Nov hot
-spell (inside reached 32–34 °C) and stayed quiet on 28 Oct (24 °C outside, inside 30 °C). All thresholds
-PROVISIONAL and per-farm.
+Example: "Hot inside likely this afternoon (about 33 °C): consider opening up and fans on before 12:00" /
+"Forecast 28 °C outside around 15:00, and on 7 warm days this past week the house peaked about 5 °C above
+outside." A replay on recent days fired on the hot spell and stayed quiet on a mild day (private findings).
+All thresholds PROVISIONAL and per-farm.
 
 ## Cooler outside now: dry-heat backstop
 
-The flush-heat prompt needed inside to *feel* 27.8 °C+. In dry heat the felt index reads low: on 1 Nov at
-17:00 the house was 29.1 °C at 33 % RH ("feels" 26 °C) with 25.6 °C outside, and no prompt showed. It now
+The flush-heat prompt needed inside to *feel* 27.8 °C+. In dry heat the felt index reads low: a house at 29 °C and 33 % RH "feels" 26 °C, so with a cooler outside
+no prompt showed. It now
 also fires when inside air is at least `warmInsideC` (29 °C, PROVISIONAL) and outside is 3 °C+ cooler; the
 "why" says the air is dry but the heat is still there.
 

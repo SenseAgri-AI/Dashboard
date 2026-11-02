@@ -9,7 +9,7 @@ try {
   }
 } catch { /* defaults + ~/.aws */ }
 
-const FARM = process.env.FARM_ID ?? "farm_anike_001";
+const FARM = process.env.FARM_ID ?? (() => { throw new Error("set FARM_ID"); })();
 const HOUSE = process.env.HOUSE_ID ?? "house1";
 const DAYS = Number(process.env.DAYS ?? 30);
 

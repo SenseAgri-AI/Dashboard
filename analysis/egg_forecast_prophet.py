@@ -27,14 +27,14 @@ WORKGROUP    = "senseagri"
 STAGING_DIR  = "s3://senseagri-dev-athena-results/"
 DATABASE     = "senseagri_silver"
 
-FARM_ID      = "farm_anike_001"
+FARM_ID      = os.environ["FARM_ID"]  # required
 HOUSE_ID     = "house1"
 
 # The flock ramps from onset of lay to a plateau over ~4 weeks. That ramp is a
 # different regime from steady production; for an *operational* forecast we train
 # on the mature laying period. Set to None to use the whole lay history instead
 # (then prefer growth="logistic" with a cap — see note at bottom).
-TRAIN_START  = "2025-11-10"
+TRAIN_START  = os.environ.get("TRAIN_START")  # e.g. the end of the lay ramp; None = all data
 
 HOLDOUT_DAYS = 21     # backtest window held out from the tail of real data
 HORIZON_DAYS = 30     # days to forecast beyond the last observation

@@ -90,9 +90,9 @@ export const DEFAULT_VENT_THRESHOLDS: VentThresholds = {
   airOutMinC: 16,          // PROVISIONAL
   airOutMaxC: 28,
   airOutMaxRainPct: 50,
-  stormRainPct: 70,        // 2 Nov call: "likely" in plain words; 50–60 % is common on summer afternoons
-  stormGustKmh: 50,        // 2 Nov call: ~"strong breeze/near gale"; tomorrow's storm forecast 65 km/h
-  stormDropC: 6,           // 2 Nov call: today's storm showed ~9 °C forecast drop; routine evening cooling is 4–5 °C/h
+  stormRainPct: 70,        // PROVISIONAL: "likely" in plain words
+  stormGustKmh: 50,        // PROVISIONAL: ~"strong breeze/near gale"
+  stormDropC: 6,           // PROVISIONAL: above routine evening cooling
   forecastOffC: 5,         // houses here run at or above outside by day
   stormRhRainPct: 40,      // PROVISIONAL (2 Nov, Code Reviewer): pads lift RH while cooling
   stormRecoverC: 2,        // PROVISIONAL (2 Nov)
@@ -342,8 +342,8 @@ export function buildVentilation(input: VentInput): VentView {
     // in the forecast nearby (≥ stormRhRainPct within ±3 h), never on its own.
     const rainSome = hours.some((h) => Math.abs(h.t - tn) <= 3 * H && (h.rainPct ?? 0) >= t.stormRhRainPct);
     const rhJump = rainSome && cur.rhPct != null && cur.rhPct - recentMinRh >= t.stormRhRise;
-    // Compare with the warmest forecast hour within ±1 h, not just the nearest one: on 2 Nov the forecast put
-    // the storm's drop in the next hour, so the nearest hour already read cool while the house was cool.
+    // Compare with the warmest forecast hour within ±1 h, not just the nearest one: a forecast can put the
+    // storm's drop an hour late, so the nearest hour already reads cool while the house is cool.
     const nearOut = hours.filter((h) => Math.abs(h.t - tn) <= H).map((h) => h.tempC);
     if (!nearOut.length) return null;
     const ok = cur.tempC <= Math.max(...nearOut) - t.forecastOffC && recentMax - cur.tempC >= 4 && (rainNear || rhJump);

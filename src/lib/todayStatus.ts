@@ -68,20 +68,18 @@ export const DEFAULT_TODAY_THRESHOLDS: TodayThresholds = {
   /** Last night's flock sleep score below this = "Disturbed" (same 60 as the sleep tile's red band). */
   nightScore: { amber: 60 },
   coldC: { amber: 10, dwellMinutes: 60 }, // PROVISIONAL (2 Nov)
-  // 1400 ppm = the existing danger band in thresholds.ts. Backtest: ~15 episodes in 6 months, real.
+  // 1400 ppm = the existing danger band in thresholds.ts. Backtest: rare, real episodes.
   co2Sustained: { ppm: 1400, dwellMinutes: 60 },
-  // PROVISIONAL. Backtest (3 Oct – 2 Nov 2026, Influx 30-min averages, backtest.md): 8 days (1.9/week), 7 of them
-  // followed by amber heat the same day (median ~3 h later); 7 of 12 amber-heat days warned. A level-only rule
-  // (≥ 28 °C) fired 6/week with 48 % precision, so the rise is what makes it useful.
+  // PROVISIONAL. Backtest (Influx 30-min averages, private findings): most warnings were followed by amber heat
+  // the same day; a level-only rule (≥ 28 °C) fired far more often with poor precision, so the rise is what makes it useful.
   warmingFast: { riseC: 3, windowMinutes: 60, floorC: 28 },
-  // Backtest (Dec 2025 – Oct 2026): 5 amber / 2 red episodes; a single-day ≥3 pt rule fired on 20 % of days.
+  // Backtest (private findings): a few episodes; a single-day ≥3 pt rule fired far too often.
   hdepDrop: { pts: 5, amberDays: 2, redDays: 3, baselineDays: 7, minBaselineDays: 3, plausibleMinPct: 20, plausibleMaxPct: 100 },
-  // Backtest: day rule 2 days a year; week rule 1 episode. Few real events to validate against.
+  // Backtest: few real events to validate against.
   mortality: { minDeaths: 3, dayFactor: 2, baselineDays: 7, weekMin: 7, weekFactor: 2, priorWeeks: 4 },
-  // Backtest (14 Apr – 31 Oct 2026, 185 days, docs/water-use-check.md): 11 days flagged. Farm rule 5 amber
-  // + 4 red days, mostly the 9–24 Oct drop; line rule 2, incl. the 17 Sep day Meter 1 read 0 L. PROVISIONAL.
+  // Backtest: docs/water-use-check.md (figures in the private findings). PROVISIONAL.
   waterDrop: { frac: 0.7, amberDays: 2, redDays: 3, baselineDays: 14, minBaselineDays: 10, minBaselineL: 300, lineFrac: 0.3, otherFrac: 0.7, minLineBaselineL: 100, maxAgeDays: 2 },
-  // night_disturbance fired 17 times in 7 weeks; only the 2-night poor-sleep rule affects Birds.
+  // night_disturbance fires often; only the 2-night poor-sleep rule affects Birds.
   birdsAlertTypes: ["sleep_decline"],
 };
 
@@ -186,7 +184,7 @@ export type TodayInput = {
   waterMeterNames?: string[];
   /** undefined = freshness endpoint failed. */
   climateLastMs?: number | null;
-  /** Last reading per house climate sensor (when the house has more than one); lastMs null = none in 30 days. */
+  /** Last reading per house climate sensor (when the house has more than one); lastMs null = none in 7 days. */
   climateSensors?: { name: string; lastMs: number | null }[];
   /** Last reading per silo radar; lastMs undefined = that check failed. */
   siloRadars?: { name: string; lastMs: number | null | undefined }[];
@@ -514,7 +512,7 @@ export function dataLine(input: TodayInput, t: TodayThresholds): TodayLine {
   const climateFresh = fresh[0].rag === "green";
   if (climateFresh && sensors.length >= 2) for (const c of sensors) {
     const f = streamFreshness("climate", c.name, c.lastMs, input.now, t);
-    if (needsYou(f.rag)) fresh.push({ ...f, rag: "amber", text: `${f.text === "no data this week" ? "no data this month" : f.text}; house numbers are from the other sensor only` });
+    if (needsYou(f.rag)) fresh.push({ ...f, rag: "amber", text: `${f.text}; house numbers are from the other sensor only` });
   }
   const stale = fresh.filter((f) => needsYou(f.rag));
   let line: TodayLine = stale.length

@@ -3,7 +3,7 @@
 // The "Flock noise" welfare feature. Noise level per minute lives in the same InfluxDB as sensor
 // telemetry (`audio_noise` measurement); spike anomalies are JSON events in the raw S3 bucket, each
 // pointing at a ~30 s WAV clip in the media-inference bucket. Reads only — the edge service writes.
-// POC scope: farm_anike_001 / house1 / mic_001. See acoustic-feature-handover.md.
+// POC scope: one farm, one house, one mic. See acoustic-feature-handover.md.
 
 import { S3Client, ListObjectsV2Command, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";

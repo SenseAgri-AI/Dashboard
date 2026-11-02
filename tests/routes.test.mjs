@@ -80,3 +80,29 @@ test('ventilation route: forecast fetch has a timeout; a failed forecast still r
   assert.equal(body.forecastError, true);
   assert.equal(body.inside.length, 1);
 });
+
+test('freshness route: 403 without farm access; every query is scoped to the caller farm', async () => {
+  const sqls = [];
+  const mk = (farm) => load('src/app/api/freshness/route.ts', {
+    'next/server': { NextResponse: { json: (body, init) => ({ body, status: init?.status ?? 200 }) } },
+    '@/lib/farms': { FarmAccessError, getFarmForRequest: async () => { if (!farm) throw new FarmAccessError('no access'); return farm; } },
+    '@/lib/todayStatus': { mergeThresholds: () => ({}) },
+    '@/lib/influxdb': { queryInflux: async (q) => { sqls.push(q); return []; } },
+  });
+  const denied = await mk(null).GET();
+  assert.equal(denied.status, 403);
+  assert.equal(sqls.length, 0);
+  await mk({ farmId: "f1' OR '1'='1", timezoneOffset: 2, waterMeters: [{ deviceId: 'aaaa000000000001', name: 'Meter 1' }] }).GET();
+  assert.ok(sqls.length >= 3);
+  for (const q of sqls) assert.match(q, /farm_id = 'f1'' OR ''1''=''1'/); // quotes escaped, never a bare OR
+});
+
+test('timeoutSignal: native AbortSignal.timeout or a timer fallback', async () => {
+  const T = load('src/lib/timeoutSignal.ts', {}, { AbortSignal, AbortController, setTimeout });
+  assert.ok(T.timeoutSignal(1000) instanceof AbortSignal);
+  const old = load('src/lib/timeoutSignal.ts', {}, { AbortSignal: { timeout: undefined }, AbortController, setTimeout });
+  const s = old.timeoutSignal(5);
+  assert.equal(s.aborted, false);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(s.aborted, true);
+});

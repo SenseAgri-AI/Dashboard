@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import VentilationView, { type VentData } from "@/components/VentilationView";
+import { timeoutSignal } from "@/lib/timeoutSignal";
 
 // Ventilation: outside forecast vs inside readings, with plain-language suggestions.
 // See docs/ventilation.md for the user story behind each block.
@@ -19,7 +20,7 @@ export default function VentilationPage() {
     let alive = true;
     const load = async () => {
       try {
-        const res = await fetch("/api/ventilation", { signal: AbortSignal.timeout(30_000) }); // a hung request shows the error, not "Loading…" forever
+        const res = await fetch("/api/ventilation", { signal: timeoutSignal(30_000) }); // a hung request shows the error, not "Loading…" forever
         if (!res.ok) throw new Error(String(res.status));
         const d = await res.json();
         if (alive) { setData(d); setNow(Date.now()); setError(false); }

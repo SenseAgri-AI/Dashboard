@@ -39,19 +39,21 @@ ax.legend(loc="upper right", fontsize=9)
 plt.show()
 
 # %%
-# Zoom: a window with clear fan changes + the real bird disturbance (08–10 Aug), night shaded.
-seg = df[(df["t_sast"] >= "2026-08-08") & (df["t_sast"] < "2026-08-11")]
+# Zoom: a window with clear fan changes + a real bird disturbance, night shaded.
+ZOOM_FROM = pd.Timestamp(os.environ.get("ZOOM_FROM", str(df["t_sast"].max().normalize() - pd.Timedelta(days=3))))
+ZOOM_TO = ZOOM_FROM + pd.Timedelta(days=3)
+seg = df[(df["t_sast"] >= ZOOM_FROM) & (df["t_sast"] < ZOOM_TO)]
 fig, (a1, a2) = plt.subplots(2, 1, figsize=(14, 7), sharex=True)
 a1.plot(seg["t_sast"], seg["noise_db_mean"], color="#2A8E9A", lw=.8, label="noise level")
 a1.plot(seg["t_sast"], seg["floor"], color="#002E35", lw=1.6, label="adaptive floor (fans/bg)")
-a1.set_ylabel("dBFS"); a1.set_title("Zoom 08–10 Aug — floor follows the fan steps"); a1.legend(fontsize=9)
+a1.set_ylabel("dBFS"); a1.set_title("Zoom — floor follows the fan steps"); a1.legend(fontsize=9)
 # bird signal = level above floor
 a2.axhline(0, color="#999", lw=.6)
 a2.fill_between(seg["t_sast"], 0, seg["bird"].clip(lower=0), color="#B91C1C", alpha=.5)
 a2.set_ylabel("dB above floor"); a2.set_title("Bird signal (level − adaptive floor) — spikes = flock up, fans removed")
 # shade night on both
 for ax in (a1, a2):
-    for d in pd.date_range("2026-08-07", "2026-08-11"):
+    for d in pd.date_range(ZOOM_FROM - pd.Timedelta(days=1), ZOOM_TO):
         ax.axvspan(d + pd.Timedelta(hours=20), d + pd.Timedelta(hours=29), color="#000", alpha=.05)
 plt.show()
 
