@@ -110,3 +110,4 @@ Dylan asked for these to be decided, not left provisional:
 - `stormGustKmh` 50 km/h: strong enough to drive rain through open curtains.
 - `forecastOffC` 5 °C: by day these houses run at or above outside, so 5 °C below plus a sharp drop means the forecast is stale.
 All are per-farm overridable via `ventilation` in the farm config.
+- Home placement (2 Nov): the heads-up sits inside the status band, right under the Today card and above the health dial on a phone (full width under both on a wide screen). Phone order: Today card → heads-up → health dial → This week → Farm overview → Houses.

@@ -122,10 +122,10 @@ export default function HomePage() {
             : <div className="sa-gauge-card" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 150, width: "100%", color: "var(--t3)", fontSize: 12 }}>Loading…</div>}
         </div>
         <TodayCard ready={today.prod && today.env} daily={today.daily} lastLogDate={today.lastLogDate} climate={today.climate} extras={attention} narrow={isNarrow} />
+        {/* Hot afternoon / storm / cold night ahead (docs/ventilation.md). On a phone it sits right under the
+            Today card, above the health dial: the two things a farmer can act on come first. */}
+        <WeatherHeadsUp style={{ gridColumn: "1 / -1", ...(isNarrow ? { order: 1 } : {}) }} />
       </section>
-
-      {/* Hot afternoon / cold night ahead, from the Ventilation page's own rules (docs/ventilation.md). */}
-      <WeatherHeadsUp />
 
       {/* Last 7 days vs the 7 before: eggs, deaths, water, hottest inside day (docs/this-week.md). */}
       <ThisWeekCard ready={today.prod} daily={today.daily} narrow={isNarrow} />
