@@ -107,6 +107,9 @@ export type Prompt = { id: string; level: "act" | "plan"; text: string; why: str
  *  `when`: the period's farm-local date vs now. `insideWhen`: the date of the `inside` range. */
 export type PeriodRow = { period: Period; outside: Range; inside: Range; insideUsual: Range; partial: boolean; upcoming?: boolean;
   when?: "today" | "tomorrow"; insideWhen?: "today" | "yesterday" };
+/** Hens drink far more on hot afternoons; a blocked line matters most then. */
+const DRINKERS = "Birds drink more in the heat: check drinkers are flowing.";
+
 export type DayOutlook = { label: string; dayMax: number | null; nightMin: number | null; hot: boolean; cold: boolean;
   /** Likely inside peak (outside high + this house's usual warm-day gain); null on cool days or without enough history. */
   insideMax: number | null; insideHot: boolean };
@@ -291,9 +294,9 @@ export function buildVentilation(input: VentInput): VentView {
     const fans = `consider opening up and fans on ${by > now ? `before ${hhmm(by)}` : "now"}`;
     prompts.push(hotOutside ? { id: "hot-day", level: by - now < 12 * H ? "act" : "plan",
       text: `Hot ${when} forecast (${r0(peak.tempC)} °C around ${hhmm(peak.t)}): ${fans}`,
-      why: `Outside reaches ${t.heatStartC} °C from about ${hhmm(warmFrom.t)}.` } : { id: "hot-day", level: by - now < 12 * H ? "act" : "plan",
+      why: `Outside reaches ${t.heatStartC} °C from about ${hhmm(warmFrom.t)}. ${DRINKERS}` } : { id: "hot-day", level: by - now < 12 * H ? "act" : "plan",
       text: `Hot inside likely ${when === "afternoon" ? "this afternoon" : "tomorrow"} (about ${r0(peak.tempC + houseGain!)} °C): ${fans}`,
-      why: `Forecast ${r0(peak.tempC)} °C outside around ${hhmm(peak.t)}, and on ${gains.length} warm days this past week the house peaked about ${r0(houseGain!)} °C above outside.` });
+      why: `Forecast ${r0(peak.tempC)} °C outside around ${hhmm(peak.t)}, and on ${gains.length} warm days this past week the house peaked about ${r0(houseGain!)} °C above outside. ${DRINKERS}` });
     break;
   }
 
@@ -383,4 +386,9 @@ export function parseOpenMeteo(j: unknown): { outside: OutsideHour[]; sun: SunDa
     });
   }
   return { outside, sun };
+}
+
+/** The one prompt worth a line on Home: an "act" hot afternoon or cold night ahead, or null. */
+export function headsUpPrompt(prompts: Prompt[]): Prompt | null {
+  return prompts.find((p) => p.level === "act" && (p.id === "hot-day" || p.id === "cold-night")) ?? null;
 }

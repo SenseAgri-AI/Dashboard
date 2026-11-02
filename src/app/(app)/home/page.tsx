@@ -7,6 +7,7 @@ import HouseHdepChart from "@/components/HouseHdepChart";
 import { buildAttention, type AttentionAlert } from "@/lib/attention"; // folded into the Today card
 import TodayCard, { type TodayClimate } from "@/components/TodayCard";
 import ThisWeekCard from "@/components/ThisWeekCard";
+import WeatherHeadsUp from "@/components/WeatherHeadsUp";
 import type { DailyRow } from "@/lib/todayStatus";
 
 type House = { id: string; name: string; startDate: string; startAgeDays: number; startingHens: number };
@@ -123,6 +124,9 @@ export default function HomePage() {
         <TodayCard ready={today.prod && today.env} daily={today.daily} lastLogDate={today.lastLogDate} climate={today.climate} extras={attention} narrow={isNarrow} />
       </section>
 
+      {/* Hot afternoon / cold night ahead, from the Ventilation page's own rules (docs/ventilation.md). */}
+      <WeatherHeadsUp />
+
       {/* Last 7 days vs the 7 before: eggs, deaths, water, hottest inside day (docs/this-week.md). */}
       <ThisWeekCard ready={today.prod} daily={today.daily} narrow={isNarrow} />
 
@@ -136,7 +140,7 @@ export default function HomePage() {
           <Stat label="Live hens" value={prod ? (prod.liveHens ?? prod.totalHens).toLocaleString() : "—"} />
           <Stat label={`Eggs (${shortDate(prod?.date)})`} value={prod ? prod.eggs.total.toLocaleString() : "—"} />
           <Stat label="Lay rate (hen-day)" value={prod?.hdep != null ? `${prod.hdep}%` : "—"} />
-          <Stat label="Deaths since housed" value={prod?.mortality.rate != null ? `${prod.mortality.cumulative.toLocaleString()} (${prod.mortality.rate}%)` : "—"} />
+          <Stat label={prod?.mortality.rate != null ? `Deaths since housed (${prod.mortality.rate}%)` : "Deaths since housed"} value={prod?.mortality.rate != null ? prod.mortality.cumulative.toLocaleString() : "—"} />
         </div>
       </section>
 

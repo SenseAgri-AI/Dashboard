@@ -80,3 +80,10 @@ Farmer story: *"Looking at the next three days, I want to know which afternoons 
 
 - Each outlook day shows **inside ~N °C** = outside forecast high + this house's usual warm-day gain (the same median gain as "Hot inside likely": past complete days with outside max ≥ `gainMinOutsideC`, at least `minGainDays` of them). It turns red and bold at `insideHotC` (32 °C).
 - Hidden on days whose outside high is below `gainMinOutsideC` (the gain isn't valid there) and when there isn't enough history. A one-line legend says the inside figure is a likely peak from recent warm days.
+- Both hot-afternoon prompts end their "why" with *"Birds drink more in the heat: check drinkers are flowing."* Farmer story: *"On a hot afternoon, remind me of the one check that matters most besides fans."*
+
+## Home heads-up
+
+Farmer story: *"When I open Home in the morning, warn me about a hot afternoon or a cold night ahead without having to open Ventilation."*
+- `WeatherHeadsUp` (Home, under the Today card) runs the same `buildVentilation` rules on `/api/ventilation` and shows one line only for an **act-level** "Hot …" or "Cold night ahead" prompt (`headsUpPrompt`), linking to Ventilation. Plan-level and other prompts (air out, CO₂, damp) stay on the Ventilation page.
+- Silent when nothing needs doing or the forecast can't load; the Ventilation page shows those states.

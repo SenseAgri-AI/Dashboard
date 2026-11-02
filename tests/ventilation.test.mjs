@@ -266,7 +266,7 @@ test('hot inside likely: a warm (not hot) forecast plus the house\'s own afterno
   const p = v.prompts.find((x) => x.id === 'hot-day');
   assert.ok(p, 'expected a hot-inside prompt');
   assert.match(p.text, /^Hot inside likely this afternoon \(about 33 °C\): consider opening up and fans on before \d\d:00$/);
-  assert.match(p.why, /warm days this past week the house peaked about 5 °C above outside/);
+  assert.match(p.why, /warm days this past week the house peaked about 5 °C above outside\. Birds drink more in the heat: check drinkers are flowing\.$/);
   // 3-day outlook carries the likely inside peak (outside high + gain), flagged when 32 °C+
   assert.deepEqual(plain(v.outlook.map((d) => [d.insideMax, d.insideHot])), [[33, true], [33, true], [33, true]]);
   // a house that stays at or below outside: no prompt for the same forecast
@@ -275,4 +275,11 @@ test('hot inside likely: a warm (not hot) forecast plus the house\'s own afterno
   const short = hotHouse.filter((x) => x.t > morning - 2 * 24 * H && x.t <= morning);
   assert.ok(!ids(V.buildVentilation({ now: morning, outside: warm, sun, inside: short, offsetHours: 2 })).includes('hot-day'));
   assert.ok(V.buildVentilation({ now: morning, outside: warm, sun, inside: short, offsetHours: 2 }).outlook.every((d) => d.insideMax == null)); // no history → no inside guess
+});
+
+test('Home heads-up: only an "act" hot-day or cold-night prompt', () => {
+  const P = (id, level) => ({ id, level, text: id, why: '' });
+  assert.equal(V.headsUpPrompt([P('air-out', 'act'), P('hot-day', 'plan')]), null);
+  assert.equal(V.headsUpPrompt([P('cooler-outside', 'act'), P('hot-day', 'act')]).id, 'hot-day');
+  assert.equal(V.headsUpPrompt([P('cold-night', 'act')]).id, 'cold-night');
 });
