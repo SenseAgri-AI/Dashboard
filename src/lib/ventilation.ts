@@ -389,22 +389,27 @@ export function buildVentilation(input: VentInput): VentView {
 
   // Cold night ahead (tonight only), with the flock's own last night vs usual.
   const tonightMin = tonight?.outside?.min ?? null;
-  const coldNight = night != null && tonightMin != null && tonightMin <= t.coldNightC;
+  // Likely house low tonight: forecast outside min + how this house's night lows compared with outside
+  // on recent nights. Story: in the warm season the house is left open and runs a few degrees below
+  // outside at night, so a 11–12 °C forecast can mean 7–8 °C inside; warn by the house, not only the forecast.
+  const offs = pastNights.map((p) => {
+    const iv = insideIn(inside, p), ov = outsideIn(hours, p);
+    return iv.length >= 6 && ov.length >= 6 ? Math.min(...iv) - Math.min(...ov) : null;
+  }).filter((v): v is number => v != null);
+  const likelyIn = tonightMin != null && offs.length >= t.minGainDays ? r0(tonightMin + median(offs)!) : null;
+  const coldOutside = tonightMin != null && tonightMin <= t.coldNightC;
+  const coldNight = night != null && tonightMin != null && (coldOutside || (likelyIn != null && likelyIn <= t.coldNightC));
   if (coldNight) {
     const lastMin = lastNightInside.length ? Math.min(...lastNightInside) : null;
     const vsUsual = lastMin != null && usualNightMin != null && lastMin <= usualNightMin - t.colderThanUsualC
       ? ` Inside got down to ${r0(lastMin)} °C last night (usual ${r0(usualNightMin)} °C).` : "";
-    // Likely house low tonight: forecast outside min + how this house's night lows compared with outside
-    // on recent nights (houses here track outside closely at night).
-    const offs = pastNights.map((p) => {
-      const iv = insideIn(inside, p), ov = outsideIn(hours, p);
-      return iv.length >= 6 && ov.length >= 6 ? Math.min(...iv) - Math.min(...ov) : null;
-    }).filter((v): v is number => v != null);
-    const likelyIn = offs.length >= t.minGainDays ? r0(tonightMin! + median(offs)!) : null;
     const likely = likelyIn != null ? ` Inside likely about ${likelyIn} °C, going by recent nights.` : "";
     prompts.push({ id: "cold-night", level: night!.start - now < 12 * H ? "act" : "plan",
-      text: `Cold night ahead (min ${r0(tonightMin!)} °C): consider closing curtains and reducing fans by dusk (${hhmm(night!.start)})`,
-      why: `Forecast outside minimum for tonight.${likely}${vsUsual}` });
+      text: coldOutside
+        ? `Cold night ahead (min ${r0(tonightMin!)} °C): consider closing curtains and reducing fans by dusk (${hhmm(night!.start)})`
+        : `Cold night inside likely (about ${likelyIn} °C): consider closing curtains and reducing fans by dusk (${hhmm(night!.start)})`,
+      why: coldOutside ? `Forecast outside minimum for tonight.${likely}${vsUsual}`
+        : `Forecast outside minimum ${r0(tonightMin!)} °C, and on recent nights the house ran about ${r0(-median(offs)!)} °C below outside.${vsUsual}` });
   }
 
   // High CO₂ while it's cold outside: don't shut the house completely.

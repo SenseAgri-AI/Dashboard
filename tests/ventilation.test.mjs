@@ -106,6 +106,15 @@ test('cold night ahead, with the flock baseline', () => {
   assert.ok(ids(view(mild, inside(calmInside), V.mergeVentThresholds({ coldNightC: 12 }))).includes('cold-night'));
 });
 
+test('cold night by the house: an 11 °C forecast, but the open house runs ~3 °C below outside at night', () => {
+  const mild = outside((h, d) => (d === 8 && (h >= 19 || h < 5) ? 11 : 18));
+  const opened = inside((h) => ({ tempC: h >= 19 || h < 5 ? 15 : 24, rhPct: 60, co2: 900 })); // nights 15 vs 18 outside
+  const p = view(mild, opened).prompts.find((x) => x.id === 'cold-night');
+  assert.ok(p, 'expected a cold-night prompt from the inside estimate');
+  assert.equal(p.text, 'Cold night inside likely (about 8 °C): consider closing curtains and reducing fans by dusk (18:40)');
+  assert.match(p.why, /^Forecast outside minimum 11 °C, and on recent nights the house ran about 3 °C below outside\./);
+});
+
 test('high CO₂ with cold outside → minimum ventilation; not when warm outside or not sustained', () => {
   const co2High = inside((h, d) => ({ tempC: 20, rhPct: 60, co2: d === 8 && h >= 10 ? 1650 : 900 }));
   const coldDay = outside(() => 9);
