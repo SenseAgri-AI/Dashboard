@@ -50,6 +50,10 @@ export type VentThresholds = {
   forecastOffC: number;
   /** Inside humidity rise (points, vs the last ~2 h) that counts as a rain signal for the storm-cooled check. */
   stormRhRise: number;
+  /** After a storm, the house counts as recovered within this many °C of its pre-drop max. */
+  stormRecoverC: number;
+  /** Longest the after-storm quiet lasts (hours) if the house doesn't recover. */
+  stormLatchHours: number;
   /** Forecast rain chance (%, within ±3 h) needed before a humidity jump counts as a storm sign (pads raise humidity too). */
   stormRhRainPct: number;
   airOutMinHours: number;
@@ -88,6 +92,8 @@ export const DEFAULT_VENT_THRESHOLDS: VentThresholds = {
   stormDropC: 6,           // 2 Nov call: today's storm showed ~9 °C forecast drop; routine evening cooling is 4–5 °C/h
   forecastOffC: 5,         // houses here run at or above outside by day
   stormRhRainPct: 40,      // PROVISIONAL (2 Nov, Code Reviewer): pads lift RH while cooling
+  stormRecoverC: 2,        // PROVISIONAL (2 Nov)
+  stormLatchHours: 4,      // PROVISIONAL (2 Nov): today's storm stayed cool ~3 h after the drop
   stormRhRise: 15,         // PROVISIONAL (2 Nov): p95 of daytime 2-h rises; storms gave +20–30
   airOutMinHours: 2,
   airOutMaxHours: 4,
@@ -329,10 +335,19 @@ export function buildVentilation(input: VentInput): VentView {
   const stormNow = insideNow ? stormAt(now, insideNow) : null;
   const stormCooled = stormNow != null;
   // Story: the storm came at 14:30; at 17:00 don't tell me "Rain likely today around 16:00" or "fans on now".
-  // Any 30-min reading today (farm-local) that met the check counts for the rest of the day.
+  // The latest 30-min reading today that met the check starts a latch; it ends once the house recovers
+  // (back within stormRecoverC of the pre-drop max, or at heatStartC) or after stormLatchHours, so a
+  // morning storm followed by a hot, re-heated house still gets its hot prompt (Code Reviewer, 2 Nov).
   const todayKey = localDate(now, offsetHours);
-  const stormedToday = stormCooled || inside.some((x) => x.tempC != null && x.t <= now && x.t >= now - 18 * H
-    && localDate(x.t, offsetHours) === todayKey && stormAt(x.t, { tempC: x.tempC, rhPct: x.rhPct }) != null);
+  let lastStorm: { t: number; recentMax: number } | null = stormNow ? { t: now, recentMax: stormNow.recentMax } : null;
+  if (!lastStorm) for (const x of inside) {
+    if (x.tempC == null || x.t > now || x.t < now - t.stormLatchHours * H || localDate(x.t, offsetHours) !== todayKey) continue;
+    const s0 = stormAt(x.t, { tempC: x.tempC, rhPct: x.rhPct });
+    if (s0) lastStorm = { t: x.t, recentMax: s0.recentMax };
+  }
+  const recovered = lastStorm != null && inside.some((x) => x.tempC != null && x.t > lastStorm!.t && x.t <= now
+    && x.tempC >= Math.min(lastStorm!.recentMax - t.stormRecoverC, t.heatStartC));
+  const stormedToday = lastStorm != null && !recovered;
   // Likely house low tonight: forecast outside min + how this house's night lows compared with outside
   // on recent nights. Story: in the warm season the house is left open and runs a few degrees below
   // outside at night, so a 11–12 °C forecast can mean 7–8 °C inside; warn by the house, not only the forecast.

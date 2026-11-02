@@ -25,8 +25,11 @@ export default function WeatherHeadsUp({ style }: { style?: React.CSSProperties 
       })
       .catch(() => {});
     load();
-    const id = setInterval(load, 10 * 60_000);
-    return () => { live = false; clearInterval(id); };
+    // Skip the poll while the tab is hidden; catch up as soon as it's shown again.
+    const id = setInterval(() => { if (!document.hidden) load(); }, 10 * 60_000);
+    const onShow = () => { if (!document.hidden) load(); };
+    document.addEventListener("visibilitychange", onShow);
+    return () => { live = false; clearInterval(id); document.removeEventListener("visibilitychange", onShow); };
   }, []);
   if (!p) return null;
   const wet = p.id === "storm" || p.id === "storm-now";

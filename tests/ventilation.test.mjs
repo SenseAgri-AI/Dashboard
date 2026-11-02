@@ -378,6 +378,18 @@ test('storm came earlier today: later the same day, no "Rain likely today" or "f
   assert.ok(!ids(v).includes('storm'));
 });
 
+test('morning storm, house re-heats: the hot prompt comes back (latch ends on recovery)', () => {
+  const o = outside((h, d) => (d === 8 ? (h >= 7 && h <= 16 ? 33 : 20) : 22), (h, d) => (d === 8 && h === 8 ? 90 : 0));
+  // 31 °C until 07:00, storm 19 °C 07:30–09:30, back to 33 °C from 10:30; NOW = 12:00
+  const reheat = inside((h, d) => ({ tempC: d === 8 && h >= 10.5 ? 33 : d === 8 && h >= 7.5 ? 19 : d === 8 && h >= 5 ? 31 : 24, rhPct: 60, co2: 800 }));
+  assert.ok(ids(view(o, reheat)).includes('hot-day'));
+  // same storm, house stays cool: still quiet
+  const cool = inside((h, d) => ({ tempC: d === 8 && h >= 7.5 ? 19 : d === 8 && h >= 5 ? 31 : 24, rhPct: 60, co2: 800 }));
+  assert.ok(!ids(view(o, cool)).includes('hot-day'));
+  // ...but only for stormLatchHours: with a 2-h latch the 09:30 storm reading has expired by 12:00
+  assert.ok(ids(view(o, cool, V.mergeVentThresholds({ stormLatchHours: 2 }))).includes('hot-day'));
+});
+
 test('"(peak)" only while the inside sensor is still reporting', () => {
   const o = outside((h, d) => (d === 8 ? (h >= 8 && h <= 9 ? 33 : 20) : 22)); // peak passed by NOW
   const stormed = inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 19 : d === 8 && h >= 9 ? 31 : 24, rhPct: 70, co2: 800 }));
