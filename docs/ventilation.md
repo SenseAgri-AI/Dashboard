@@ -93,7 +93,7 @@ Farmer story: *"When I open Home in the morning, warn me about a hot afternoon o
 
 Farmer story: *"On a hot day the house is wide open. When a storm is coming I want time to close up before wind and rain blow in and the house chills fast."*
 
-- The first daylight hour, for the rest of today or tomorrow, with forecast rain chance ≥ `stormRainPct` (70 %, provisional) gives "Rain likely today|tomorrow around HH:00 (N% chance): be ready to close curtains". It is **act** within 3 h (and then also shows as the Home heads-up), otherwise **plan**.
+- The first daylight hour, for the rest of today or tomorrow, with forecast rain chance ≥ `stormRainPct` (70 %, provisional) gives "Rain likely today|tomorrow around HH:00 (N% chance): be ready to close curtains". It is **act** (and then also shows as the Home heads-up) only within 3 h *and* with a storm sign: a forecast outside drop ≥ `stormDropC` (6 °C) or gusts ≥ `stormGustKmh` (50 km/h). Plain rain stays a **plan** note on Ventilation, so summer afternoons with a routine rain chance don't nag on Home.
 - The why line gives the forecast outside drop around then when it is ≥ 4 °C. Night rain doesn't trigger it.
 - Open-Meteo's storm timing can be an hour or two out, so the wording is "around" and "be ready", never a time to close.
 - **Storm already came:** when the house has just dropped ≥ 4 °C in about 2 h *and* sits ≥ `forecastOffC` (5 °C) below the forecast outside temperature, today's forecast is treated as out of date: no "Hot … fans on now" and no "Rain likely today" for today (tomorrow's prompts still show). Both signs are needed, so a pad-cooled house that simply runs below outside still gets its hot-day prompt. Farmer story: *"After the storm the house is cool; don't tell me to put the fans on."*
@@ -101,3 +101,12 @@ Farmer story: *"On a hot day the house is wide open. When a storm is coming I wa
 - **Today, after the peak:** once the forecast peak hour has passed (or a storm has cooled the house), the Today card shows the **measured** inside maximum so far as "inside N °C (peak)" instead of the estimate. Farmer story: *"In the evening, show me how hot it actually got, not the morning guess."*
 - The why line adds "Gusts up to about N km/h." when forecast gusts (Open-Meteo `wind_gusts_10m`, now fetched) reach `stormGustKmh` (50, provisional) between an hour before and two hours after the rain hour.
 - **Cold night ahead** why line adds "Inside likely about N °C, going by recent nights." = forecast outside minimum + the median (inside night low − outside night low) over recent nights (at least `minGainDays` of them). Farmer story: *"Tell me how cold the house itself will get, not just the weather."* Houses here track outside closely at night (details in the private findings).
+
+### Threshold calls (2 Nov)
+
+Dylan asked for these to be decided, not left provisional:
+- `stormRainPct` 70 %: "likely" in plain words; 50–60 % chances are common on summer afternoons.
+- `stormDropC` 6 °C: routine evening cooling is 4–5 °C an hour, so 6 °C+ around a rain hour points to a storm front.
+- `stormGustKmh` 50 km/h: strong enough to drive rain through open curtains.
+- `forecastOffC` 5 °C: by day these houses run at or above outside, so 5 °C below plus a sharp drop means the forecast is stale.
+All are per-farm overridable via `ventilation` in the farm config.

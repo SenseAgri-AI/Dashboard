@@ -42,6 +42,8 @@ export type VentThresholds = {
   stormRainPct: number;
   /** Forecast gusts at/above this around the rain hour → mentioned in the why line. */
   stormGustKmh: number;
+  /** Forecast outside drop (°C, 2 h before vs 2 h after the rain hour) that, like strong gusts, makes "Rain likely" urgent. */
+  stormDropC: number;
   /** Inside this far below the forecast outside temperature now → today's forecast is out of date (e.g. a storm came early): skip today's hot prompt. */
   forecastOffC: number;
   airOutMinHours: number;
@@ -74,8 +76,9 @@ export const DEFAULT_VENT_THRESHOLDS: VentThresholds = {
   airOutMinC: 16,          // PROVISIONAL
   airOutMaxC: 28,
   airOutMaxRainPct: 50,
-  stormRainPct: 70,        // PROVISIONAL
-  stormGustKmh: 50,        // PROVISIONAL
+  stormRainPct: 70,        // 2 Nov call: "likely" in plain words; 50–60 % is common on summer afternoons
+  stormGustKmh: 50,        // 2 Nov call: ~"strong breeze/near gale"; tomorrow's storm forecast 65 km/h
+  stormDropC: 6,           // 2 Nov call: today's storm showed ~9 °C forecast drop; routine evening cooling is 4–5 °C/h
   forecastOffC: 5,         // houses here run at or above outside by day
   airOutMinHours: 2,
   airOutMaxHours: 4,
@@ -343,7 +346,10 @@ export function buildVentilation(input: VentInput): VentView {
     const day0 = localDate(wet.t, offsetHours) === localDate(now, offsetHours) ? "today" : "tomorrow";
     const gusts = hours.filter((h) => h.t >= wet.t - H && h.t <= wet.t + 2 * H && h.gustKmh != null).map((h) => h.gustKmh as number);
     const gust = gusts.length ? Math.max(...gusts) : null;
-    prompts.push({ id: "storm", level: wet.t - now < 3 * H ? "act" : "plan",
+    // Summer afternoons often carry a rain chance; only a real storm sign (big outside drop or strong gusts)
+    // within 3 h is urgent (and reaches Home). Plain rain stays a plan-level note on Ventilation.
+    const severe = (from != null && to != null && from - to >= t.stormDropC) || (gust != null && gust >= t.stormGustKmh);
+    prompts.push({ id: "storm", level: severe && wet.t - now < 3 * H ? "act" : "plan",
       text: `Rain likely ${day0} around ${hhmm(wet.t)} (${r0(wet.rainPct!)}% chance): be ready to close curtains`,
       why: (from != null && to != null && from - to >= 4
         ? `Forecast outside drops from about ${r0(from)} °C to ${r0(to)} °C around then; storms can chill an open house fast.`

@@ -311,7 +311,11 @@ test('storm: rain likely in daylight → be ready to close curtains; none for ni
   assert.equal(p.level, 'plan');
   assert.deepEqual(plain(v.outlook.map((d) => d.rainPct)), [10, 90, 10]); // outlook carries the day's highest rain chance
   // today 14:00, two hours from NOW (12:00) → act
-  assert.equal(view(outside(sine(16, 28), (h, d) => (d === 8 && h === 14 ? 80 : 0))).prompts.find((x) => x.id === 'storm').level, 'act');
+  // today 14:00, two hours from NOW (12:00): plain rain stays plan; with a big outside drop or strong gusts → act
+  assert.equal(view(outside(sine(16, 28), (h, d) => (d === 8 && h === 14 ? 80 : 0))).prompts.find((x) => x.id === 'storm').level, 'plan');
+  const dropToday = (h, d) => (d === 8 && h >= 14 && h <= 16 ? 18 : sine(16, 28)(h));
+  assert.equal(view(outside(dropToday, (h, d) => (d === 8 && h === 14 ? 80 : 0))).prompts.find((x) => x.id === 'storm').level, 'act');
+  assert.equal(view(outside(sine(16, 28), (h, d) => (d === 8 && h === 14 ? 80 : 0)).map((x) => ({ ...x, gustKmh: 60 }))).prompts.find((x) => x.id === 'storm').level, 'act');
   // night-time rain or 60 %: no prompt
   assert.ok(!ids(view(outside(sine(16, 28), (h, d) => (d === 9 && h === 22 ? 95 : 0)))).includes('storm'));
   assert.ok(!ids(view(outside(sine(16, 28), () => 60))).includes('storm'));
