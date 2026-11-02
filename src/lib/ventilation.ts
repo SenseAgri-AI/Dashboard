@@ -283,7 +283,7 @@ export function buildVentilation(input: VentInput): VentView {
     if (!ahead.length) continue;
     const peak = ahead.reduce((a, b) => (b.tempC > a.tempC ? b : a));
     const hotOutside = peak.tempC >= t.hotDayC;
-    const insideLikely = houseGain != null && houseGain > 0 && peak.tempC >= t.heatStartC && peak.tempC + houseGain >= t.insideHotC;
+    const insideLikely = houseGain != null && houseGain > 0 && peak.tempC >= t.heatStartC && r0(peak.tempC + houseGain) >= t.insideHotC; // the "about N °C" we show, so text and trigger agree
     if (!hotOutside && !insideLikely) continue;
     // Fans before the outside reaches the level that, with the usual gain, makes the house hot.
     const startC = hotOutside ? t.heatStartC : Math.min(t.heatStartC, t.insideHotC - houseGain!);

@@ -283,3 +283,12 @@ test('Home heads-up: only an "act" hot-day or cold-night prompt', () => {
   assert.equal(V.headsUpPrompt([P('cooler-outside', 'act'), P('hot-day', 'act')]).id, 'hot-day');
   assert.equal(V.headsUpPrompt([P('cold-night', 'act')]).id, 'cold-night');
 });
+
+test('hot inside likely: fires when the shown "about N °C" reaches 32 (rounded), not below', () => {
+  const warm = outside(sine(16, 28));
+  const morning = Date.parse('2026-11-01T06:00:00Z');
+  const house = (peakC) => inside((h) => ({ tempC: h >= 12 && h < 17 ? peakC : 22, rhPct: 40, co2: 600 })).filter((x) => x.t <= morning);
+  const at = (peakC) => V.buildVentilation({ now: morning, outside: warm, sun, inside: house(peakC), offsetHours: 2 });
+  assert.match(at(31.5).prompts.find((x) => x.id === 'hot-day').text, /about 32 °C/);
+  assert.ok(!ids(at(31.4)).includes('hot-day'));
+});
