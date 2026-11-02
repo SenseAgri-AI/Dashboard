@@ -250,3 +250,20 @@ test('after midnight, before sunrise: the Day box is today and the inside range 
   assert.equal(mid.when, 'today');
   assert.equal(mid.insideWhen, 'today');
 });
+
+test('hot inside likely: a warm (not hot) forecast plus the house\'s own afternoon gain', () => {
+  // past days: outside peaks 28, inside peaks 33 (gain 5); today forecast 28 → ~33 inside
+  const warm = outside(sine(16, 28));
+  const hotHouse = inside((h) => ({ tempC: h >= 12 && h < 17 ? 33 : 22, rhPct: 40, co2: 600 }));
+  const morning = Date.parse('2026-11-01T06:00:00Z'); // 08:00 SAST
+  const v = V.buildVentilation({ now: morning, outside: warm, sun, inside: hotHouse.filter((x) => x.t <= morning), offsetHours: 2 });
+  const p = v.prompts.find((x) => x.id === 'hot-day');
+  assert.ok(p, 'expected a hot-inside prompt');
+  assert.match(p.text, /^Hot inside likely this afternoon \(about 33 °C\): consider opening up and fans on before \d\d:00$/);
+  assert.match(p.why, /warm days this past week the house peaked about 5 °C above outside/);
+  // a house that stays at or below outside: no prompt for the same forecast
+  assert.ok(!ids(V.buildVentilation({ now: morning, outside: warm, sun, inside: inside(calmInside).filter((x) => x.t <= morning), offsetHours: 2 })).includes('hot-day'));
+  // too few days of history: no gain, no prompt
+  const short = hotHouse.filter((x) => x.t > morning - 2 * 24 * H && x.t <= morning);
+  assert.ok(!ids(V.buildVentilation({ now: morning, outside: warm, sun, inside: short, offsetHours: 2 })).includes('hot-day'));
+});

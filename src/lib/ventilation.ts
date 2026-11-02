@@ -13,6 +13,14 @@ export type VentThresholds = {
   /** Fans/opening suggested this many hours before outside first reaches `heatStartC`. */
   heatStartC: number;
   fansLeadHours: number;
+  /** "Hot inside likely": outside peak + the house's usual afternoon gain over outside reaches this
+   *  (same 32 °C as the Today card's dry-bulb backstop). Gain = median of (inside max − outside max)
+   *  over the last `baselineNights` complete days, needing at least `minGainDays`. */
+  insideHotC: number;
+  minGainDays: number;
+  /** Only warm days (outside max at or above this) count towards the gain: on cool days birds' own heat
+   *  makes the gap bigger and would overstate it. */
+  gainMinOutsideC: number;
   /** Inside CO₂ held at or above this for `co2DwellMinutes` while outside is at or below `co2ColdOutsideC`. */
   co2Ppm: number;
   co2DwellMinutes: number;
@@ -43,6 +51,9 @@ export const DEFAULT_VENT_THRESHOLDS: VentThresholds = {
   hotDayC: 30,             // PROVISIONAL
   heatStartC: 27,          // PROVISIONAL
   fansLeadHours: 1,
+  insideHotC: 32,          // PROVISIONAL; = Today card dryBulbC.amber
+  minGainDays: 4,
+  gainMinOutsideC: 24,     // PROVISIONAL
   co2Ppm: 1400,            // same as the Today card (existing danger band)
   co2DwellMinutes: 60,
   co2ColdOutsideC: 15,     // PROVISIONAL
@@ -242,21 +253,35 @@ export function buildVentilation(input: VentInput): VentView {
   const prompts: Prompt[] = [];
   const hhmm = (ms: number) => localHHMM(ms, offsetHours);
 
-  // Hot afternoon (today if the heat is still ahead, otherwise tomorrow).
+  // Hot afternoon (today if the heat is still ahead, otherwise tomorrow). Two triggers: the outside
+  // forecast alone is hot, or a warm forecast plus this house's own usual afternoon gain over outside
+  // (houses here peak ~3–6 °C above outside, so a 28 °C day can mean ~33 °C inside).
+  const gains = pastDays.map((p) => {
+    const iv = insideIn(inside, p), ov = outsideIn(hours, p);
+    return iv.length >= 6 && ov.length >= 6 && Math.max(...ov) >= t.gainMinOutsideC ? Math.max(...iv) - Math.max(...ov) : null;
+  }).filter((g): g is number => g != null);
+  const houseGain = gains.length >= t.minGainDays ? Math.max(0, median(gains)!) : null;
   const hotDays = all.filter((p) => p.kind === "day" && p.end > now).slice(0, 2);
   for (const p of hotDays) {
     const dh = hours.filter((h) => h.t >= p.start && h.t < p.end);
     const ahead = dh.filter((h) => h.t >= now - H); // the heat still to come (current hour included)
     if (!ahead.length) continue;
     const peak = ahead.reduce((a, b) => (b.tempC > a.tempC ? b : a));
-    if (peak.tempC < t.hotDayC) continue;
-    const warmFrom = dh.find((h) => h.tempC >= t.heatStartC) ?? peak;
+    const hotOutside = peak.tempC >= t.hotDayC;
+    const insideLikely = houseGain != null && houseGain > 0 && peak.tempC >= t.heatStartC && peak.tempC + houseGain >= t.insideHotC;
+    if (!hotOutside && !insideLikely) continue;
+    // Fans before the outside reaches the level that, with the usual gain, makes the house hot.
+    const startC = hotOutside ? t.heatStartC : Math.min(t.heatStartC, t.insideHotC - houseGain!);
+    const warmFrom = dh.find((h) => h.tempC >= startC) ?? peak;
     const by = warmFrom.t - t.fansLeadHours * H;
     // Label by the farm's local date (before sunrise, today's daylight is still "today").
     const when = localDate(p.start, offsetHours) === localDate(now, offsetHours) ? "afternoon" : "tomorrow";
-    prompts.push({ id: "hot-day", level: by - now < 12 * H ? "act" : "plan",
-      text: `Hot ${when} forecast (${r0(peak.tempC)} °C around ${hhmm(peak.t)}): consider opening up and fans on ${by > now ? `before ${hhmm(by)}` : "now"}`,
-      why: `Outside reaches ${t.heatStartC} °C from about ${hhmm(warmFrom.t)}.` });
+    const fans = `consider opening up and fans on ${by > now ? `before ${hhmm(by)}` : "now"}`;
+    prompts.push(hotOutside ? { id: "hot-day", level: by - now < 12 * H ? "act" : "plan",
+      text: `Hot ${when} forecast (${r0(peak.tempC)} °C around ${hhmm(peak.t)}): ${fans}`,
+      why: `Outside reaches ${t.heatStartC} °C from about ${hhmm(warmFrom.t)}.` } : { id: "hot-day", level: by - now < 12 * H ? "act" : "plan",
+      text: `Hot inside likely ${when === "afternoon" ? "this afternoon" : "tomorrow"} (about ${r0(peak.tempC + houseGain!)} °C): ${fans}`,
+      why: `Forecast ${r0(peak.tempC)} °C outside around ${hhmm(peak.t)}, and on ${gains.length} warm days this past week the house peaked about ${r0(houseGain!)} °C above outside.` });
     break;
   }
 

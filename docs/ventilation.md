@@ -43,3 +43,26 @@ today (measured)"; from midnight to sunrise the heading is "Today & tonight" and
 yesterday (measured)". If an inside figure is still blank it says why:
 "No inside reading since 1 Nov, 12:41" (sensor quiet over 90 min), "Day just started", or "No inside
 readings in this period".
+
+## Hot inside likely (house's own afternoon gain)
+
+*As a farmer, when a warm (not hot) day will still make my house hot, I want to be told in the morning, so I
+open up and start fans before the heat builds.*
+
+On 2 Nov the forecast peak was 28 °C, below the 30 °C "hot afternoon" trigger, yet the house reached
+32–34 °C on most of the previous 8 days (about 3–6 °C above outside at peak). The hot-day prompt now also
+fires when:
+
+- the outside forecast peak is at least `heatStartC` (27 °C), and
+- that peak plus the house's usual gain reaches `insideHotC` (32 °C, the Today card's dry-bulb amber).
+
+The gain is the median of (inside daily max − outside daily max) over the last 7 complete days with an
+outside max of at least `gainMinOutsideC` (24 °C; cool days overstate it because of the birds' own heat),
+needing at least `minGainDays` (4). Fans are suggested `fansLeadHours` before outside reaches
+`insideHotC − gain`.
+
+Example (real data, 2 Nov 08:00): "Hot inside likely this afternoon (about 33 °C): consider opening up and
+fans on before 12:00" / "Forecast 28 °C outside around 15:00, and on 7 warm days this past week the house
+peaked about 5 °C above outside." Replay of the last 8 days: it would have fired on the 30 Oct – 2 Nov hot
+spell (inside reached 32–34 °C) and stayed quiet on 28 Oct (24 °C outside, inside 30 °C). All thresholds
+PROVISIONAL and per-farm.
