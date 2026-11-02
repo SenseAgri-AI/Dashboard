@@ -420,6 +420,7 @@ export function buildVentilation(input: VentInput): VentView {
   // forecast alone is hot, or a warm forecast plus this house's own usual afternoon gain over outside
   // (houses here peak ~3–6 °C above outside, so a 28 °C day can mean ~33 °C inside).
   const hotDays = all.filter((p) => p.kind === "day" && p.end > now).slice(0, 2);
+  let fansNowToday = false; // today's hot-day prompt says "fans on now"
   for (const p of hotDays) {
     const dh = hours.filter((h) => h.t >= p.start && h.t < p.end);
     const ahead = dh.filter((h) => h.t >= now - H); // the heat still to come (current hour included)
@@ -447,6 +448,7 @@ export function buildVentilation(input: VentInput): VentView {
     const when = localDate(p.start, offsetHours) === localDate(now, offsetHours) ? "afternoon" : "tomorrow";
     const warmNote = warmEnd != null ? ` The warmest sensor usually peaks about ${r0(warmEnd)} °C above the house average.` : "";
     const fans = `consider opening up and fans on ${by > now ? `before ${hhmm(by)}` : "now"}`;
+    if (today && by <= now) fansNowToday = true;
     prompts.push(hotOutside ? { id: "hot-day", level: by - now < 12 * H ? "act" : "plan",
       text: `Hot ${when} forecast (${r0(peak.tempC)} °C around ${hhmm(peak.t)}): ${fans}`,
       why: `Outside reaches ${t.heatStartC} °C from about ${hhmm(warmFrom.t)}.${warmNote} ${DRINKERS}` } : { id: "hot-day", level: by - now < 12 * H ? "act" : "plan",
@@ -520,8 +522,7 @@ export function buildVentilation(input: VentInput): VentView {
   // Cooler outside right now while it's warm inside: flush heat.
   const warmInside = insideNow != null && ((insideNow.feltC != null && insideNow.feltC >= t.warmInsideFeltC) || insideNow.tempC >= t.warmInsideC);
   // Not when the hot-day prompt already says "fans on now" for today: one instruction, not two.
-  const hotNowToday = prompts.some((p) => p.id === "hot-day" && p.level === "act" && / fans on now$/.test(p.text) && !/tomorrow/.test(p.text));
-  if (insideNow && warmInside && !hotNowToday && outsideNow != null && insideNow.tempC - outsideNow >= t.coolerOutsideDeltaC) {
+  if (insideNow && warmInside && !fansNowToday && outsideNow != null && insideNow.tempC - outsideNow >= t.coolerOutsideDeltaC) {
     prompts.push({ id: "cooler-outside", level: "act",
       text: `Cooler outside now (${r0(outsideNow)} °C vs ${r0(insideNow.tempC)} °C inside): consider opening up or fans on to flush heat`,
       why: insideNow.feltC != null && insideNow.feltC >= t.warmInsideFeltC ? `Inside feels ${r0(insideNow.feltC)} °C.`
