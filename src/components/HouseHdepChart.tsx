@@ -120,9 +120,9 @@ export default function HouseHdepChart({ house, height = 150 }: { house: House; 
       </div>
       <div style={{ width: "100%", height }}>
         {raw === null && !err ? (
-          <Placeholder text="Loading HDEP…" />
+          <Placeholder text="Loading lay rate…" />
         ) : err ? (
-          <Placeholder text="Couldn't load HDEP." />
+          <Placeholder text="Couldn't load the lay-rate chart." />
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={pts} margin={{ top: 6, right: 10, bottom: 0, left: -20 }}>

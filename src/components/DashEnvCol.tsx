@@ -182,11 +182,11 @@ export default function DashEnvCol({ env, narrow, house = null }: { env: EnvData
         chart={<EnvChart data={env?.temperature.sparkline ?? []} domain={[8, 36]} ticks={[10, 20, 30]} band={[18, 26]} tipUnit="°C" height={H} house={house} />} />
       <EnvTile name="Humidity" value={r0(env?.humidity.current)} unit="% RH" status={env?.humidity.status} normal="50–70%"
         chart={<EnvChart data={env?.humidity.sparkline ?? []} domain={[20, 105]} ticks={[30, 60, 90]} band={[50, 70]} tipUnit="%" height={H} house={house} />} />
-      <EnvTile name="Felt temp · THI" value={r1(thiCurrent)} unit="°C" status={thiStatus} normal={`<${THI_COMFORT}° comfort`}
+      <EnvTile name="Felt temperature" value={r1(thiCurrent)} unit="°C" status={thiStatus} normal={`comfortable below ${THI_COMFORT}°`}
         chart={<EnvChart data={thiSpark} domain={[10, 34]} ticks={[14, 22, 30]} band={[10, THI_COMFORT]} threshold={THI_EXTREME} tipUnit="°C" height={H} house={house} />} />
       <EnvTile name="CO₂ / Ventilation" value={r0(env?.co2.current)} unit="ppm" status={env?.co2.status} normal="max 1,400"
         chart={<EnvChart data={env?.co2.sparkline ?? []} domain={[300, 2200]} ticks={[500, 1200, 1900]} threshold={1400} tipUnit="ppm" height={H} house={house} />} />
-      <EnvTile name="Air quality" value={env?.tvoc.current != null ? `${Math.round(env.tvoc.current * 100) / 100}` : null} unit="TVOC" normal="±2σ baseline"
+      <EnvTile name="Air quality" value={env?.tvoc.current != null ? `${Math.round(env.tvoc.current * 100) / 100}` : null} unit="TVOC" normal="shaded = usual range"
         chart={<EnvChart data={env?.tvoc.sparkline ?? []} domain={tvocScale.domain} ticks={tvocScale.ticks} band={tvocStd > 0 ? [Math.max(0, Math.round((tvocMean - 2 * tvocStd) * 10) / 10), Math.round((tvocMean + 2 * tvocStd) * 10) / 10] : undefined} tipUnit="idx" height={H} house={house} />} />
 
       {/* Particulates — fine + coarse dust on one plot */}

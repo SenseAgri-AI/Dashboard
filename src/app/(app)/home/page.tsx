@@ -133,7 +133,7 @@ export default function HomePage() {
           {houses.length > 1 && <Stat label="Houses" value={String(houses.length)} />}
           <Stat label="Live hens" value={prod ? prod.totalHens.toLocaleString() : "—"} />
           <Stat label={`Eggs (${shortDate(prod?.date)})`} value={prod ? prod.eggs.total.toLocaleString() : "—"} />
-          <Stat label="Hen-day %" value={prod?.hdep != null ? `${prod.hdep}%` : "—"} />
+          <Stat label="Lay rate (hen-day)" value={prod?.hdep != null ? `${prod.hdep}%` : "—"} />
           <Stat label="Mortality rate" value={prod?.mortality.rate != null ? `${prod.mortality.rate}%` : "—"} />
         </div>
       </section>
@@ -170,7 +170,7 @@ function HouseCard({ house, narrow }: { house: House; narrow: boolean }) {
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)", marginBottom: 3 }}>
-          Hen-day % and hen-housed % vs typical layer curve (not breed-specific)
+          Lay rate (hen-day % and hen-housed %) vs a typical layer curve (not breed-specific)
         </div>
         <HouseHdepChart house={house} height={narrow ? 132 : 150} />
       </div>
