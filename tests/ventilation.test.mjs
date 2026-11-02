@@ -347,14 +347,21 @@ test('storm came early: house just dropped and sits well below the forecast → 
   assert.ok(ids(view(o, inside(() => ({ tempC: 19, rhPct: 60, co2: 800 })))).includes('hot-day'));
 });
 
-test('fans/pads cooled a hot house (no rain signal): the hot prompt stays; a humidity jump counts as rain', () => {
+test('fans/pads cooled a hot house (no rain signal): the hot prompt stays; a humidity jump counts only with some rain forecast', () => {
   const dry = outside((h, d) => (d === 8 ? (h >= 11 && h <= 16 ? 33 : 20) : 22)); // no rain forecast
   const cooled = (rh) => inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 19 : d === 8 && h >= 9 ? 31 : 24, rhPct: rh(h, d), co2: 800 }));
   // same sharp drop, humidity steady: fans/pads, not a storm → still told about the afternoon
   assert.ok(ids(view(dry, cooled(() => 45))).includes('hot-day'));
   assert.ok(!ids(view(dry, cooled(() => 45))).includes('storm-now'));
-  // humidity up ~35 points with the drop: rain has come even though the forecast missed it
-  assert.ok(!ids(view(dry, cooled((h, d) => (d === 8 && h >= 11 ? 80 : 45)))).includes('hot-day'));
+  // humidity up ~35 points with the drop but no rain forecast: could be pads → hot prompt stays, no "cooled fast"
+  const padded = view(dry, cooled((h, d) => (d === 8 && h >= 11 ? 80 : 45)));
+  assert.ok(ids(padded).includes('hot-day'));
+  assert.ok(!ids(padded).includes('storm-now'));
+  // same jump with a 50 % rain chance within 3 h (below the 70 % "rain near" level): counts as a storm
+  const showery = outside((h, d) => (d === 8 ? (h >= 11 && h <= 16 ? 33 : 20) : 22), (h, d) => (d === 8 && h === 14 ? 50 : 0));
+  const wet = view(showery, cooled((h, d) => (d === 8 && h >= 11 ? 80 : 45)));
+  assert.ok(!ids(wet).includes('hot-day'));
+  assert.ok(ids(wet).includes('storm-now'));
 });
 
 test('storm came earlier today: later the same day, no "Rain likely today" or "fans on now" either', () => {

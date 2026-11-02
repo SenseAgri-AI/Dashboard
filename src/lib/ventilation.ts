@@ -48,6 +48,8 @@ export type VentThresholds = {
   forecastOffC: number;
   /** Inside humidity rise (points, vs the last ~2 h) that counts as a rain signal for the storm-cooled check. */
   stormRhRise: number;
+  /** Forecast rain chance (%, within ±3 h) needed before a humidity jump counts as a storm sign (pads raise humidity too). */
+  stormRhRainPct: number;
   airOutMinHours: number;
   /** The suggested window is the warmest stretch of at most this many hours. */
   airOutMaxHours: number;
@@ -82,6 +84,7 @@ export const DEFAULT_VENT_THRESHOLDS: VentThresholds = {
   stormGustKmh: 50,        // 2 Nov call: ~"strong breeze/near gale"; tomorrow's storm forecast 65 km/h
   stormDropC: 6,           // 2 Nov call: today's storm showed ~9 °C forecast drop; routine evening cooling is 4–5 °C/h
   forecastOffC: 5,         // houses here run at or above outside by day
+  stormRhRainPct: 40,      // PROVISIONAL (2 Nov, Code Reviewer): pads lift RH while cooling
   stormRhRise: 15,         // PROVISIONAL (2 Nov): p95 of daytime 2-h rises; storms gave +20–30
   airOutMinHours: 2,
   airOutMaxHours: 4,
@@ -274,7 +277,8 @@ export function buildVentilation(input: VentInput): VentView {
   // 3-day outlook, today first: outside high/low, plus the likely inside peak on warm days.
   // Signs today's forecast is out of date because a storm has come: the house has just dropped sharply
   // (≥ 4 °C in ~2 h), sits well below the forecast outside temperature, AND there is a rain signal
-  // (rain forecast ≥ stormRainPct within ±2 h, or inside humidity up ≥ stormRhRise points). Fans/pads
+  // (rain forecast ≥ stormRainPct within ±2 h, or inside humidity up ≥ stormRhRise points with rain ≥
+  // stormRhRainPct forecast within ±3 h). Fans/pads
   // pulling a hot house down give the first two but not the third, so their hot prompt stays.
   // Checked at a given time `tn` against the inside reading `cur` then; returns the pre-drop max when it holds.
   const stormAt = (tn: number, cur: { tempC: number; rhPct: number | null }) => {
@@ -282,7 +286,10 @@ export function buildVentilation(input: VentInput): VentView {
     const recentMax = Math.max(-Infinity, ...recent.filter((x) => x.tempC != null).map((x) => x.tempC as number));
     const recentMinRh = Math.min(Infinity, ...recent.filter((x) => x.rhPct != null).map((x) => x.rhPct as number));
     const rainNear = hours.some((h) => Math.abs(h.t - tn) <= 2 * H && (h.rainPct ?? 0) >= t.stormRainPct);
-    const rhJump = cur.rhPct != null && cur.rhPct - recentMinRh >= t.stormRhRise;
+    // Evaporative pads also lift humidity while cooling, so a humidity jump only counts with some rain
+    // in the forecast nearby (≥ stormRhRainPct within ±3 h), never on its own.
+    const rainSome = hours.some((h) => Math.abs(h.t - tn) <= 3 * H && (h.rainPct ?? 0) >= t.stormRhRainPct);
+    const rhJump = rainSome && cur.rhPct != null && cur.rhPct - recentMinRh >= t.stormRhRise;
     // Compare with the warmest forecast hour within ±1 h, not just the nearest one: on 2 Nov the forecast put
     // the storm's drop in the next hour, so the nearest hour already read cool while the house was cool.
     const nearOut = hours.filter((h) => Math.abs(h.t - tn) <= H).map((h) => h.tempC);
@@ -329,7 +336,7 @@ export function buildVentilation(input: VentInput): VentView {
   // now, while closing curtains still helps. Only with a rain signal, so ordinary evening cooling stays quiet.
   if (stormCooled) prompts.push({ id: "storm-now", level: "act",
     text: `House cooled fast (${r0(stormNow!.recentMax)} → ${r0(insideNow!.tempC)} °C in about 2 h): if a storm is passing, check curtains`,
-    why: `${stormNow!.rainNear ? "Rain is forecast around now" : "Inside humidity jumped"}; an open house can chill fast in wind and rain. Early warning, not a cause.` });
+    why: `${stormNow!.rainNear ? "Rain is forecast around now" : "Inside humidity jumped, with rain in the forecast nearby"}; an open house can chill fast in wind and rain. Early warning, not a cause.` });
 
   // Hot afternoon (today if the heat is still ahead, otherwise tomorrow). Two triggers: the outside
   // forecast alone is hot, or a warm forecast plus this house's own usual afternoon gain over outside
