@@ -152,8 +152,8 @@ export default function FeedTab() {
             <thead>
               <tr style={{ textAlign: "left", color: "var(--t2)" }}>
                 {/* Date, weight and "lasted" first: on a phone they're what fits without scrolling. */}
-                {["Date", "Weight", "Lasted", "House", "Silo", "Feed type", "Batch", "Protein", "Calcium", "Phos", "Energy", ""].map((h) => (
-                  <th key={h} style={{ padding: "8px 10px", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid var(--divider)" }}>{h}</th>
+                {["Date", "Weight", "Lasted", "", "House", "Silo", "Feed type", "Batch", "Protein", "Calcium", "Phos", "Energy", " "].map((h, i) => (
+                  <th key={i} style={{ padding: "8px 10px", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "1px solid var(--divider)" }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -163,6 +163,10 @@ export default function FeedTab() {
                   <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{d.date}</td>
                   <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{weightCell(d.weight)}</td>
                   <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{lastedCell(intakeByDate.get(d.date))}</td>
+                  {/* Edit next to the figures it fixes, so it's in view on a phone; Delete stays at the far end. */}
+                  <td style={{ padding: "8px 10px" }}>
+                    <button onClick={() => edit(d)} style={{ background: "transparent", border: "none", color: "var(--teal)", fontWeight: 700, cursor: "pointer", padding: 0 }}>Edit</button>
+                  </td>
                   <td style={{ padding: "8px 10px", color: "var(--t2)" }}>{houseLabel(d.house)}</td>
                   <td style={{ padding: "8px 10px", fontWeight: 700 }}>{d.silo}</td>
                   <td style={{ padding: "8px 10px" }}>{d.feedType}</td>
@@ -172,12 +176,11 @@ export default function FeedTab() {
                   <td style={{ padding: "8px 10px" }}>{d.phosphorus}</td>
                   <td style={{ padding: "8px 10px" }}>{d.energy}</td>
                   <td style={{ padding: "8px 10px", textAlign: "right", whiteSpace: "nowrap" }}>
-                    <button onClick={() => edit(d)} style={{ background: "transparent", border: "none", color: "var(--teal)", fontWeight: 700, cursor: "pointer", marginRight: 12 }}>Edit</button>
                     <button onClick={() => remove(d)} style={{ background: "transparent", border: "none", color: "var(--danger)", fontWeight: 700, cursor: "pointer" }}>Delete</button>
                   </td>
                 </tr>
               ))}
-              {recent.length === 0 && <ListEmptyRow state={loadState} colSpan={12} what="deliveries" empty="No deliveries logged yet." onRetry={() => { setLoadState("loading"); load(); }} />}
+              {recent.length === 0 && <ListEmptyRow state={loadState} colSpan={13} what="deliveries" empty="No deliveries logged yet." onRetry={() => { setLoadState("loading"); load(); }} />}
             </tbody>
           </table>
         </div>

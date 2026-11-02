@@ -36,3 +36,4 @@ The Recent deliveries table shows Date, Weight and Lasted first, so on a phone (
 *As a farmer logging a silo fill on my phone, I want the few fields that matter in view; the nutrient spec is there when I have the batch label.*
 
 The nutrient spec and cost fields sit in a collapsed "Nutrient spec & cost (optional)" section. It opens by itself when editing a delivery that already has any of them, and otherwise stays as the user leaves it.
+- Recent deliveries: "Edit" sits right after Date, Weight and Lasted, so on a phone it is in view next to the figures it fixes (it scrolls the form into view). "Delete" stays at the far end and still asks to confirm.
