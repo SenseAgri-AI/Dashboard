@@ -59,7 +59,7 @@ fires when:
 The gain is the median of (inside daily max − outside daily max) over the last 7 complete days with an
 outside max of at least `gainMinOutsideC` (24 °C; cool days overstate it because of the birds' own heat),
 needing at least `minGainDays` (4). Fans are suggested `fansLeadHours` before outside reaches
-`insideHotC − gain`.
+`insideHotC − gain`. Since 2 Nov the gain for a coming day is wind-adjusted (see "Wind-adjusted house gain" below); the median is still what the "why" line quotes and the fallback when wind is missing.
 
 Example (real data, 2 Nov 08:00): "Hot inside likely this afternoon (about 33 °C): consider opening up and
 fans on before 12:00" / "Forecast 28 °C outside around 15:00, and on 7 warm days this past week the house
@@ -78,7 +78,7 @@ also fires when inside air is at least `warmInsideC` (29 °C, PROVISIONAL) and o
 
 Farmer story: *"Looking at the next three days, I want to know which afternoons the house itself will get hot, not just the weather, so I can plan fans, water and work around them."*
 
-- Each outlook day shows **inside ~N °C** = outside forecast high + this house's usual warm-day gain (the same median gain as "Hot inside likely": past complete days with outside max ≥ `gainMinOutsideC`, at least `minGainDays` of them). It turns red and bold at `insideHotC` (32 °C).
+- Each outlook day shows **inside ~N °C** = outside forecast high + this house's usual warm-day gain (the same gain as "Hot inside likely", wind-adjusted since 2 Nov: past complete days with outside max ≥ `gainMinOutsideC`, at least `minGainDays` of them). It turns red and bold at `insideHotC` (32 °C).
 - Hidden on days whose outside high is below `gainMinOutsideC` (the gain isn't valid there) and when there isn't enough history. A one-line legend says the inside figure is a likely peak from recent warm days.
 - Both hot-afternoon prompts end their "why" with *"Birds drink more in the heat: check drinkers are flowing."* Farmer story: *"On a hot afternoon, remind me of the one check that matters most besides fans."*
 
