@@ -34,3 +34,4 @@ Farmer story: *"If the egg or deaths chart in Analytics just stops, tell me the 
 - The assistant's history tool already reports the last egg-log date.
 - Live dashboard temperature status messages (`/api/dashboard/summary`) no longer state causes ("birds diverting energy… expect increased feed intake"); they read e.g. "Cold night: N°C inside. Early warning: check curtains and draughts." The Light tile's hint "photoperiod" now reads "shows lights on/off".
 - Analytics noise caption: "Sound level in the house (higher = louder; includes fans, not calibrated). Red dots are sudden loud sounds… tap one to hear the ~30 s clip." (dropped "relative dBFS" and the "POC: house1 / mic_001" note).
+- Egg counting: the big "Total today" card is now "Camera count today" (sub "both A-frames · not the log total"), so it isn't read as the day's egg total.

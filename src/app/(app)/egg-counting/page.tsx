@@ -184,7 +184,7 @@ export default function EggCountingPage() {
             {data!.totals.perCamera.map((c, i) => (
               <TotalCard key={c.cameraId} label={c.label} sub={c.cameraId} value={c.eggsToday} accent={PALETTE[i % PALETTE.length]} />
             ))}
-            <TotalCard label="Total today" sub="both A-frames" value={data!.totals.combined} accent={PRIMARY} highlight />
+            <TotalCard label="Camera count today" sub="both A-frames · not the log total" value={data!.totals.combined} accent={PRIMARY} highlight />
           </div>
 
           {/* Counts over time */}
