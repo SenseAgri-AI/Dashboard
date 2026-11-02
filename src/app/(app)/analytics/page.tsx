@@ -119,7 +119,7 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
   { key: "cum_mortality", label: "Cumulative mortality", unit: "%", env: false },
   { key: "eggs_damaged", label: "Eggs broken / day", unit: "", env: false },
   { key: "breakage_rate", label: "Breakage rate", unit: "%", env: false },
-  { key: "hdep", label: "Hen-day %", unit: "%", env: false },
+  { key: "hdep", label: "Lay rate (hen-day)", unit: "%", env: false },
   { key: "night_rest", label: "Night-rest score", unit: "", env: false },
   { key: "water", label: "Drinking rate", unit: "L", env: false },
   // Feed & water from the silver meters table (daily). Groups plot both members together.
@@ -507,7 +507,7 @@ function SilverExplorer() {
         <div style={GROUP_END}>
           <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
             <Toggle checked={showStd} onChange={setShowStd} disabled={!hdepAxis} accent={STD} label="Standard"
-              title={hdepAxis ? "Overlay the breed-standard lay curve" : "Select Hen-day % to compare against the standard"} />
+              title={hdepAxis ? "Overlay the breed-standard lay curve" : "Select Lay rate to compare against the breed standard"} />
             <Toggle checked={showRange} onChange={setShowRange} label="Min–max" title="Show each metric's daily min–max range" />
             <Toggle checked={overlays} onChange={setOverlays} label="Events" title="Mark schedule changes, events and feed deliveries" />
           </div>
