@@ -63,7 +63,7 @@ export const DEFAULT_VENT_THRESHOLDS: VentThresholds = {
   coldNightC: 10,          // PROVISIONAL; the summary's inside cold-night warning is 14 / 10 °C
   hotDayC: 30,             // PROVISIONAL
   heatStartC: 27,          // PROVISIONAL
-  fansLeadHours: 1,
+  fansLeadHours: 2,        // PROVISIONAL (2 Nov): on recent hot days the house reached 28 °C ~1.5 h before outside reached heatStartC
   insideHotC: 32,          // PROVISIONAL; = Today card dryBulbC.amber
   minGainDays: 4,
   gainMinOutsideC: 24,     // PROVISIONAL

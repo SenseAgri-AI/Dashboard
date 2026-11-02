@@ -72,9 +72,9 @@ test('inside now: felt temperature and the chill estimate (felt − 3 °C)', () 
 });
 
 test('hot afternoon: fans before the heat, only while heat is still ahead', () => {
-  // today: 27.5 °C from 13:00, 33 °C 14:00–17:00 → before 12:00 is now-ish; use a later start
-  const later = view(outside((h, d) => (d === 8 ? (h >= 15 && h <= 17 ? 33 : h >= 14 ? 27.5 : 20) : 22)));
-  assert.equal(later.prompts.find((x) => x.id === 'hot-day').text, 'Hot afternoon forecast (33 °C around 15:00): consider opening up and fans on before 13:00');
+  // today: 27.5 °C from 15:00, 33 °C 16:00–17:00 → fans 2 h before the warm-up
+  const later = view(outside((h, d) => (d === 8 ? (h >= 16 && h <= 17 ? 33 : h >= 15 ? 27.5 : 20) : 22)));
+  assert.equal(later.prompts.find((x) => x.id === 'hot-day').text, 'Hot afternoon forecast (33 °C around 16:00): consider opening up and fans on before 13:00');
   // already warm: "now"
   const already = view(outside((h, d) => (d === 8 ? (h >= 11 && h <= 17 ? 33 : 20) : 22)));
   assert.match(already.prompts.find((x) => x.id === 'hot-day').text, /fans on now$/);
@@ -82,7 +82,7 @@ test('hot afternoon: fans before the heat, only while heat is still ahead', () =
   assert.ok(!ids(view(outside((h, d) => (d === 8 && h < 11 ? 33 : 22)))).includes('hot-day'));
   // tomorrow: planned, not urgent
   const tmr = view(outside((h, d) => (d === 9 && h >= 10 && h <= 16 ? 34 : 20)));
-  assert.equal(tmr.prompts[0].text, 'Hot tomorrow forecast (34 °C around 10:00): consider opening up and fans on before 09:00');
+  assert.equal(tmr.prompts[0].text, 'Hot tomorrow forecast (34 °C around 10:00): consider opening up and fans on before 08:00');
   assert.equal(tmr.prompts[0].level, 'plan');
   // below the farm threshold → nothing; with a lower per-farm threshold → prompt
   const warm = outside((h, d) => (d === 8 && h >= 14 && h <= 16 ? 29 : 20));
@@ -185,7 +185,7 @@ test('hot-day wording uses the farm-local date: before sunrise, today is "aftern
   const o = outside((h, d) => (d === 8 && h >= 11 && h <= 15 ? 33 : 20));
   const v = V.buildVentilation({ now: early, outside: o, sun, inside: inside(calmInside).filter((x) => x.t <= early), offsetHours: 2 });
   const p = v.prompts.find((x) => x.id === 'hot-day');
-  assert.match(p.text, /^Hot afternoon forecast \(33 °C around 11:00\): consider opening up and fans on before 10:00$/);
+  assert.match(p.text, /^Hot afternoon forecast \(33 °C around 11:00\): consider opening up and fans on before 09:00$/);
 });
 
 test('ventilation CO₂: a lone reading after a gap does not count as sustained', () => {
