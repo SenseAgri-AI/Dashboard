@@ -518,6 +518,8 @@ function SilverExplorer() {
           <Group label="Range"><Segmented options={SILVER_RANGES} value={rangeKey} onChange={setRangeKey} /></Group>
         </div>
       </div>
+      {/* Above the chart, so a line that just stops is explained before it is read as a drop. */}
+      {logNotice && <div role="status" style={{ margin: "0 16px 8px", background: "#FFF7ED", border: "1px solid #FED7AA", color: "#9A3412", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600 }}>{logNotice}</div>}
       <div style={CHART_PAD}>
         {loading ? <div style={{ height: 340 }}><Placeholder text="Loading…" /></div>
           : err ? <div style={{ height: 340 }}><Placeholder text={err} /></div>
@@ -530,7 +532,6 @@ function SilverExplorer() {
               labelFormat={(ms) => new Date(ms).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "2-digit" })} house={house} />}
       </div>
       <div className="sa-chart-note" style={NOTE_PAD}>
-        {logNotice && <div role="status" style={{ background: "#FFF7ED", border: "1px solid #FED7AA", color: "#9A3412", borderRadius: 8, padding: "6px 10px", marginBottom: 6, fontWeight: 600 }}>{logNotice}</div>}
         One point per day. Drag across the plot to zoom.
         {overlays && <> Markers: <span style={{ color: PRIMARY, fontWeight: 700 }}>schedule change</span> · <span style={{ color: DANGER, fontWeight: 700 }}>event</span> · <span style={{ color: STD, fontWeight: 700 }}>feed</span>.</>}
       </div>

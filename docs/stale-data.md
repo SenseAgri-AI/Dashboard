@@ -30,7 +30,7 @@ Farmer story: *"I'm not a data engineer; tell me what the line is, and don't tel
 
 Farmer story: *"If the egg or deaths chart in Analytics just stops, tell me the copy is behind, so I don't think I stopped laying or forgot to log."*
 - Analytics daily-log metrics (eggs, sizes, weight, broken eggs, deaths, lay rate, cumulative mortality, breakage) come from the analytics copy of the log (silver), which can fall behind; Home and the Live dashboard read the live log.
-- `/api/analytics/series` returns `logLastDay` (latest day with an egg count) when a daily-log metric is shown. Analytics shows "Daily-log figures here last updated D Mon (N days ago). Home shows the latest log." when it is more than 2 days old (`src/lib/logFreshness.ts`). Climate, water and feed charts don't trigger it.
+- `/api/analytics/series` returns `logLastDay` (latest day with an egg count) when a daily-log metric is shown. Analytics shows "Daily-log figures here last updated D Mon (N days ago). Home shows the latest log." above the chart when it is more than 2 days old (`src/lib/logFreshness.ts`). Climate, water and feed charts don't trigger it.
 - The assistant's history tool already reports the last egg-log date.
 - Live dashboard temperature status messages (`/api/dashboard/summary`) no longer state causes ("birds diverting energy… expect increased feed intake"); they read e.g. "Cold night: N°C inside. Early warning: check curtains and draughts." The Light tile's hint "photoperiod" now reads "shows lights on/off".
 - Analytics noise caption: "Sound level in the house (higher = louder; includes fans, not calibrated). Red dots are sudden loud sounds… tap one to hear the ~30 s clip." (dropped "relative dBFS" and the "POC: house1 / mic_001" note).
