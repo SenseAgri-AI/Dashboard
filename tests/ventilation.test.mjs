@@ -441,3 +441,12 @@ test('warm end note also on the hot-outside prompt', () => {
   assert.match(p.text, /^Hot afternoon forecast/);
   assert.match(p.why, /warmest sensor usually peaks about 2 °C above the house average/);
 });
+
+test('inside now: warm end reading only when it is clearly above the average', () => {
+  const o = outside((h) => sine(18, 28)(h));
+  const base = inside((h, d) => ({ tempC: d < 8 ? sine(18, 33)(h) : 24, rhPct: 60, co2: 900 }));
+  const at = (gap) => view(o, base.map((x) => ({ ...x, hotC: x.tempC == null ? null : x.tempC + gap }))).insideNow;
+  assert.equal(at(1.6).warmC, Math.round((base.at(-1).tempC + 1.6) * 10) / 10);
+  assert.equal(at(0.4).warmC, null);
+  assert.equal(view(o, base).insideNow.warmC, null);
+});

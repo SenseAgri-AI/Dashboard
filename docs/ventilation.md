@@ -142,5 +142,6 @@ pant first. I want to see the warm end too, not only the average.
 - When that gap is at least `warmEndMinC` (1 °C, provisional), each outlook day with an "inside ~N" also shows
   **warm end ~N** (likely peak + gap; today after the peak: the measured warmest reading). Red at `insideHotC` or above.
 - Both hot-day why lines ("Hot afternoon forecast" and "Hot inside likely") add "The warmest sensor usually peaks about N °C above the house average."
+- **Inside now** shows "warm end N °C" under the temperature when the warmest sensor reads at least `warmEndMinC` above the average right now.
 - Triggers are unchanged: prompts still use the house average. Whether hot prompts should use the warm end is a
   decision for Dylan (backtest in the private findings).

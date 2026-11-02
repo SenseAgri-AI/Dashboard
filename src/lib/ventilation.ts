@@ -154,7 +154,8 @@ export type DayOutlook = { label: string; dayMax: number | null; nightMin: numbe
   rainPct: number | null };
 
 export type VentView = {
-  insideNow: { tempC: number; rhPct: number | null; feltC: number | null; chillEstC: number | null; co2: number | null; at: number } | null;
+  /** `warmC`: the warmest sensor's reading, only when it is at least `warmEndMinC` above the average. */
+  insideNow: { tempC: number; rhPct: number | null; feltC: number | null; chillEstC: number | null; co2: number | null; at: number; warmC: number | null } | null;
   outsideNow: number | null;
   /** Time of the newest inside temperature, even when too old for "now" (so a stale sensor can say how old). */
   insideLastAt: number | null;
@@ -237,7 +238,8 @@ export function buildVentilation(input: VentInput): VentView {
   const insideNow = last && now - last.t <= 90 * 60_000 ? (() => {
     const felt = last.rhPct != null && plausibleClimate(last.tempC!, last.rhPct) ? r1(feltTemp(last.tempC!, last.rhPct)) : null;
     return { tempC: r1(last.tempC!), rhPct: last.rhPct != null ? r0(last.rhPct) : null, feltC: felt,
-      chillEstC: felt != null ? r1(felt - t.chillOffsetC) : null, co2: last.co2 != null ? r0(last.co2) : null, at: last.t };
+      chillEstC: felt != null ? r1(felt - t.chillOffsetC) : null, co2: last.co2 != null ? r0(last.co2) : null, at: last.t,
+      warmC: last.hotC != null && Number.isFinite(last.hotC) && last.hotC - last.tempC! >= t.warmEndMinC ? r1(last.hotC) : null };
   })() : null;
   const nowHour = hours.reduce<OutsideHour | null>((b, h) => (Math.abs(h.t - now) < (b ? Math.abs(b.t - now) : Infinity) ? h : b), null);
   const outsideNow = nowHour && Math.abs(nowHour.t - now) <= 90 * 60_000 ? r1(nowHour.tempC) : null;

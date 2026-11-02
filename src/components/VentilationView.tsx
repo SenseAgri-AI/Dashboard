@@ -74,7 +74,7 @@ export default function VentilationView({ data, now, narrow = false }: { data: V
         <h2 style={h2}>Inside now{v.insideNow ? ` · ${localHHMM(v.insideNow.at, data.offsetHours)}` : ""}</h2>
         {v.insideNow ? (
           <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr 1fr" : "repeat(4, 1fr)", gap: 10 }}>
-            <Stat label="Temperature" value={fmt(v.insideNow.tempC)} sub={v.outsideNow != null ? `outside ${fmt(v.outsideNow)}` : undefined} />
+            <Stat label="Temperature" value={fmt(v.insideNow.tempC)} sub={[v.outsideNow != null ? `outside ${fmt(v.outsideNow)}` : "", v.insideNow.warmC != null ? `warm end ${fmt(v.insideNow.warmC)}` : ""].filter(Boolean).join("\n") || undefined} />
             <Stat label="Feels" value={fmt(v.insideNow.feltC)} sub={v.insideNow.rhPct != null ? `RH ${v.insideNow.rhPct}%` : undefined} />
             <Stat label="Chill estimate" value={v.insideNow.chillEstC != null ? `≈${fmt(v.insideNow.chillEstC)}` : "–"} sub={`feels (≤ actual) − ${t.chillOffsetC} °C, rough`} />
             <Stat label="CO₂" value={v.insideNow.co2 != null ? `${v.insideNow.co2.toLocaleString("en-ZA")}` : "–"} sub="ppm" />
@@ -136,7 +136,7 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
     <div>
       <div style={{ fontSize: 10.5, color: MUTED, fontWeight: 700 }}>{label}</div>
       <div style={{ fontSize: 24, fontWeight: 800, color: INK, fontFamily: "var(--font-d)", lineHeight: 1.15 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: MUTED }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 11, color: MUTED, whiteSpace: "pre-line" }}>{sub}</div>}
     </div>
   );
 }
