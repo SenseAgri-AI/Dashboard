@@ -133,6 +133,8 @@ export type DayOutlook = { label: string; dayMax: number | null; nightMin: numbe
   insideMax: number | null; insideHot: boolean;
   /** True when `insideMax` is today's measured maximum so far (after the forecast peak), not an estimate. */
   insideMeasured: boolean;
+  /** Likely inside low for the night after this day, shown only when cold (≤ coldNightC); else null. */
+  insideMinLikely: number | null;
   /** Highest daylight rain chance (%), or null without rain data. */
   rainPct: number | null };
 
@@ -304,6 +306,14 @@ export function buildVentilation(input: VentInput): VentView {
   const todayKey = localDate(now, offsetHours);
   const stormedToday = stormCooled || inside.some((x) => x.tempC != null && x.t <= now && x.t >= now - 18 * H
     && localDate(x.t, offsetHours) === todayKey && stormAt(x.t, { tempC: x.tempC, rhPct: x.rhPct }) != null);
+  // Likely house low tonight: forecast outside min + how this house's night lows compared with outside
+  // on recent nights. Story: in the warm season the house is left open and runs a few degrees below
+  // outside at night, so a 11–12 °C forecast can mean 7–8 °C inside; warn by the house, not only the forecast.
+  const offs = pastNights.map((p) => {
+    const iv = insideIn(inside, p), ov = outsideIn(hours, p);
+    return iv.length >= 6 && ov.length >= 6 ? Math.min(...iv) - Math.min(...ov) : null;
+  }).filter((v): v is number => v != null);
+  const nightOff = offs.length >= t.minGainDays ? median(offs)! : null;
   const insideMax = (dayMax: number | null) => (houseGain != null && dayMax != null && dayMax >= t.gainMinOutsideC ? r0(dayMax + houseGain) : null);
   const outlook: DayOutlook[] = [];
   for (let i = Math.max(dayIdx, 0); dayIdx >= 0 && i < all.length && outlook.length < 3; i++) {
@@ -323,7 +333,10 @@ export function buildVentilation(input: VentInput): VentView {
     const measured = dDate === today0 && insideNow != null && soFar.length >= 6 && ((peakT != null && now > peakT + H) || stormedToday);
     const inMax = measured ? r0(Math.max(...soFar)) : insideMax(dayMax);
     outlook.push({ label: dDate === today0 ? "Today" : dDate === tomorrow0 ? "Tomorrow" : p.label, dayMax, nightMin,
-      hot: dayMax != null && dayMax >= t.hotDayC, cold: nightMin != null && nightMin <= t.coldNightC,
+      hot: dayMax != null && dayMax >= t.hotDayC,
+      // Cold by the outside forecast or by the house's likely low (same rule as the cold-night prompt).
+      cold: nightMin != null && (nightMin <= t.coldNightC || (nightOff != null && r0(nightMin + nightOff) <= t.coldNightC)),
+      insideMinLikely: nightMin != null && nightOff != null && r0(nightMin + nightOff) <= t.coldNightC ? r0(nightMin + nightOff) : null,
       insideMax: inMax, insideHot: (inMax ?? -Infinity) >= t.insideHotC, insideMeasured: measured,
       rainPct: (() => { const r = hours.filter((h) => h.t >= p.start && h.t < p.end && h.rainPct != null).map((h) => h.rainPct as number); return r.length ? r0(Math.max(...r)) : null; })() });
   }
@@ -396,14 +409,7 @@ export function buildVentilation(input: VentInput): VentView {
 
   // Cold night ahead (tonight only), with the flock's own last night vs usual.
   const tonightMin = tonight?.outside?.min ?? null;
-  // Likely house low tonight: forecast outside min + how this house's night lows compared with outside
-  // on recent nights. Story: in the warm season the house is left open and runs a few degrees below
-  // outside at night, so a 11–12 °C forecast can mean 7–8 °C inside; warn by the house, not only the forecast.
-  const offs = pastNights.map((p) => {
-    const iv = insideIn(inside, p), ov = outsideIn(hours, p);
-    return iv.length >= 6 && ov.length >= 6 ? Math.min(...iv) - Math.min(...ov) : null;
-  }).filter((v): v is number => v != null);
-  const likelyIn = tonightMin != null && offs.length >= t.minGainDays ? r0(tonightMin + median(offs)!) : null;
+  const likelyIn = tonightMin != null && nightOff != null ? r0(tonightMin + nightOff) : null;
   const coldOutside = tonightMin != null && tonightMin <= t.coldNightC;
   const coldNight = night != null && tonightMin != null && (coldOutside || (likelyIn != null && likelyIn <= t.coldNightC));
   if (coldNight) {

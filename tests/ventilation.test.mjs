@@ -113,6 +113,10 @@ test('cold night by the house: an 11 °C forecast, but the open house runs ~3 °
   assert.ok(p, 'expected a cold-night prompt from the inside estimate');
   assert.equal(p.text, 'Cold night inside likely (about 8 °C): consider closing curtains and reducing fans by dusk (18:40)');
   assert.match(p.why, /^Forecast outside minimum 11 °C, and on recent nights the house ran about 3 °C below outside\./);
+  // the outlook marks tonight cold by the house too, with the likely inside low
+  const v = view(mild, opened);
+  assert.deepEqual(plain([v.outlook[0].cold, v.outlook[0].insideMinLikely]), [true, 8]);
+  assert.equal(view(mild).outlook[0].insideMinLikely, null); // house warmer than outside at night: nothing extra
 });
 
 test('high CO₂ with cold outside → minimum ventilation; not when warm outside or not sustained', () => {
