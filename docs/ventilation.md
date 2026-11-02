@@ -14,7 +14,7 @@ Rules: `src/lib/ventilation.ts`, tested in `tests/ventilation.test.mjs`. UI: `sr
 | Block | User story |
 |---|---|
 | **Suggestions** (top, "Today" before "Plan") | As a farmer, I want one or two plain suggestions about curtains and fans for today and tonight, so I don't have to read charts to decide. |
-| Hot afternoon: "Hot afternoon forecast (33 °C around 14:00): consider opening up and fans on before 10:00". Day max ≥ `hotDayC` 30 °C; "before" = first hour ≥ `heatStartC` 27 °C minus `fansLeadHours` 2 (provisional, 2 Nov: on recent hot days the house was already at about 28 °C by the time outside reached 27 °C, so one hour was often too late); "now" when that's past. Today, else tomorrow, by the farm's local date (before sunrise it is still "today"). | As a farmer, when a hot afternoon is coming, I want to know by when to open up, so heat doesn't build before I react. |
+| Hot afternoon: "Hot afternoon forecast (33 °C around 14:00): consider opening up and fans on before 10:00". Day max ≥ `hotDayC` 30 °C; "before" = first hour ≥ `heatStartC` 27 °C minus `fansLeadHours` 2 (provisional, 2 Nov: on recent hot days the house was already warm by the time outside reached `heatStartC`, so one hour was often too late); "now" when that's past. Today, else tomorrow, by the farm's local date (before sunrise it is still "today"). | As a farmer, when a hot afternoon is coming, I want to know by when to open up, so heat doesn't build before I react. |
 | Cold night: "Cold night ahead (min 8 °C): consider closing curtains and reducing fans by dusk (18:40)". Tonight's outside min ≤ `coldNightC` 10 °C; mentions last night inside vs the flock's usual when ≥ 3 °C colder. | As a farmer, when a cold night is coming, I want a reminder before dusk, so the birds don't spend the night cold. |
 | High CO₂ + cold outside: "consider minimum ventilation, don't close fully". Inside CO₂ ≥ 1400 ppm for 60 min (same as the Today card; needs one more reading than the dwell spans, so never a lone reading after a gap) and outside now ≤ 15 °C. | As a farmer closing up for the cold, I want to be told when the air is getting bad, so I keep minimum ventilation instead of sealing the house. |
 | Damp when closed up: last night's inside RH max ≥ 80 %, or ≥ 10 pts above the usual night, and a cold night ahead. No ammonia sensor, so RH is the proxy. | As a farmer, I want to know when closing up risks damp litter and ammonia, so I keep some air moving and check litter. |
@@ -126,7 +126,7 @@ Dylan asked for these to be decided, not left provisional:
 - `stormRhRainPct` 40 %: a humidity jump only counts with at least this rain chance within ±3 h (pads raise humidity too).
 - `fansLeadHours` 2 h: on recent hot days the house was already warm by the time outside reached `heatStartC`.
 - `coldNightC` 10 °C now also applies to the likely inside low, not only the outside forecast.
-- Kept `forecastOffC` at 5 °C after a 4-week replay: 4 °C added night-time "cooled fast" lines without catching more storms.
+- Kept `forecastOffC` at 5 °C after a replay: 4 °C added night-time "cooled fast" lines without catching more storms.
 All are per-farm overridable via `ventilation` in the farm config.
 - Home placement (2 Nov): the heads-up sits inside the status band, right under the Today card and above the health dial on a phone (full width under both on a wide screen). Phone order: Today card → heads-up → health dial → This week → Farm overview → Houses.
 

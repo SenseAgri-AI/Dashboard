@@ -73,7 +73,7 @@ export const DEFAULT_VENT_THRESHOLDS: VentThresholds = {
   coldNightC: 10,          // PROVISIONAL; the summary's inside cold-night warning is 14 / 10 °C
   hotDayC: 30,             // PROVISIONAL
   heatStartC: 27,          // PROVISIONAL
-  fansLeadHours: 2,        // PROVISIONAL (2 Nov): on recent hot days the house reached 28 °C ~1.5 h before outside reached heatStartC
+  fansLeadHours: 2,        // PROVISIONAL (2 Nov)
   insideHotC: 32,          // PROVISIONAL; = Today card dryBulbC.amber
   minGainDays: 4,
   gainMinOutsideC: 24,     // PROVISIONAL
@@ -97,7 +97,7 @@ export const DEFAULT_VENT_THRESHOLDS: VentThresholds = {
   stormRhRainPct: 40,      // PROVISIONAL (2 Nov, Code Reviewer): pads lift RH while cooling
   stormRecoverC: 2,        // PROVISIONAL (2 Nov)
   stormLatchHours: 4,      // PROVISIONAL (2 Nov)
-  stormRhRise: 15,         // PROVISIONAL (2 Nov): p95 of daytime 2-h rises; storms gave +20–30
+  stormRhRise: 15,         // PROVISIONAL (2 Nov)
   airOutMinHours: 2,
   airOutMaxHours: 4,
   colderThanUsualC: 3,
