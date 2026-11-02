@@ -85,7 +85,7 @@ Farmer story: *"Looking at the next three days, I want to know which afternoons 
 ## Home heads-up
 
 Farmer story: *"When I open Home in the morning, warn me about a hot afternoon or a cold night ahead without having to open Ventilation."*
-- `WeatherHeadsUp` (Home, under the Today card) runs the same `buildVentilation` rules on `/api/ventilation` and shows one line only for an **act-level** "Hot …" or "Cold night ahead" prompt (`headsUpPrompt`), linking to Ventilation. Plan-level and other prompts (air out, CO₂, damp) stay on the Ventilation page.
+- `WeatherHeadsUp` (Home, under the Today card) runs the same `buildVentilation` rules on `/api/ventilation` and shows one line only for an **act-level** prompt (`headsUpPrompt`), linking to Ventilation. When several are act-level the most urgent wins: storm passing now → storm due within 3 h → hot day → cold night (☂ for rain, ☀ heat, ☾ cold). On Ventilation, act-level suggestions are tagged "Soon" (not "Today": in the evening an act prompt can be for tomorrow morning), and the storm-passing line is listed first. Plan-level and other prompts (air out, CO₂, damp) stay on the Ventilation page.
 - Silent when nothing needs doing or the forecast can't load; the Ventilation page shows those states.
 - The "Hot inside likely" trigger compares the **rounded** estimate (the "about N °C" shown) with `insideHotC`, so the prompt and the outlook's red "inside ~32 °C" always agree. A backtest on the pilot house caught one more hot day this way with no extra false alarms (numbers kept out of the public repo).
 

@@ -23,7 +23,7 @@ const MUTED = "var(--t3)";
 const OUT_C = "#D97706";
 const IN_C = "#0F766E";
 const LEVEL = {
-  act: { dot: "#D97706", bg: "rgba(217,119,6,0.10)", text: "#92400E", word: "Today" },
+  act: { dot: "#D97706", bg: "rgba(217,119,6,0.10)", text: "#92400E", word: "Soon" },
   plan: { dot: "#2A8E9A", bg: "rgba(42,142,154,0.08)", text: "#134E4A", word: "Plan" },
 };
 const fmt = (v: number | null | undefined, unit = "°C") => (v == null ? "–" : `${Math.round(v)}${unit}`);

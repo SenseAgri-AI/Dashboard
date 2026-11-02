@@ -287,6 +287,8 @@ test('Home heads-up: only an "act" hot-day or cold-night prompt', () => {
   assert.equal(V.headsUpPrompt([P('cold-night', 'act')]).id, 'cold-night');
   assert.equal(V.headsUpPrompt([P('storm', 'act')]).id, 'storm');
   assert.equal(V.headsUpPrompt([P('storm', 'plan')]), null);
+  assert.equal(V.headsUpPrompt([P('hot-day', 'act'), P('storm', 'act'), P('storm-now', 'act')]).id, 'storm-now'); // most urgent wins, whatever the order
+  assert.equal(V.headsUpPrompt([P('hot-day', 'act'), P('storm', 'act')]).id, 'storm');
 });
 
 test('hot inside likely: fires when the shown "about N °C" reaches 32 (rounded), not below', () => {

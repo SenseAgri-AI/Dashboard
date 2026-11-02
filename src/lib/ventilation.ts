@@ -311,6 +311,12 @@ export function buildVentilation(input: VentInput): VentView {
   const prompts: Prompt[] = [];
   const hhmm = (ms: number) => localHHMM(ms, offsetHours);
 
+  // First, as the most urgent. Story: a storm has just hit and the house is chilling fast; if I'm away from the house I want to know
+  // now, while closing curtains still helps. Only with a rain signal, so ordinary evening cooling stays quiet.
+  if (stormCooled) prompts.push({ id: "storm-now", level: "act",
+    text: `House cooled fast (${r0(recentMax)} → ${r0(insideNow!.tempC)} °C in about 2 h): if a storm is passing, check curtains`,
+    why: `${rainNear ? "Rain is forecast around now" : "Inside humidity jumped"}; an open house can chill fast in wind and rain. Early warning, not a cause.` });
+
   // Hot afternoon (today if the heat is still ahead, otherwise tomorrow). Two triggers: the outside
   // forecast alone is hot, or a warm forecast plus this house's own usual afternoon gain over outside
   // (houses here peak ~3–6 °C above outside, so a 28 °C day can mean ~33 °C inside).
@@ -341,12 +347,6 @@ export function buildVentilation(input: VentInput): VentView {
       why: `Forecast ${r0(peak.tempC)} °C outside around ${hhmm(peak.t)}, and on ${gains.length} warm days this past week the house peaked about ${r0(houseGain!)} °C above outside. ${DRINKERS}` });
     break;
   }
-
-  // Story: a storm has just hit and the house is chilling fast; if I'm away from the house I want to know
-  // now, while closing curtains still helps. Only with a rain signal, so ordinary evening cooling stays quiet.
-  if (stormCooled) prompts.push({ id: "storm-now", level: "act",
-    text: `House cooled fast (${r0(recentMax)} → ${r0(insideNow!.tempC)} °C in about 2 h): if a storm is passing, check curtains`,
-    why: `${rainNear ? "Rain is forecast around now" : "Inside humidity jumped"}; an open house can chill fast in wind and rain. Early warning, not a cause.` });
 
   // Story: on a hot day the house is wide open; when a storm is coming I want time to close up before
   // wind and rain blow in and the house chills fast. First daylight hour (rest of today or tomorrow)
@@ -471,5 +471,10 @@ export function parseOpenMeteo(j: unknown): { outside: OutsideHour[]; sun: SunDa
 
 /** The one prompt worth a line on Home: an "act" hot afternoon, storm within 3 h or cold night ahead, or null. */
 export function headsUpPrompt(prompts: Prompt[]): Prompt | null {
-  return prompts.find((p) => p.level === "act" && (p.id === "storm-now" || p.id === "hot-day" || p.id === "storm" || p.id === "cold-night")) ?? null;
+  // Most urgent first: a storm passing now, then one due within hours, then heat, then cold.
+  for (const id of ["storm-now", "storm", "hot-day", "cold-night"]) {
+    const p = prompts.find((x) => x.level === "act" && x.id === id);
+    if (p) return p;
+  }
+  return null;
 }
