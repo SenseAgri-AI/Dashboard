@@ -13,6 +13,7 @@ export type TodayClimate = { temperatureC: number | null; humidityPct: number | 
 type FreshnessResponse = {
   streams: { climate?: string | null };
   silos?: { name: string; lastSeen?: string | null }[];
+  climateSensors?: { name: string; lastSeen?: string | null }[];
   water: { name: string; lastSeen?: string | null }[];
   thresholds: TodayThresholds;
   timezoneOffset: number;
@@ -71,6 +72,7 @@ export default function TodayCard({ ready, daily, lastLogDate, climate, extras, 
     alerts: alerts.list, alertsStale: alerts.stale,
     climateLastMs: fresh ? ms(fresh.streams.climate) : undefined, // omitted key = that query failed
     siloRadars: fresh?.silos?.map((r) => ({ name: r.name, lastMs: ms(r.lastSeen) })),
+    climateSensors: fresh?.climateSensors?.map((c) => ({ name: c.name, lastMs: ms(c.lastSeen) ?? null })),
     waterMeters: fresh?.water.map((m) => ({ name: m.name, lastMs: ms(m.lastSeen) })),
     // Loading = no water check yet (not a failure); failed = undefined, which shows the footer.
     waterDays: water === "loading" ? [] : water?.days, waterMeterNames: water === "loading" ? undefined : water?.names,

@@ -36,3 +36,15 @@ Farmer story: *"If the egg or deaths chart in Analytics just stops, tell me the 
 - Live dashboard temperature status messages (`/api/dashboard/summary`) no longer state causes ("birds diverting energy… expect increased feed intake"); they read e.g. "Cold night: N°C inside. Early warning: check curtains and draughts." The Light tile's hint "photoperiod" now reads "shows lights on/off".
 - Analytics noise caption: "Sound level in the house (higher = louder; includes fans, not calibrated). Red dots are sudden loud sounds… tap one to hear the ~30 s clip." (dropped "relative dBFS" and the "POC: house1 / mic_001" note).
 - Egg counting: the big "Total today" card is now "Camera count today" (sub "both A-frames · not the log total"), so it isn't read as the day's egg total.
+
+## One house climate sensor silent (2 Nov)
+
+Story: the house has more than one climate sensor; if one stops, the house numbers quietly become the other
+one's, so "Climate" still looks fresh. I want to know so I check that sensor.
+
+- `/api/freshness` returns `climateSensors` (last reading per AM308-1 sensor over 30 days, named "House sensor 1, 2…"
+  in device-id order), only when the house has two or more.
+- Today card **Sensors** line, amber: "House sensor 2: no data for 4 h; house numbers are from the other sensor only",
+  using the climate stale window (`staleMinutes.climate`). "no data this month" when it has not reported in 30 days.
+- Only while the Climate stream itself is fresh; when every sensor is silent the usual Climate item shows instead.
+- A sensor removed on purpose keeps showing for up to 30 days (until it drops out of the 30-day window).

@@ -46,13 +46,15 @@ export async function GET() {
   const ids = meters.map((m) => `'${m.deviceId}'`).join(", ");
 
   // Only streams the farmer is told about. Sound and the egg camera are SenseAgri ops checks.
-  const [climate, silo, water] = await Promise.allSettled([
+  const [climate, silo, water, sensors] = await Promise.allSettled([
     lastTime(`SELECT MAX(time) AS last FROM sensors WHERE farm_id = '${f}' AND device_type = 'AM308-1' AND time > now() - ${LOOKBACK}`),
     // Per radar: one silent radar must not be hidden by the other one's fresh readings.
     queryInflux<{ device_id: unknown; last: unknown }>(`SELECT device_id, MAX(time) AS last FROM sensors WHERE farm_id = '${f}' AND device_type = 'EM411-RDL' AND time > now() - ${LOOKBACK} GROUP BY device_id`),
     meters.length
       ? queryInflux<{ device_id: unknown; last: unknown }>(`SELECT device_id, MAX(time) AS last FROM sensors WHERE farm_id = '${f}' AND device_id IN (${ids}) AND pulse_total IS NOT NULL AND time > now() - ${LOOKBACK} GROUP BY device_id`)
       : Promise.resolve([]),
+    // Per house climate sensor (30 days, so a sensor that died last week still shows as silent).
+    queryInflux<{ device_id: unknown; last: unknown }>(`SELECT device_id, MAX(time) AS last FROM sensors WHERE farm_id = '${f}' AND device_type = 'AM308-1' AND time > now() - interval '30 days' GROUP BY device_id`),
   ]);
   const val = (r: PromiseSettledResult<number | null>) => (r.status === "fulfilled" ? r.value : undefined);
 
@@ -66,6 +68,14 @@ export async function GET() {
     streams: {
       climate: iso(val(climate)),
     },
+    // Omitted when the query failed or the house has a single sensor.
+    climateSensors: sensors.status === "fulfilled" && sensors.value.length >= 2
+      ? sensors.value
+        .map((r) => ({ deviceId: String(r.device_id ?? "").trim(), ms: toMs(r.last) }))
+        .filter((r) => r.deviceId && !NON_PHYSICAL_DEVICE.test(r.deviceId))
+        .sort((a, b) => a.deviceId.localeCompare(b.deviceId))
+        .map((r, i) => ({ name: `House sensor ${i + 1}`, lastSeen: r.ms == null ? null : new Date(r.ms).toISOString() }))
+      : undefined,
     // `undefined` (omitted in JSON) = that query failed; a radar silent for over 7 days drops out of
     // this list, and the silo cards (30-day window) still show it.
     silos: silo.status === "fulfilled"

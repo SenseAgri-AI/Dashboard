@@ -186,6 +186,8 @@ export type TodayInput = {
   waterMeterNames?: string[];
   /** undefined = freshness endpoint failed. */
   climateLastMs?: number | null;
+  /** Last reading per house climate sensor (when the house has more than one); lastMs null = none in 30 days. */
+  climateSensors?: { name: string; lastMs: number | null }[];
   /** Last reading per silo radar; lastMs undefined = that check failed. */
   siloRadars?: { name: string; lastMs: number | null | undefined }[];
   waterMeters?: WaterMeterFreshness[];
@@ -497,6 +499,14 @@ export function dataLine(input: TodayInput, t: TodayThresholds): TodayLine {
     ...(input.waterMeters ?? []).map((m) => streamFreshness("water", `Water (${m.name})`, m.lastMs, input.now, t)),
     ...(input.siloRadars ?? []).map((r) => streamFreshness("silo", r.name, r.lastMs, input.now, t)),
   ];
+  // Story: the house has two climate sensors; if one stops, the house numbers quietly become the other
+  // one's, so tell me, even though "Climate" still looks fresh. Amber only: readings are still coming.
+  const sensors = input.climateSensors ?? [];
+  const climateFresh = fresh[0].rag === "green";
+  if (climateFresh && sensors.length >= 2) for (const c of sensors) {
+    const f = streamFreshness("climate", c.name, c.lastMs, input.now, t);
+    if (needsYou(f.rag)) fresh.push({ ...f, rag: "amber", text: `${f.text === "no data this week" ? "no data this month" : f.text}; house numbers are from the other sensor only` });
+  }
   const stale = fresh.filter((f) => needsYou(f.rag));
   let line: TodayLine = stale.length
     ? { ...base, rag: worst(...stale.map((f) => f.rag)), text: stale.map((f) => `${f.label}: ${f.text}`).join(" · "), action: "Check power and that device" }

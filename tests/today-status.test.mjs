@@ -387,3 +387,19 @@ test('last night: a disturbed flock-sleep score shows once, in the morning check
   assert.equal(line(today({}), 'night'), undefined);                                                 // no data → no line, no failure footer
   assert.equal(today({}).someChecksFailed, today({ nights: [] }).someChecksFailed);
 });
+
+test('one silent house sensor is flagged even while Climate looks fresh', () => {
+  const both = [{ name: 'House sensor 1', lastMs: min(3) }, { name: 'House sensor 2', lastMs: min(5) }];
+  assert.equal(line(today({ climateSensors: both }), 'data'), undefined);
+  const r = today({ climateSensors: [both[0], { name: 'House sensor 2', lastMs: min(240) }] });
+  const d = line(r, 'data');
+  assert.equal(d.rag, 'amber');
+  assert.match(d.text, /^House sensor 2: no data for 4 h; house numbers are from the other sensor only$/);
+  const gone = line(today({ climateSensors: [both[0], { name: 'House sensor 2', lastMs: null }] }), 'data');
+  assert.match(gone.text, /House sensor 2: no data this month/);
+  // whole climate stream stale → only the Climate item, not one per sensor
+  const all = line(today({ climateLastMs: min(240), climateSensors: [{ name: 'House sensor 1', lastMs: min(240) }, { name: 'House sensor 2', lastMs: min(250) }] }), 'data');
+  assert.doesNotMatch(all.text, /House sensor/);
+  // a single-sensor house never gets this item
+  assert.equal(line(today({ climateSensors: [{ name: 'House sensor 1', lastMs: min(240) }] }), 'data'), undefined);
+});
