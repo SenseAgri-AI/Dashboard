@@ -204,7 +204,7 @@ export default function DashEnvCol({ env, narrow, house = null }: { env: EnvData
         <ParticulatesChart pm25={env?.pm2_5?.sparkline ?? []} pm10={env?.pm10?.sparkline ?? []} height={H} house={house} />
       </TileShell>
 
-      <EnvTile name="Light" value={r0(env?.light?.current)} unit="lux" normal="photoperiod"
+      <EnvTile name="Light" value={r0(env?.light?.current)} unit="lux" normal="shows lights on/off"
         chart={<EnvChart data={env?.light?.sparkline ?? []} domain={lightScale.domain} ticks={lightScale.ticks} tipUnit="lux" height={H} house={house} />} />
     </div>
   );

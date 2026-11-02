@@ -116,20 +116,20 @@ function tempAlertMessage(
   const v = Math.round(val * 10) / 10;
 
   // Heat stress thresholds apply day and night
-  if (val > 30) return { status: "danger", message: `Critical. ${v}°C — heat stress threshold exceeded. Check cooling immediately.` };
-  if (val > 26) return { status: "warning", message: `Elevated. ${v}°C approaching heat stress threshold — monitor closely.` };
+  if (val > 30) return { status: "danger", message: `Hot: ${v}°C inside. Fans on and check drinkers.` };
+  if (val > 26) return { status: "warning", message: `Warm: ${v}°C inside. Early warning: keep an eye on it.` };
 
   const night = isNightSast();
 
   if (night) {
-    if (val < 10) return { status: "danger", message: `Cold night. ${v}°C — below 10°C threshold. Birds diverting energy to thermoregulation. Expect increased feed intake.` };
-    if (val < 14) return { status: "warning", message: `Cool night. ${v}°C — below optimal. Monitor feed consumption tomorrow.` };
+    if (val < 10) return { status: "danger", message: `Cold night: ${v}°C inside. Early warning: check curtains and draughts.` };
+    if (val < 14) return { status: "warning", message: `Cool night: ${v}°C inside.` };
     return { status: "normal", message: `${v}°C — within acceptable night range.` };
   } else {
     if (val < 14 && sustainedBelowThreshold(sparkline, 14, 3)) {
-      return { status: "warning", message: `Sustained cold. ${v}°C for 3+ hours — birds burning extra energy on thermoregulation. Expect higher feed intake today.` };
+      return { status: "warning", message: `Cold for 3+ hours: ${v}°C inside. Early warning: check curtains and draughts.` };
     }
-    if (val < 14) return { status: "warning", message: `Low. ${v}°C — below optimal daytime range. Monitor closely.` };
+    if (val < 14) return { status: "warning", message: `Cool: ${v}°C inside.` };
     return { status: "normal", message: `Within range. ${v}°C — no action required.` };
   }
 }
