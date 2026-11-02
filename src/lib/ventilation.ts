@@ -231,7 +231,8 @@ export function buildVentilation(input: VentInput): VentView {
   const t = input.thresholds ?? DEFAULT_VENT_THRESHOLDS;
   const { now, offsetHours } = input;
   const hours = (input.outside ?? []).filter((h) => Number.isFinite(h.tempC) && h.tempC > -30 && h.tempC < 60);
-  const inside = input.inside.filter((x) => x.tempC == null || (x.tempC > -20 && x.tempC < 60));
+  const inside = input.inside.filter((x) => x.tempC == null || (x.tempC > -20 && x.tempC < 60))
+    .map((x) => (x.hotC != null && !(x.hotC > -20 && x.hotC < 60) ? { ...x, hotC: null } : x)); // one glitchy reading mustn't make a "warm end"
 
   // Inside now: the latest point within 90 min (older = stale; the Today card's Sensors line covers it).
   const last = [...inside].reverse().find((x) => x.tempC != null);

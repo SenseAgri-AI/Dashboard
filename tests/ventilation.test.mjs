@@ -450,3 +450,11 @@ test('inside now: warm end reading only when it is clearly above the average', (
   assert.equal(at(0.4).warmC, null);
   assert.equal(view(o, base).insideNow.warmC, null);
 });
+
+test('warm end ignores implausible readings', () => {
+  const o = outside((h) => sine(18, 28)(h));
+  const base = inside((h, d) => ({ tempC: d < 8 ? sine(18, 33)(h) : 24, rhPct: 60, co2: 900 }));
+  const v = view(o, base.map((x) => ({ ...x, hotC: x.tempC == null ? null : x.tempC > 30 ? 85 : x.tempC })));
+  assert.equal(v.outlook[0].warmEndMax, null);
+  assert.equal(v.insideNow.warmC, null);
+});
