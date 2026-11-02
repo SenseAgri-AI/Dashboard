@@ -6,6 +6,7 @@ import DashStatusBar from "@/components/DashStatusBar";
 import HouseHdepChart from "@/components/HouseHdepChart";
 import { buildAttention, type AttentionAlert } from "@/lib/attention"; // folded into the Today card
 import TodayCard, { type TodayClimate } from "@/components/TodayCard";
+import ThisWeekCard from "@/components/ThisWeekCard";
 import type { DailyRow } from "@/lib/todayStatus";
 
 type House = { id: string; name: string; startDate: string; startAgeDays: number; startingHens: number };
@@ -21,7 +22,7 @@ type Health = { health: number; word: string; label: "good" | "normal" | "warnin
 
 /** "2026-10-31" → "31 Oct" (the log date the egg count is from). */
 const shortDate = (d?: string | null) => (d && /^\d{4}-\d{2}-\d{2}$/.test(d)
-  ? new Date(`${d}T00:00:00Z`).toLocaleDateString("en-ZA", { timeZone: "UTC", day: "numeric", month: "short" }) : "—");
+  ? new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "short" }) : "—");
 
 const todayInSast = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Johannesburg" }).format(new Date());
 
@@ -121,11 +122,15 @@ export default function HomePage() {
         <TodayCard ready={today.prod && today.env} daily={today.daily} lastLogDate={today.lastLogDate} climate={today.climate} extras={attention} narrow={isNarrow} />
       </section>
 
+      {/* Last 7 days vs the 7 before: eggs, deaths, water, hottest inside day (docs/this-week.md). */}
+      <ThisWeekCard ready={today.prod} daily={today.daily} narrow={isNarrow} />
+
       {/* Farm overview */}
       <section className="sa-panel" style={{ padding: 0 }}>
         <div className="sa-panel-hd sa-panel-hd--production">Farm overview</div>
         <div style={{ padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
-          <Stat label="Houses" value={String(houses.length)} />
+          {/* Only worth a tile on a multi-house farm; one house is listed just below. */}
+          {houses.length > 1 && <Stat label="Houses" value={String(houses.length)} />}
           <Stat label="Live hens" value={prod ? prod.totalHens.toLocaleString() : "—"} />
           <Stat label={`Eggs (${shortDate(prod?.date)})`} value={prod ? prod.eggs.total.toLocaleString() : "—"} />
           <Stat label="Hen-day %" value={prod?.hdep != null ? `${prod.hdep}%` : "—"} />

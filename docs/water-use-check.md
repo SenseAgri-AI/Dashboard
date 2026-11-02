@@ -23,7 +23,7 @@ Read-only, farm-scoped, Athena-cached.
 - A meter with no reading in the whole 17-day window is treated as not installed (one-meter farms get the
   farm check only).
 - First house only (every farm today has one metered house); multi-house farms need a per-house check.
-- Days are UTC (02:00–02:00 SAST). Hens drink little at night, so this barely shifts the totals.
+- Days are farm-local (SAST midnight to midnight). The backtest used UTC days (02:00–02:00 SAST); hens drink little at night, so the totals barely differ.
 - The silver batch runs once a day, so yesterday appears in the early morning. If the newest complete day
   is more than 2 days old the check stays silent; the Sensors line covers stale meters.
 
