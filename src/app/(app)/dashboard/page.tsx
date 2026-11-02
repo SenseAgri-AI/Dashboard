@@ -160,7 +160,7 @@ export default function DashboardPage() {
           <DashAlertChat alerts={alerts} updatedAt={alertsAt} />
         </div>
       </> : (
-        <DashFeedWater silos={siloLevels} water={summary?.env.water.sparkline ?? []} narrow={isNarrow} house={house} />
+        <DashFeedWater silos={siloLevels} water={summary?.env.water.sparkline ?? []} meters={summary?.env.water.meters} narrow={isNarrow} house={house} />
       )}
     </main>
   );

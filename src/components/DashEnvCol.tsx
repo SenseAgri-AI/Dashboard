@@ -17,7 +17,7 @@ export interface EnvData {
   pm2_5?:      { current: number | null; sparkline: SparklinePoint[] };
   pm10?:       { current: number | null; sparkline: SparklinePoint[] };
   light?:      { current: number | null; sparkline: SparklinePoint[] };
-  water:       { current: number | null; today: number | null; sparkline: SparklinePoint[]; mean: number; std: number };
+  water:       { current: number | null; today: number | null; sparkline: SparklinePoint[]; mean: number; std: number; meters?: number };
 }
 export interface SparklinePoint { time: string; value: number; cumulative?: number; lo?: number | null; hi?: number | null; }
 

@@ -19,7 +19,10 @@ interface SparkRow {
   tvoc?: number;
 }
 
+import { sumMeterPoints } from "@/lib/meterPoints";
+
 interface MeterRow {
+  device_id?: unknown;
   bucket: string | Date;
   cumulative?: number;
 }
@@ -77,6 +80,8 @@ function cumulativeMeterPoints(rows: MeterRow[], unitPerPulse = 1): { time: stri
     ];
   });
 }
+
+const DEVICE_ID = /^[0-9a-f]{16}$/i;
 
 function rebaseCumulative(points: { time: string; value: number; cumulative: number }[]) {
   let runningTotal = 0;
@@ -162,6 +167,8 @@ export async function GET() {
 
   try {
     // Latest AM308 reading
+    const waterIds = (farm.waterMeters?.length ? farm.waterMeters.map((m) => m.deviceId) : [farm.waterDeviceId])
+      .filter((id): id is string => typeof id === "string" && DEVICE_ID.test(id));
     const [latestRows, sparkRows, waterSparkRows, feedSparkRows, pmSparkRows, lightRows] = await Promise.all([
       queryInflux<Record<string, unknown>>(`
         SELECT
@@ -194,12 +201,13 @@ export async function GET() {
       queryInflux<MeterRow>(`
         SELECT
           date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
+          device_id,
           MAX(pulse_total) AS cumulative
         FROM sensors
         WHERE farm_id = '${farm.farmId}'
-          AND device_id = '${farm.waterDeviceId}'
+          AND device_id IN (${waterIds.map((id) => `'${id}'`).join(", ") || "''"})
           AND time > now() - INTERVAL '25 hours'
-        GROUP BY bucket
+        GROUP BY device_id, bucket
         ORDER BY bucket ASC
       `),
       queryInflux<MeterRow>(`
@@ -268,7 +276,9 @@ export async function GET() {
     const lightCurrent = lightSpark.length ? lightSpark[lightSpark.length - 1].value : null;
 
     // Consumption is derived from consecutive cumulative meter readings.
-    const allWaterPoints = cumulativeMeterPoints(waterSparkRows, farm.waterLitresPerPulse);
+    // Every in-use meter (one per A-frame), each differenced on its own counter, then summed per bucket.
+    const allWaterPoints = sumMeterPoints(waterIds.map((id) =>
+      cumulativeMeterPoints(waterSparkRows.filter((r) => String(r.device_id) === id), farm.waterLitresPerPulse)));
     const cutoff3h = Date.now() - 3 * 60 * 60 * 1000;
     const waterLast3h = allWaterPoints
       .filter((pt) => new Date(pt.time).getTime() >= cutoff3h)
@@ -318,6 +328,7 @@ export async function GET() {
           sparkline: waterSpark,
           mean: waterStats.mean,
           std: waterStats.std,
+          meters: waterIds.length,
         },
       },
       metrics: {
