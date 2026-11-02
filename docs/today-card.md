@@ -66,3 +66,10 @@ and name what to check, never a cause: lay drop ("check water, feed and the bird
 ("check the birds"), water use ("check drinkers, pressure and the birds"), one quiet drinker line, and
 "Warming fast". Red lines drop the prefix and say "today" or "now". The This week card and the Ventilation
 prompts follow the same rule (docs/this-week.md, docs/ventilation.md).
+
+## Live dashboard temperature tiles follow the Today card (2 Nov)
+
+Farmer story: *"If the Today card says the house is fine and the Live dashboard says 'Out of range', I stop trusting both."*
+- `heatTileStatus` (in `todayStatus.ts`) applies the Climate row's heat rules to the Live dashboard: felt ≥ `feltTempC.red` → **Out of range**, felt ≥ `feltTempC.amber` or air at/above `dryBulbC.amber` for `dryBulbC.dwellMinutes` → **Watch**. The Temperature tile uses it on the hot side (cold side unchanged: the summary's < 14 °C / < 10 °C bands) and reads "hot: 32°+ or felt 28.9°+". The Felt temperature tile uses the same two felt levels ("watch from 28.9°"; before it warned from 27.8 °C).
+- Uses the default thresholds (the Live dashboard doesn't load per-farm overrides).
+- **Display only.** The Home health gauge still scores air temperature with the old bands (warning > 26 °C, danger > 30 °C), so the gauge can dip on a dry afternoon the Today card calls fine. Changing the score is left for Dylan to decide.

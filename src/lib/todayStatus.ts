@@ -502,3 +502,14 @@ export function buildToday(input: TodayInput, overrides?: unknown): TodayResult 
     : `${problems} ${problems === 1 ? "thing needs" : "things need"} you today`;
   return { headline, problems, lines, someChecksFailed };
 }
+
+/** Story: the Live dashboard's temperature tiles must say the same as the Today card's Climate row, or I
+ *  stop trusting both. Heat status from the Today card's own rules: felt ≥ red → danger, felt ≥ amber or
+ *  air at/above the dry-bulb backstop for the dwell → warning; otherwise null (not hot). Display only:
+ *  the health gauge keeps its own score (docs/today-card.md). */
+export function heatTileStatus(felt: number | null, tempSeries: SeriesPoint[], now: number, t: TodayThresholds = DEFAULT_TODAY_THRESHOLDS): "danger" | "warning" | null {
+  if (felt != null && felt >= t.feltTempC.red) return "danger";
+  if (felt != null && felt >= t.feltTempC.amber) return "warning";
+  const dry = sustainedAtOrAbove(tempSeries.filter((p) => p.value >= -20 && p.value <= 60), now, t.dryBulbC.amber, t.dryBulbC.dwellMinutes);
+  return dry != null ? "warning" : null;
+}

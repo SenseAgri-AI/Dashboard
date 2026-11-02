@@ -353,3 +353,13 @@ test('water: a one-meter farm still gets the farm check, never the line check', 
   const quiet = wdays([...Array.from({ length: 14 }, () => [500, null]), [500, null], [0, null]]);
   assert.equal(line(today({ waterDays: quiet }), 'water'), undefined);
 });
+
+test('Live dashboard heat tile status follows the Today card climate rules', () => {
+  const now = Date.parse('2026-11-02T13:00:00Z');
+  const ser = (v, n = 3) => Array.from({ length: n }, (_, i) => ({ time: new Date(now - (n - 1 - i) * 30 * 60_000).toISOString(), value: v }));
+  assert.equal(T.heatTileStatus(30.2, ser(31), now), 'danger');   // felt ≥ red
+  assert.equal(T.heatTileStatus(29.0, ser(31), now), 'warning');  // felt ≥ amber
+  assert.equal(T.heatTileStatus(27.1, ser(32.4), now), 'warning'); // dry heat, sustained 32 °C+
+  assert.equal(T.heatTileStatus(27.1, ser(31), now), null);       // dry 31 °C: not hot by the Today card either
+  assert.equal(T.heatTileStatus(27.1, ser(32.4, 1), now), null);  // one reading is never sustained
+});
