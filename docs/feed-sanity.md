@@ -30,3 +30,9 @@ which could lead a farmer to log the same delivery twice. The same empty row (`s
 
 The Recent deliveries table shows Date, Weight and Lasted first, so on a phone (375 px) the
 "how long did it last" figure is visible without scrolling sideways.
+
+## Form layout (2 Nov)
+
+*As a farmer logging a silo fill on my phone, I want the few fields that matter in view; the nutrient spec is there when I have the batch label.*
+
+The nutrient spec and cost fields sit in a collapsed "Nutrient spec & cost (optional)" section. It opens by itself when editing a delivery that already has any of them, and otherwise stays as the user leaves it.

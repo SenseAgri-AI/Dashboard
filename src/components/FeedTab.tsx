@@ -118,15 +118,17 @@ export default function FeedTab() {
             </div>
           </div>
 
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--teal)", marginBottom: 8 }}>Nutrient spec (this batch)</div>
+          {/* Story: logging a silo fill on a phone, I want the few fields that matter in view; the batch label's
+              nutrient spec is one tap away (open already when editing a delivery that has it). */}
+          <Collapsible key={f.id ?? "new"} initiallyOpen={nutrientCols.some(([k]) => String(f[k] ?? "").trim() !== "") || String(f.cost ?? "").trim() !== ""}
+            summary={<>Nutrient spec &amp; cost (optional)</>}>
             <div style={grid(120)}>
               {nutrientCols.map(([k, label]) => (
                 <Field key={k} label={label}><input value={f[k]} onChange={set(k)} style={inputStyle} inputMode="decimal" /></Field>
               ))}
               <Field label="Cost"><input value={f.cost} onChange={set("cost")} style={inputStyle} /></Field>
             </div>
-          </div>
+          </Collapsible>
 
           <Field label="Notes"><input value={f.notes} onChange={set("notes")} style={inputStyle} placeholder="Optional" /></Field>
 
@@ -181,6 +183,17 @@ export default function FeedTab() {
         </div>
       </section>
     </div>
+  );
+}
+
+/** <details> whose open state is set once per mount (re-key to reset), then left to the user. */
+function Collapsible({ initiallyOpen, summary, children }: { initiallyOpen: boolean; summary: React.ReactNode; children: React.ReactNode }) {
+  const [open, setOpen] = useState(initiallyOpen);
+  return (
+    <details open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+      <summary style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--teal)", cursor: "pointer", marginBottom: 8 }}>{summary}</summary>
+      {children}
+    </details>
   );
 }
 
