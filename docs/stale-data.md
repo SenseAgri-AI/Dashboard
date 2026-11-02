@@ -14,7 +14,7 @@ load. Each notice says what is missing, since when, and what to check.
 
 ## Plain labels (2 Nov)
 
-Farmer-facing labels avoid jargon: "Felt temperature" (was "Felt temp · THI"), "comfortable below 27.8°",
+Farmer-facing labels avoid jargon: "Felt temperature" (was "Felt temp · THI"), "comfortable below 27.8°" (since 2 Nov "watch from 28.9°", see docs/today-card.md),
 air-quality band "shaded = usual range" (was "±2σ baseline"), Home "Lay rate (hen-day)" (was "Hen-day %"),
 and the house chart's "Loading lay rate…" / "Couldn't load the lay-rate chart." (was "HDEP"). The
 Analytics explorer keeps the technical names.
