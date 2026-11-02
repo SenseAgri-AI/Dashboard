@@ -193,6 +193,7 @@ test('climate: warming fast early warning (rise over 60 min, above the floor, be
   assert.match(w.text, /^29°C \(feels 2\d\.\d°C\) · Warming fast: up 3\.5°C in the last hour$/);
   assert.equal(w.action, 'Early warning: check fans and ventilation');
   assert.equal(c(co2(25, 27, 28)).rag, 'amber');              // edges: rise exactly 3, latest exactly 28
+  assert.equal(T.warmingFast(co2(29.3, 31, 32.3), NOW, T.DEFAULT_TODAY_THRESHOLDS), 32.3 - 29.3); // 2.9999… in floats, still a 3.0 rise
   assert.equal(c(co2(25.1, 27, 28)).rag, 'green');            // rise 2.9
   assert.equal(c(co2(24, 26, 27.9), 27.9).rag, 'green');      // below the warm floor
   assert.equal(c(co2(29, 26, 29)).rag, 'green');              // only the 60-min change counts, not a dip-and-recover
@@ -208,7 +209,7 @@ test('climate: warming fast early warning (rise over 60 min, above the floor, be
   assert.match(dry.text, /32°C\+ for 30\+ min$/);
   assert.equal(c(co2(29, 31, 33), 34, 70).rag, 'red');        // felt red wins
   assert.equal(c(co2(29, 31, 33), 34, 70).text.includes('Warming fast'), false);
-  assert.equal(c(co2(25, 60, 27, 29)).rag, 'green');      // junk reading 60 min ago ignored → no pair, never a fake rise
+  assert.equal(c(co2(25, 61, 27, 29)).rag, 'green');      // junk reading (61 °C, above the 60 filter) 60 min ago ignored → no pair, never a fake rise
   const t = T.mergeThresholds({ warmingFast: { riseC: 2, windowMinutes: 30, floorC: 26 } });
   assert.equal(T.warmingFast(co2(24, 26.5), NOW, t), 2.5);
   assert.equal(T.DEFAULT_TODAY_THRESHOLDS.warmingFast.riseC, 3);

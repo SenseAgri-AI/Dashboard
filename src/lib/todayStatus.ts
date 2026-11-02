@@ -327,7 +327,7 @@ export function warmingFast(series: SeriesPoint[], now: number, t: TodayThreshol
   const before = pts.find((p) => Math.abs(Date.parse(p.time) - (lastMs - w.windowMinutes * 60_000)) < 60_000);
   if (!before) return null;
   const rise = last.value - before.value;
-  return rise >= w.riseC && last.value >= w.floorC ? rise : null;
+  return r1(rise) >= w.riseC && last.value >= w.floorC ? rise : null;
 }
 
 /** Story: when the house is getting hot or the air stays bad, give me the numbers and what to do. */
