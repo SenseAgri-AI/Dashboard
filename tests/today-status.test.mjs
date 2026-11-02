@@ -403,3 +403,11 @@ test('one silent house sensor is flagged even while Climate looks fresh', () => 
   // a single-sensor house never gets this item
   assert.equal(line(today({ climateSensors: [{ name: 'House sensor 1', lastMs: min(240) }] }), 'data'), undefined);
 });
+
+test('last night: the action points at what cost the most points', () => {
+  const act = (breakdown) => line(today({ nights: [{ date: '2026-10-30', score: 40, breakdown }] }), 'night').action;
+  assert.equal(act({ noise: 30, bouts: 20, severity: 5, predawn: 5, heat: 0, darkness: 0 }), 'Early warning: noisy night; check for predators or people');
+  assert.equal(act({ noise: 5, bouts: 0, severity: 0, predawn: 0, heat: 0, darkness: 50 }), 'Early warning: short dark period; check the lights and timer');
+  assert.equal(act({ noise: 5, bouts: 0, severity: 0, predawn: 0, heat: 40, darkness: 10 }), 'Early warning: the house was warm at night; check it was aired');
+  assert.equal(act(undefined), 'Early warning: check for lights, predators or people in the night');
+});

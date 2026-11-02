@@ -60,7 +60,7 @@ export default function TodayCard({ ready, daily, lastLogDate, climate, extras, 
       setNow(Date.now());
     });
     json("/api/sleep-score?days=2")
-      .then((r) => setNights(Array.isArray(r.nights) ? r.nights.map((x: { date: string; score: number }) => ({ date: x.date, score: x.score })) : undefined))
+      .then((r) => setNights(Array.isArray(r.nights) ? r.nights.map((x: { date: string; score: number; breakdown?: Record<string, number> }) => ({ date: x.date, score: x.score, breakdown: x.breakdown })) : undefined))
       .catch(() => {});
     json("/api/water-use")
       .then((w) => setWater(Array.isArray(w.days) ? { days: w.days, names: Array.isArray(w.names) ? w.names : [] } : null))

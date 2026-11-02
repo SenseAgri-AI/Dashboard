@@ -194,7 +194,7 @@ export type TodayInput = {
   /** undefined = silo endpoint failed. */
   silos?: SiloState[];
   /** Flock sleep scores by night (date = the evening it starts), from /api/sleep-score. Optional: a failure just hides the line. */
-  nights?: { date: string; score: number }[];
+  nights?: { date: string; score: number; breakdown?: Partial<Record<"noise" | "bouts" | "severity" | "predawn" | "heat" | "darkness", number>> }[];
   /** Firing alerts from /api/alerts; undefined = feed unavailable. */
   alerts?: FarmAlert[];
   alertsStale?: boolean;
@@ -488,7 +488,16 @@ export function nightLine(input: TodayInput, t: TodayThresholds): TodayLine {
   const yesterday = new Date(input.now + off - 86_400_000).toISOString().slice(0, 10);
   const n = (input.nights ?? []).find((x) => x.date === yesterday);
   if (!n || !(n.score < t.nightScore.amber)) return { ...base, rag: "green", text: "", action: "" };
-  return { ...base, rag: "amber", text: `Disturbed: flock sleep score ${Math.round(n.score)}/100`, action: "Early warning: check for lights, predators or people in the night" };
+  // Point the check at what cost the most points: light in the dark hours, heat, or sound (noise, bouts,
+  // loudness, pre-dawn unrest all come from the microphone). Early warnings, never a cause.
+  const b = n.breakdown ?? {};
+  const sound = (b.noise ?? 0) + (b.bouts ?? 0) + (b.severity ?? 0) + (b.predawn ?? 0);
+  const top = Math.max(sound, b.darkness ?? 0, b.heat ?? 0);
+  const action = top <= 0 ? "Early warning: check for lights, predators or people in the night"
+    : top === (b.darkness ?? 0) ? "Early warning: short dark period; check the lights and timer"
+    : top === (b.heat ?? 0) ? "Early warning: the house was warm at night; check it was aired"
+    : "Early warning: noisy night; check for predators or people";
+  return { ...base, rag: "amber", text: `Disturbed: flock sleep score ${Math.round(n.score)}/100`, action };
 }
 
 /** Story: when sensors stop reporting, tell me plainly so I don't trust old numbers. Shown only on a problem. */
