@@ -137,7 +137,7 @@ export default function HomePage() {
           {/* Only worth a tile on a multi-house farm; one house is listed just below. */}
           {houses.length > 1 && <Stat label="Houses" value={String(houses.length)} />}
           {/* Housed flock minus every death in the daily log, so it falls as birds are lost. */}
-          <Stat label="Live hens" value={prod ? (prod.liveHens ?? prod.totalHens).toLocaleString() : "—"} />
+          <Stat label="Live hens" value={prod?.liveHens != null ? prod.liveHens.toLocaleString() : "—"} />
           <Stat label={`Eggs (${shortDate(prod?.date)})`} value={prod ? prod.eggs.total.toLocaleString() : "—"} />
           <Stat label="Lay rate (hen-day)" value={prod?.hdep != null ? `${prod.hdep}%` : "—"} />
           <Stat label={prod?.mortality.rate != null ? `Deaths since housed (${prod.mortality.rate}%)` : "Deaths since housed"} value={prod?.mortality.rate != null ? prod.mortality.cumulative.toLocaleString() : "—"} />

@@ -1,3 +1,4 @@
+import { flockCounts } from "@/lib/flock";
 import { NextResponse } from "next/server";
 import { getSheetValues } from "@/lib/sheets";
 import { getFarmForRequest, FarmAccessError, type PriceTier } from "@/lib/farms";
@@ -96,11 +97,12 @@ export async function GET(request: Request) {
     for (const { r } of dataRows) {
       cumulativeMortality += toInt(r[8]);
     }
-    const liveHens = Math.max(1, TOTAL_HENS - cumulativeMortality);
+    const flock = flockCounts(TOTAL_HENS, cumulativeMortality);
+    const liveHens = flock.liveHens ?? 1; // only used as a divisor below, guarded by TOTAL_HENS > 0
     const hdep = TOTAL_HENS > 0 ? (totalEggs / liveHens) * 100 : null;
     // houseHens is the flock housed when the daily log began (Oct 2025, point of lay); live hens and the
     // mortality rate both count logged deaths against it (docs/live-hens.md).
-    const mortalityRate = TOTAL_HENS > 0 ? (cumulativeMortality / TOTAL_HENS) * 100 : null;
+    const mortalityRate = flock.mortalityPct;
 
     // Aggregate per day (a day may have several house rows). r[10] = avg egg weight (g).
     type DayAgg = {
@@ -169,7 +171,7 @@ export async function GET(request: Request) {
         rate: mortalityRate !== null ? Math.round(mortalityRate * 100) / 100 : null,
       },
       totalHens: TOTAL_HENS,
-      liveHens: TOTAL_HENS > 0 ? liveHens : null,
+      liveHens: flock.liveHens,
       daily: daily30d,
     });
   } catch (err) {

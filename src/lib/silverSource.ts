@@ -94,7 +94,9 @@ async function runAthenaRaw(sql: string): Promise<(string | undefined)[][]> {
   return out;
 }
 
-/** Latest day (YYYY-MM-DD, UTC bucket) with a daily-log egg count in the analytics copy, or null. */
+/** Latest day with a daily-log egg count in the analytics copy, or null. Returns the **UTC** date
+ *  (YYYY-MM-DD) of the newest bucket, not a farm-local one; the stale notice only needs whole-day
+ *  accuracy (it fires after 2+ days), so the ≤ 2 h SAST offset doesn't matter. */
 export async function fetchLastLogDay(farmId: string, houseId: string): Promise<string | null> {
   if (!ID_RE.test(farmId) || !ID_RE.test(houseId)) throw new Error("Invalid farm/house id");
   const y = new Date().getUTCFullYear();
