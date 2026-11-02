@@ -186,6 +186,34 @@ test('climate: dry-bulb backstop only when sustained', () => {
   assert.equal(T.sustainedAtOrAbove(co2(31, 31, 31), NOW, t.dryBulbC.amber, t.dryBulbC.dwellMinutes), 31);
 });
 
+test('climate: warming fast early warning (rise over 60 min, above the floor, below amber)', () => {
+  const c = (tempSeries, temperatureC = 29, humidityPct = 30) => line(today({ climate: { temperatureC, humidityPct, co2Series: [], tempSeries } }), 'climate');
+  const w = c(co2(25.5, 27, 29)); // +3.5 °C in 60 min, now 29 °C, feels < 28.9
+  assert.equal(w.rag, 'amber');
+  assert.match(w.text, /^29°C \(feels 2\d\.\d°C\) · Warming fast: up 3\.5°C in the last hour$/);
+  assert.equal(w.action, 'Early warning: check fans and ventilation');
+  assert.equal(c(co2(25, 27, 28)).rag, 'amber');              // edges: rise exactly 3, latest exactly 28
+  assert.equal(c(co2(25.1, 27, 28)).rag, 'green');            // rise 2.9
+  assert.equal(c(co2(24, 26, 27.9), 27.9).rag, 'green');      // below the warm floor
+  assert.equal(c(co2(29, 26, 29)).rag, 'green');              // only the 60-min change counts, not a dip-and-recover
+  assert.equal(c(co2(26, 29)).rag, 'green');                  // no bucket 60 min earlier
+  assert.equal(c([]).rag, 'green');                           // no series
+  const old = [{ time: iso(150), value: 25 }, { time: iso(90), value: 29 }];
+  assert.equal(T.warmingFast(old, NOW, T.DEFAULT_TODAY_THRESHOLDS), null); // latest point too old
+  const felt = c(co2(27, 29, 31), 31, 70);                    // already amber by felt temp: no extra warning
+  assert.equal(felt.rag, 'amber');
+  assert.equal(felt.action, 'Increase airflow, keep water cool');
+  assert.equal(felt.text.includes('Warming fast'), false);
+  const dry = c(co2(32, 33, 35), 35, 0);                     // dry-bulb backstop already amber: its text, no extra warning
+  assert.match(dry.text, /32°C\+ for 30\+ min$/);
+  assert.equal(c(co2(29, 31, 33), 34, 70).rag, 'red');        // felt red wins
+  assert.equal(c(co2(29, 31, 33), 34, 70).text.includes('Warming fast'), false);
+  assert.equal(c(co2(25, 60, 27, 29)).rag, 'green');      // junk reading 60 min ago ignored → no pair, never a fake rise
+  const t = T.mergeThresholds({ warmingFast: { riseC: 2, windowMinutes: 30, floorC: 26 } });
+  assert.equal(T.warmingFast(co2(24, 26.5), NOW, t), 2.5);
+  assert.equal(T.DEFAULT_TODAY_THRESHOLDS.warmingFast.riseC, 3);
+});
+
 test('climate: dry-bulb backstop never fires on a lone reading after a gap', () => {
   const lone = [{ time: iso(5), value: 33 }];
   assert.equal(T.sustainedAtOrAbove(lone, NOW, 32, 30), null);

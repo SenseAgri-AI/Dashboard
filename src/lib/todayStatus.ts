@@ -23,6 +23,9 @@ export type TodayThresholds = {
   dryBulbC: { amber: number; dwellMinutes: number };
   /** CO₂ is only shown once readings stay at or above `ppm` for `dwellMinutes`. */
   co2Sustained: { ppm: number; dwellMinutes: number };
+  /** Early warning while still below amber: the 30-min average temperature rose at least `riseC` over
+   *  `windowMinutes` and is now at/above `floorC`. */
+  warmingFast: { riseC: number; windowMinutes: number; floorC: number };
   /** Lay drop: each of the last `amberDays` (amber) / `redDays` (red) logged days is at least `pts`
    *  below the median of the `baselineDays` logged days before it. Hen-day % outside
    *  [`plausibleMinPct`, `plausibleMaxPct`] is treated as a log-entry problem, not a production change. */
@@ -61,6 +64,10 @@ export const DEFAULT_TODAY_THRESHOLDS: TodayThresholds = {
   dryBulbC: { amber: 32, dwellMinutes: 30 },
   // 1400 ppm = the existing danger band in thresholds.ts. Backtest: ~15 episodes in 6 months, real.
   co2Sustained: { ppm: 1400, dwellMinutes: 60 },
+  // PROVISIONAL. Backtest (3 Oct – 2 Nov 2026, Influx 30-min averages, backtest.md): 8 days (1.9/week), 7 of them
+  // followed by amber heat the same day (median ~3 h later); 7 of 12 amber-heat days warned. A level-only rule
+  // (≥ 28 °C) fired 6/week with 48 % precision, so the rise is what makes it useful.
+  warmingFast: { riseC: 3, windowMinutes: 60, floorC: 28 },
   // Backtest (Dec 2025 – Oct 2026): 5 amber / 2 red episodes; a single-day ≥3 pt rule fired on 20 % of days.
   hdepDrop: { pts: 5, amberDays: 2, redDays: 3, baselineDays: 7, minBaselineDays: 3, plausibleMinPct: 20, plausibleMaxPct: 100 },
   // Backtest: day rule 2 days a year; week rule 1 episode. Few real events to validate against.
@@ -308,6 +315,21 @@ export function co2Sustained(series: SeriesPoint[], now: number, t: TodayThresho
   return sustainedAtOrAbove(series, now, t.co2Sustained.ppm, t.co2Sustained.dwellMinutes, bucketMinutes);
 }
 
+/** Rise (°C) of the latest 30-min average over the one `windowMinutes` earlier, when it is at least `riseC`
+ *  and the latest is at/above `floorC`; else null. Needs a recent latest point and the exact earlier bucket. */
+export function warmingFast(series: SeriesPoint[], now: number, t: TodayThresholds, bucketMinutes = 30): number | null {
+  const w = t.warmingFast;
+  const pts = series.filter((p) => Number.isFinite(p.value) && p.value >= -20 && p.value <= 60 && Number.isFinite(Date.parse(p.time)));
+  const last = pts.at(-1);
+  if (!last) return null;
+  const lastMs = Date.parse(last.time);
+  if (now - lastMs > 2 * bucketMinutes * 60_000) return null; // old data: no "now" to warn about
+  const before = pts.find((p) => Math.abs(Date.parse(p.time) - (lastMs - w.windowMinutes * 60_000)) < 60_000);
+  if (!before) return null;
+  const rise = last.value - before.value;
+  return rise >= w.riseC && last.value >= w.floorC ? rise : null;
+}
+
 /** Story: when the house is getting hot or the air stays bad, give me the numbers and what to do. */
 export function climateLine(input: TodayInput, t: TodayThresholds): TodayLine {
   const base = { key: "climate" as const, label: "Climate" };
@@ -334,6 +356,14 @@ export function climateLine(input: TodayInput, t: TodayThresholds): TodayLine {
     rag = "amber";
     action = "Increase airflow, keep water cool";
     parts[0] = `${parts[0]}, ${r1(t.dryBulbC.amber)}°C+ for ${t.dryBulbC.dwellMinutes}+ min`;
+  }
+  // Early warning (story: the house is heating fast, warn me before it's dangerous). Only while still below amber.
+  const rise = rag === "green" && c?.tempSeries ? warmingFast(c.tempSeries, input.now, t) : null;
+  if (rise != null) {
+    rag = "amber";
+    action = "Early warning: check fans and ventilation";
+    const span = t.warmingFast.windowMinutes === 60 ? "the last hour" : `the last ${t.warmingFast.windowMinutes} min`;
+    parts.push(`Warming fast: up ${r1(rise)}°C in ${span}`);
   }
   if (co2 != null) {
     parts.push(`CO₂ ${Math.round(co2).toLocaleString("en-ZA")} ppm for ${t.co2Sustained.dwellMinutes}+ min`);
