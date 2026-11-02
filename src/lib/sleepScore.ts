@@ -103,8 +103,8 @@ function nightDarkness(pts: ClimateSample[]): number | null {
 
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
-/** Story: on the coldest October nights (inside 4–7 °C) the flock was quiet, so the score read 100
- *  "Restful"; cold birds huddle and go quiet. Flag the cold next to the score instead of changing the
+/** Story: cold birds huddle and go quiet, so a freezing night can score
+ *  "Restful". Flag the cold next to the score instead of changing the
  *  validated score. Same 10 °C as the Today card and Ventilation. PROVISIONAL (2 Nov). */
 export const COLD_NIGHT_C = 10;
 function nightColdMin(pts: ClimateSample[]): number | null {

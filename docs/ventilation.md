@@ -113,7 +113,7 @@ Today's card shows the measured peak "(peak)" only while the inside sensor is st
 
 The likely inside peak is no longer just the median gain. Over the same recent warm days it fits gain ≈ mean gain + slope × (forecast wind 09:00–16:59 − mean wind), with the slope clamped between −`windGainMax` (0.3 °C per km/h, provisional) and 0, so calm days run hotter and windy days cooler. If wind is missing it falls back to the median gain. The hot-day "why" adds "; calmer than usual forecast, so likely a bit more" (or "windier… a bit less") when the adjustment moves the estimate by 0.5 °C or more.
 
-Also: the outlook's "inside ~N" now uses the unrounded outside maximum, the same as the prompt, so the outlook can't show a hot inside day without the prompt. The inside-gain trigger now needs only `gainMinOutsideC` (24 °C) outside, not `heatStartC`, matching the outlook. A replay over recent weeks reduced the inside-peak error by about a fifth and caught one more hot day with no extra false alarms (figures in the private findings). Two mild-outside misses remain, about 1 °C short.
+Also: the outlook's "inside ~N" now uses the unrounded outside maximum, the same as the prompt, so the outlook can't show a hot inside day without the prompt. The inside-gain trigger now needs only `gainMinOutsideC` (24 °C) outside, not `heatStartC`, matching the outlook. A replay over recent weeks improved the inside-peak estimate (figures in the private findings).
 
 ### Threshold calls (2 Nov)
 

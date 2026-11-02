@@ -96,7 +96,7 @@ export const DEFAULT_VENT_THRESHOLDS: VentThresholds = {
   forecastOffC: 5,         // houses here run at or above outside by day
   stormRhRainPct: 40,      // PROVISIONAL (2 Nov, Code Reviewer): pads lift RH while cooling
   stormRecoverC: 2,        // PROVISIONAL (2 Nov)
-  stormLatchHours: 4,      // PROVISIONAL (2 Nov): today's storm stayed cool ~3 h after the drop
+  stormLatchHours: 4,      // PROVISIONAL (2 Nov)
   stormRhRise: 15,         // PROVISIONAL (2 Nov): p95 of daytime 2-h rises; storms gave +20–30
   airOutMinHours: 2,
   airOutMaxHours: 4,

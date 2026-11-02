@@ -67,7 +67,7 @@ export const DEFAULT_TODAY_THRESHOLDS: TodayThresholds = {
   dryBulbC: { amber: 32, dwellMinutes: 30 },
   /** Last night's flock sleep score below this = "Disturbed" (same 60 as the sleep tile's red band). */
   nightScore: { amber: 60 },
-  coldC: { amber: 10, dwellMinutes: 60 }, // PROVISIONAL (2 Nov): several October nights went to 5–8 °C inside
+  coldC: { amber: 10, dwellMinutes: 60 }, // PROVISIONAL (2 Nov)
   // 1400 ppm = the existing danger band in thresholds.ts. Backtest: ~15 episodes in 6 months, real.
   co2Sustained: { ppm: 1400, dwellMinutes: 60 },
   // PROVISIONAL. Backtest (3 Oct – 2 Nov 2026, Influx 30-min averages, backtest.md): 8 days (1.9/week), 7 of them
