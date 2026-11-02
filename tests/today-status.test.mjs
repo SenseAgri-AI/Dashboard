@@ -363,3 +363,15 @@ test('Live dashboard heat tile status follows the Today card climate rules', () 
   assert.equal(T.heatTileStatus(27.1, ser(31), now), null);       // dry 31 °C: not hot by the Today card either
   assert.equal(T.heatTileStatus(27.1, ser(32.4, 1), now), null);  // one reading is never sustained
 });
+
+test('climate: cold house early warning (10 °C or below for 60+ min), never one reading', () => {
+  const c = (tempSeries, temperatureC = 8, humidityPct = 80) => line(today({ climate: { temperatureC, humidityPct, co2Series: [], tempSeries } }), 'climate');
+  const cold = c(co2(9.5, 8.6, 8));
+  assert.equal(cold.rag, 'amber');
+  assert.match(cold.text, /^8°C \(feels .*\) · Cold: 10°C or below for 60\+ min$/);
+  assert.equal(cold.action, 'Early warning: check curtains and draughts');
+  assert.equal(c(co2(10, 10, 10), 10).rag, 'amber');   // edge: exactly 10
+  assert.equal(c(co2(10.6, 9, 8)).rag, 'green');        // warmer an hour ago: not sustained
+  assert.equal(c(co2(9, 8)).rag, 'green');              // too few buckets
+  assert.equal(c([], 8).rag, 'green');                  // a single reading never fires
+});

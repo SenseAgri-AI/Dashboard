@@ -74,3 +74,9 @@ Farmer story: *"If the Today card says the house is fine and the Live dashboard 
 - Uses the default thresholds (the Live dashboard doesn't load per-farm overrides).
 - **Display only.** The Home health gauge still scores air temperature with the old bands (warning > 26 °C, danger > 30 °C), so the gauge can dip on a dry afternoon the Today card calls fine. Changing the score is left for Dylan to decide.
 - The tiles' shaded bands match the same levels: Temperature 14–32 °C (air alone), Felt temperature up to 28.9 °C. Humid heat can still flag the Temperature tile inside its shading, through felt temperature.
+
+## Cold house (2 Nov)
+
+*As a farmer checking my phone before dawn after a cold night, I want the Today card to say the house is cold, not "All good".*
+
+Climate turns amber with "Cold: 10°C or below for 60+ min" and "Early warning: check curtains and draughts" when every 30-min inside average over the last hour (three buckets) is at or below `coldC.amber` (10 °C, provisional, same as the Live tile's cold-night level and Ventilation's cold night). It never fires on one reading, and only while Climate is otherwise green. A replay over recent weeks gave a handful of cold nights, each amber from after midnight to about 06:00, and nothing in warm spells (figures in the private findings). Per-farm override: `today.coldC`.

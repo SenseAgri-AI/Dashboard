@@ -21,6 +21,8 @@ export type TodayThresholds = {
   feltTempC: { amber: number; red: number };
   /** Dry-bulb backstop: amber when the house stays at/above `amberC` for `dwellMinutes` (the felt index understates dry heat). */
   dryBulbC: { amber: number; dwellMinutes: number };
+  /** Cold house: inside at or below `amber` °C for `dwellMinutes` (same 10 °C as the Live tile's "Cold night" and Ventilation's cold night). */
+  coldC: { amber: number; dwellMinutes: number };
   /** CO₂ is only shown once readings stay at or above `ppm` for `dwellMinutes`. */
   co2Sustained: { ppm: number; dwellMinutes: number };
   /** Early warning while still below amber: the 30-min average temperature rose at least `riseC` over
@@ -62,6 +64,7 @@ export const DEFAULT_TODAY_THRESHOLDS: TodayThresholds = {
   feltTempC: { amber: THI_SEVERE, red: THI_EXTREME },
   // PROVISIONAL backstop (Dylan, 2026-10-31): the backtest saw 34 °C / 24 % RH read as "feels 29.5".
   dryBulbC: { amber: 32, dwellMinutes: 30 },
+  coldC: { amber: 10, dwellMinutes: 60 }, // PROVISIONAL (2 Nov): several October nights went to 5–8 °C inside
   // 1400 ppm = the existing danger band in thresholds.ts. Backtest: ~15 episodes in 6 months, real.
   co2Sustained: { ppm: 1400, dwellMinutes: 60 },
   // PROVISIONAL. Backtest (3 Oct – 2 Nov 2026, Influx 30-min averages, backtest.md): 8 days (1.9/week), 7 of them
@@ -356,6 +359,16 @@ export function climateLine(input: TodayInput, t: TodayThresholds): TodayLine {
     rag = "amber";
     action = "Increase airflow, keep water cool";
     parts[0] = `${parts[0]}, ${r1(t.dryBulbC.amber)}°C+ for ${t.dryBulbC.dwellMinutes}+ min`;
+  }
+  // Story: checking my phone before dawn after a cold night, I want the Today card to say the house is cold,
+  // not "All good". Sustained, never one reading.
+  const cold = rag === "green" && c?.tempSeries
+    ? sustainedAtOrAbove(c.tempSeries.filter((p) => p.value >= -20 && p.value <= 60).map((p) => ({ ...p, value: -p.value })), input.now, -t.coldC.amber, t.coldC.dwellMinutes)
+    : null;
+  if (cold != null) {
+    rag = "amber";
+    action = "Early warning: check curtains and draughts";
+    parts.push(`Cold: ${r1(t.coldC.amber)}°C or below for ${t.coldC.dwellMinutes}+ min`);
   }
   // Early warning (story: the house is heating fast, warn me before it's dangerous). Only while still below amber.
   const rise = rag === "green" && c?.tempSeries ? warmingFast(c.tempSeries, input.now, t) : null;
