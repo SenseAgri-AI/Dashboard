@@ -145,3 +145,16 @@ pant first. I want to see the warmest sensor too, not only the average.
 - **Inside now** shows "warmest sensor N °C" under the temperature when the warmest sensor reads at least `warmEndMinC` above the average right now.
 - Triggers are unchanged: prompts still use the house average. Whether hot prompts should use the warmest sensor is a
   decision for Dylan (backtest in the private findings).
+
+## After the day's peak, and one instruction at a time (2 Nov)
+
+Story: at 18:00 the house is cooling; "Hot inside likely this afternoon (about 34 °C): fans on now" is wrong by
+then, and at midday I don't need "fans on now" and "Cooler outside now: fans on" as two separate cards.
+
+- Today's **"Hot inside likely"** estimate stops once the day's forecast peak (the last hour within 0.5 °C of the
+  day's max, so a flat hot spell counts to its end) is more than an hour past, unless the house is at or above
+  `insideHotC` now. The loop then moves on, so tomorrow's hot prompt (plan level) shows instead. "Hot afternoon
+  forecast" (outside itself hot in the hours ahead) is unchanged.
+- **"Cooler outside now"** is skipped while today's hot-day prompt already says "fans on now"; it still shows in the
+  evening once the heat has passed. A replay over five recent days at 06/09/12/15/18 h removed the duplicate
+  midday cards and the wrong evening "this afternoon" prompt (details in the private findings).

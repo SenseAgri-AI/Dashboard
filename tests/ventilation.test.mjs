@@ -458,3 +458,23 @@ test('warm end ignores implausible readings', () => {
   assert.equal(v.outlook[0].warmEndMax, null);
   assert.equal(v.insideNow.warmC, null);
 });
+
+test("today's 'Hot inside likely' stops once the day's peak has passed, unless the house is hot now", () => {
+  // past week: house peaks ~6 °C above a 28 °C outside. Today outside peaked 28 °C at 08–09 h, 26 °C since; NOW = 12:00
+  const o = outside((h, d) => (d === 8 ? (h >= 8 && h <= 9 ? 28 : 26) : d < 8 ? sine(18, 28)(h) : 22));
+  const past = (h, d) => (d < 8 ? { tempC: sine(18, 34)(h), rhPct: 60, co2: 800 } : null);
+  const cooling = view(o, inside((h, d) => past(h, d) ?? { tempC: 28, rhPct: 60, co2: 800 }));
+  assert.ok(!cooling.prompts.some((x) => x.id === 'hot-day' && /this afternoon/.test(x.text)));
+  const hotNow = view(o, inside((h, d) => past(h, d) ?? { tempC: 32.5, rhPct: 60, co2: 800 }));
+  assert.match(hotNow.prompts.find((x) => x.id === 'hot-day').text, /^Hot inside likely this afternoon/);
+});
+
+test('"Cooler outside now" stays quiet when the hot-day prompt already says fans on now', () => {
+  const o = outside((h, d) => (d === 8 ? (h >= 14 && h <= 15 ? 33 : 25) : 22));
+  const v = view(o, inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 33 : 24, rhPct: 40, co2: 800 })));
+  assert.match(v.prompts.find((x) => x.id === 'hot-day').text, /fans on now$/);
+  assert.ok(!ids(v).includes('cooler-outside'));
+  // evening, heat over and no hot prompt today: the flush suggestion is back
+  const o2 = outside((h, d) => (d === 8 ? (h >= 8 && h <= 9 ? 33 : 25) : 22));
+  assert.ok(ids(view(o2, inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 31 : 24, rhPct: 40, co2: 800 })))).includes('cooler-outside'));
+});

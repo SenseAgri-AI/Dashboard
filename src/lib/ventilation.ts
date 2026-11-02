@@ -431,7 +431,13 @@ export function buildVentilation(input: VentInput): VentView {
     const peak = ahead.reduce((a, b) => (b.tempC > a.tempC ? b : a));
     const hotOutside = peak.tempC >= t.hotDayC;
     const gain = gainFor(p);
-    const insideLikely = gain != null && gain > 0 && peak.tempC >= t.gainMinOutsideC && r0(peak.tempC + gain) >= t.insideHotC; // same gate as the outlook's inside peak // the "about N °C" we show, so text and trigger agree
+    // Story: at 18:00 the house is 29 °C and cooling; "Hot inside likely this afternoon (about 34 °C)" is
+    // wrong by then (the gain is for the day's peak, not the evening). Once today's forecast peak is over an
+    // hour past (as the outlook switches to measured), the estimate stops unless the house is hot now.
+    const dayMaxC = dh.length ? Math.max(...dh.map((h) => h.tempC)) : null;
+    const dayPeakT = dayMaxC != null ? Math.max(...dh.filter((h) => h.tempC >= dayMaxC - 0.5).map((h) => h.t)) : null; // last hour near the max (plateaus)
+    const heatPassed = today && dayPeakT != null && now > dayPeakT + H && !(insideNow && insideNow.tempC >= t.insideHotC);
+    const insideLikely = !heatPassed && gain != null && gain > 0 && peak.tempC >= t.gainMinOutsideC && r0(peak.tempC + gain) >= t.insideHotC; // same gate as the outlook's inside peak // the "about N °C" we show, so text and trigger agree
     if (!hotOutside && !insideLikely) continue;
     // Fans before the outside reaches the level that, with the usual gain, makes the house hot.
     const startC = hotOutside ? t.heatStartC : Math.min(t.heatStartC, t.insideHotC - gain!);
@@ -513,7 +519,9 @@ export function buildVentilation(input: VentInput): VentView {
 
   // Cooler outside right now while it's warm inside: flush heat.
   const warmInside = insideNow != null && ((insideNow.feltC != null && insideNow.feltC >= t.warmInsideFeltC) || insideNow.tempC >= t.warmInsideC);
-  if (insideNow && warmInside && outsideNow != null && insideNow.tempC - outsideNow >= t.coolerOutsideDeltaC) {
+  // Not when the hot-day prompt already says "fans on now" for today: one instruction, not two.
+  const hotNowToday = prompts.some((p) => p.id === "hot-day" && p.level === "act" && / fans on now$/.test(p.text) && !/tomorrow/.test(p.text));
+  if (insideNow && warmInside && !hotNowToday && outsideNow != null && insideNow.tempC - outsideNow >= t.coolerOutsideDeltaC) {
     prompts.push({ id: "cooler-outside", level: "act",
       text: `Cooler outside now (${r0(outsideNow)} °C vs ${r0(insideNow.tempC)} °C inside): consider opening up or fans on to flush heat`,
       why: insideNow.feltC != null && insideNow.feltC >= t.warmInsideFeltC ? `Inside feels ${r0(insideNow.feltC)} °C.`
