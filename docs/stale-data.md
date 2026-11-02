@@ -18,3 +18,9 @@ Farmer-facing labels avoid jargon: "Felt temperature" (was "Felt temp · THI"), 
 air-quality band "shaded = usual range" (was "±2σ baseline"), Home "Lay rate (hen-day)" (was "Hen-day %"),
 and the house chart's "Loading lay rate…" / "Couldn't load the lay-rate chart." (was "HDEP"). The
 Analytics explorer keeps the technical names.
+
+## Analytics and noise wording (2 Nov)
+
+Farmer story: *"I'm not a data engineer; tell me what the line is, and don't tell me my birds are stressed because a door banged."*
+- Analytics series: "Air quality (TVOC)", "Dust (PM2.5/PM10)", "Felt temperature". Captions drop "InfluxDB" / "AWS silver layer" ("Last month, at N resolution", "One point per day").
+- Noise: "spike anomalies" → "sudden loud sounds" / "loud spikes". The Dashboard noise badge no longer says "Stressed flock" for one spike (a tractor or door gives the same spike): it says "Loud spike: listen to the clip" (amber), "Noisier than usual" (red, louder than baseline by >4 dB) takes priority, and the calm state reads "Usual noise level". Early warning, never a cause.

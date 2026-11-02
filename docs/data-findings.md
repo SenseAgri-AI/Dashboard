@@ -66,3 +66,9 @@ Deaths average **0.36/day** (101 in 2026 to 11 Oct), too few for temperature lin
 
 Re-run once the October–November logs are in the silver table: the hot spell is the first real test of
 heat vs lay and water vs lay.
+
+## Egg camera vs daily-log hand count (2 Nov)
+
+- Only 8 days overlap (4–11 Oct 2026; the silver daily log ends 11 Oct). Camera total (both cameras) / logged eggs: median **0.48**, range 0.33–0.78. Since 12 Oct the camera reads 1 200–3 100 a day while the log usually shows about 3 900.
+- So the camera is not "about 20 % low" on this data; it is roughly half and swings a lot. The Egg counting banner now says the counts read below the hand count and vary, so use them to compare days and A-frames, not as the day's total. It gives no fixed percentage. Still no alerts on the egg counter.
+- Needs Dylan: is the 20 % figure from a newer validation (e.g. a single collector)? If so, which cameras/period?

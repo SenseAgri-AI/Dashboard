@@ -166,7 +166,7 @@ export default function EggCountingPage() {
       {/* Live-estimate disclaimer */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#FFF7ED", border: "1px solid #FED7AA", color: "#9A3412", padding: "8px 12px", borderRadius: 8, fontSize: 12.5, marginBottom: 18 }}>
         <span style={{ fontWeight: 800 }}>Live estimate</span>
-        <span style={{ opacity: 0.9 }}>First trained model — good detection, but not yet validated against a manual hand-count.</span>
+        <span style={{ opacity: 0.9 }}>Counts read below the daily-log hand count and vary day to day. Use them to compare days and A-frames, not as the day’s total.</span>
       </div>
 
       {!loaded ? (

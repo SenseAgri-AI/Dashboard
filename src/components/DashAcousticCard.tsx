@@ -6,7 +6,7 @@ import { withFlockAge } from "@/lib/flockAge";
 import { TIP_BOX, TIP_LABEL } from "@/components/ChartTooltip";
 
 // Flock-noise welfare card: 24 h noise over a red→green "heat" backdrop (loud/stressed up, calm down),
-// a Calm/Stressed badge from noise-vs-baseline, and spike anomalies surfaced on the plot (tap to hear).
+// a usual/noisier badge from noise-vs-baseline, and spike anomalies surfaced on the plot (tap to hear).
 const LINE = "#0c5c69";
 const DANGER = "#B91C1C", GREEN = "#16A34A", AMBER = "#D97706";
 const AXIS = "#3a4d4f";
@@ -78,10 +78,10 @@ function computeWelfare(series: NoiseRow[], anomalies: AnomalyRow[], now: number
   const base = bl.length ? bl.reduce((a, b) => a + b, 0) / bl.length : m;
   const delta = m - base; // dB above baseline (louder = higher, since dBFS)
   const anomLastHour = anomalies.filter((a) => now - new Date(a.time).getTime() < HOUR_MS).length;
-  if (anomLastHour >= 1) return { label: "Stressed flock", color: DANGER };
   if (delta > 4) return { label: "Noisier than usual", color: DANGER };
-  if (delta > 2) return { label: "Slightly elevated", color: AMBER };
-  return { label: "Calm flock", color: GREEN };
+  if (anomLastHour >= 1) return { label: "Loud spike: listen to the clip", color: AMBER }; // early warning, not a diagnosis (a door or tractor sounds the same)
+  if (delta > 2) return { label: "A bit noisier than usual", color: AMBER };
+  return { label: "Usual noise level", color: GREEN };
 }
 
 // Read the time directly from the hovered noise point. This keeps the label moving with the cursor
@@ -230,7 +230,7 @@ export default function DashAcousticCard({ narrow, house = null }: { narrow?: bo
               <YAxis tick={{ fontSize: 9, fill: AXIS }} axisLine={false} tickLine={false} width={40} unit=" dB" domain={[yMin, yMax]} allowDataOverflow />
               <Tooltip cursor={{ stroke: LINE, strokeWidth: 1.25, strokeDasharray: "4 3" }} content={<NoiseTooltip house={house} />} />
               <Area type="monotone" dataKey="mean" name="Noise" stroke={LINE} strokeWidth={2} fill="url(#sa-noise-heat)" fillOpacity={1} baseValue={yMin} dot={false} connectNulls isAnimationActive={false} />
-              <Scatter name="Anomaly" dataKey="anom" isAnimationActive={false}
+              <Scatter name="Loud spike" dataKey="anom" isAnimationActive={false}
                 shape={(p) => <AnomalyDot {...(p as { cx?: number; cy?: number })} />}
                 onClick={(d) => { const a = (d as unknown as { payload?: { a?: AnomalyRow | null } }).payload?.a; if (a) play(a); }} />
             </ComposedChart>

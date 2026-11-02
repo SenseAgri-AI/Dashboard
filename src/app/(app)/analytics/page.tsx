@@ -105,13 +105,13 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
   { key: "temperature", label: "Temperature", unit: "°C", env: true },
   { key: "humidity", label: "Humidity", unit: "%", env: true },
   { key: "co2", label: "CO₂", unit: "ppm", env: true },
-  { key: "tvoc", label: "TVOC", unit: "idx", env: true },
-  { key: "pm2_5", label: "PM2.5", unit: "µg/m³", env: true },
-  { key: "pm10", label: "PM10", unit: "µg/m³", env: true },
+  { key: "tvoc", label: "Air quality (TVOC)", unit: "idx", env: true },
+  { key: "pm2_5", label: "Dust (PM2.5)", unit: "µg/m³", env: true },
+  { key: "pm10", label: "Dust (PM10)", unit: "µg/m³", env: true },
   { key: "pressure", label: "Pressure", unit: "hPa", env: true },
   { key: "light_level", label: "Light", unit: "lux", env: true },
   { key: "battery", label: "Battery", unit: "%", env: true },
-  { key: "thi", label: "Felt temp (THI)", unit: "°C", env: false }, // derived from temp + humidity
+  { key: "thi", label: "Felt temperature", unit: "°C", env: false }, // derived from temp + humidity
   { key: "noise", label: "Sound level", unit: "dB", env: false },
   { key: "eggs_total", label: "Eggs / day", unit: "", env: false },
   { key: "egg_sizes", label: "Egg sizes (all)", unit: "", env: false },
@@ -406,7 +406,7 @@ function HighResExplorer() {
         )}
       </div>
       <div className="sa-chart-note" style={NOTE_PAD}>
-        Recent, from InfluxDB (≤1 month) at {HR_RES.find((r) => r.key === resKey)?.label} resolution. Drag across the plot to zoom.
+        Last month, at {HR_RES.find((r) => r.key === resKey)?.label} resolution. Drag across the plot to zoom.
         {showWindows && <> Shaded blocks are the day&apos;s schedule windows + run-times.</>}
         {showEvents && <> Markers: <span style={{ color: PRIMARY, fontWeight: 700 }}>schedule change</span> · <span style={{ color: DANGER, fontWeight: 700 }}>event</span> · <span style={{ color: STD, fontWeight: 700 }}>feed</span>.</>}
       </div>
@@ -526,7 +526,7 @@ function SilverExplorer() {
               labelFormat={(ms) => new Date(ms).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "2-digit" })} house={house} />}
       </div>
       <div className="sa-chart-note" style={NOTE_PAD}>
-        Daily, from the AWS silver layer. Drag across the plot to zoom.
+        One point per day. Drag across the plot to zoom.
         {overlays && <> Markers: <span style={{ color: PRIMARY, fontWeight: 700 }}>schedule change</span> · <span style={{ color: DANGER, fontWeight: 700 }}>event</span> · <span style={{ color: STD, fontWeight: 700 }}>feed</span>.</>}
       </div>
     </section>
@@ -618,8 +618,8 @@ function AcousticExplorer() {
       <div className="sa-panel-hd sa-panel-hd--welfare">Flock noise (welfare)</div>
       <div style={TOOLBAR}>
         <div style={GROUP}>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--t2)" }}>Noise level &amp; spike anomalies</span>
-          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--t3)" }}>{anomalies.length} anomal{anomalies.length === 1 ? "y" : "ies"}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--t2)" }}>Noise level &amp; sudden loud sounds</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--t3)" }}>{anomalies.length} loud spike{anomalies.length === 1 ? "" : "s"}</span>
         </div>
         <div style={GROUP_END}>
           <Group label="Range"><Segmented options={ACOUSTIC_RANGES} value={rangeKey} onChange={setRangeKey} /></Group>
@@ -729,7 +729,7 @@ function AcousticChart({ data, domainMs, selectedT, onPick, tickFormat, labelFor
           <Area type="monotone" dataKey="band" name="Loudest (per bucket)" stroke="none" fill={TEAL} fillOpacity={0.16} legendType="none" isAnimationActive={false} connectNulls />
           <Line type="monotone" dataKey="baseline" name="Baseline" stroke={AXIS} strokeWidth={1} strokeDasharray="5 4" dot={false} connectNulls isAnimationActive={false} />
           <Line type="monotone" dataKey="mean" name="Noise level" stroke={TEAL} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-          <Scatter name="Anomaly" dataKey="anomY" isAnimationActive={false}
+          <Scatter name="Loud spike" dataKey="anomY" isAnimationActive={false}
             shape={(p) => <AnomalyDot {...(p as { cx?: number; cy?: number; payload?: NoiseDatum })} selectedT={selectedT} />}
             onClick={(d) => { const a = (d as unknown as { payload?: NoiseDatum }).payload?.anom; if (a) onPick(a); }} />
           {sel && sel[0] !== sel[1] && <ReferenceArea x1={Math.min(sel[0], sel[1])} x2={Math.max(sel[0], sel[1])} strokeOpacity={0} fill={PRIMARY} fillOpacity={0.08} />}
@@ -743,12 +743,12 @@ function AnomalyInbox({ anomalies, selected, clip, onPlay }: {
   anomalies: AnomalyRow[]; selected: AnomalyRow | null; clip: ClipState; onPlay: (a: AnomalyRow) => void;
 }) {
   if (anomalies.length === 0) {
-    return <div style={{ padding: "2px 16px 4px", fontSize: 12, color: "var(--t3)" }}>No spike anomalies detected in this range.</div>;
+    return <div style={{ padding: "2px 16px 4px", fontSize: 12, color: "var(--t3)" }}>No sudden loud sounds in this range.</div>;
   }
   const recent = [...anomalies].reverse(); // newest first
   return (
     <div style={{ padding: "4px 12px 6px" }}>
-      <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)", padding: "2px 4px 6px" }}>Anomaly inbox</div>
+      <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)", padding: "2px 4px 6px" }}>Loud spikes: tap to listen</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 176, overflowY: "auto" }}>
         {recent.map((a) => {
           const key = anomKey(a);
