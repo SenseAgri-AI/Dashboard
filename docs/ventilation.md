@@ -130,18 +130,18 @@ Dylan asked for these to be decided, not left provisional:
 All are per-farm overridable via `ventilation` in the farm config.
 - Home placement (2 Nov): the heads-up sits inside the status band, right under the Today card and above the health dial on a phone (full width under both on a wide screen). Phone order: Today card → heads-up → health dial → This week → Farm overview → Houses.
 
-## Warm end of the house (2 Nov)
+## Warmest sensor (2 Nov)
 
-Story: the house average looks fine, but one end of the house can run hotter, and that is where birds
-pant first. I want to see the warm end too, not only the average.
+Story: the house average looks fine, but one part of the house can run hotter, and that is where birds
+pant first. I want to see the warmest sensor too, not only the average.
 
 - `/api/ventilation` now also returns `hotC` per 30-min bucket: the warmest single reading across the house sensors
   (`tempC` stays the average, used for every rule as before).
 - Usual warm-end gap = median of (warmest-reading peak − average peak) over the same recent warm days as the
   house gain (outside max ≥ `gainMinOutsideC`, at least `minGainDays`).
 - When that gap is at least `warmEndMinC` (1 °C, provisional), each outlook day with an "inside ~N" also shows
-  **warm end ~N** (likely peak + gap; today after the peak: the measured warmest reading). Red at `insideHotC` or above.
+  **warmest ~N** (likely peak + gap; today after the peak: the measured warmest reading). Red at `insideHotC` or above.
 - Both hot-day why lines ("Hot afternoon forecast" and "Hot inside likely") add "The warmest sensor usually peaks about N °C above the house average."
-- **Inside now** shows "warm end N °C" under the temperature when the warmest sensor reads at least `warmEndMinC` above the average right now.
-- Triggers are unchanged: prompts still use the house average. Whether hot prompts should use the warm end is a
+- **Inside now** shows "warmest sensor N °C" under the temperature when the warmest sensor reads at least `warmEndMinC` above the average right now.
+- Triggers are unchanged: prompts still use the house average. Whether hot prompts should use the warmest sensor is a
   decision for Dylan (backtest in the private findings).

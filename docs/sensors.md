@@ -17,9 +17,9 @@ The `sensors` measurement mixes device types under one farm — filter by `devic
 the dashboard/analytics/telemetry routes. A raw `FROM sensors WHERE farm_id = …` sweeps in the meters
 and produces garbage.
 
-**A house can have more than one `AM308-1`** (different `device_id`s, e.g. one at each end). `AVG(...)` over
-`device_type = 'AM308-1'` (what most routes do) is the house average; the ends can differ by a few degrees on a
-hot afternoon. Group by `device_id` to see each sensor, or use `MAX(temperature)` per bucket for the warm end
+**A house can have more than one `AM308-1`** (different `device_id`s). `AVG(...)` over
+`device_type = 'AM308-1'` (what most routes do) is the house average; sensors can differ by a few degrees on a
+hot afternoon. Group by `device_id` to see each sensor, or use `MAX(temperature)` per bucket for the warmest sensor
 (`/api/ventilation` returns it as `hotC`). Per-sensor freshness: `/api/freshness` `climateSensors`.
 
 ## `light_level` — a 0–5 index, NOT lux

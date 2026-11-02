@@ -23,7 +23,7 @@ export type VentThresholds = {
   gainMinOutsideC: number;
   /** Steepest allowed fall in house gain per km/h of daytime wind (°C per km/h). */
   windGainMax: number;
-  /** Show the warm end of the house when its usual peak runs at least this far above the house average. */
+  /** Show the warmest sensor when its usual peak runs at least this far above the house average. */
   warmEndMinC: number;
   /** Inside CO₂ held at or above this for `co2DwellMinutes` while outside is at or below `co2ColdOutsideC`. */
   co2Ppm: number;
@@ -232,7 +232,7 @@ export function buildVentilation(input: VentInput): VentView {
   const { now, offsetHours } = input;
   const hours = (input.outside ?? []).filter((h) => Number.isFinite(h.tempC) && h.tempC > -30 && h.tempC < 60);
   const inside = input.inside.filter((x) => x.tempC == null || (x.tempC > -20 && x.tempC < 60))
-    .map((x) => (x.hotC != null && !(x.hotC > -20 && x.hotC < 60) ? { ...x, hotC: null } : x)); // one glitchy reading mustn't make a "warm end"
+    .map((x) => (x.hotC != null && !(x.hotC > -20 && x.hotC < 60) ? { ...x, hotC: null } : x)); // one glitchy reading mustn't make a warm spot
 
   // Inside now: the latest point within 90 min (older = stale; the Today card's Sensors line covers it).
   const last = [...inside].reverse().find((x) => x.tempC != null);
@@ -299,7 +299,7 @@ export function buildVentilation(input: VentInput): VentView {
     return iv.length >= 6 && ov.length >= 6 && Math.max(...ov) >= t.gainMinOutsideC ? { g: Math.max(...iv) - Math.max(...ov), w: dayWind(p) } : null;
   }).filter((g): g is { g: number; w: number | null } => g != null);
   const gains = gainRows.map((r) => r.g);
-  // Story: the house average looks fine but one end of the house can run hotter, and that is where birds
+  // Story: the house average looks fine but one part of the house can run hotter, and that is where birds
   // pant first. Usual gap between the warmest sensor's peak and the average's peak on the same warm days.
   const warmGaps = pastDays.map((p) => {
     const iv = insideIn(inside, p), ov = outsideIn(hours, p);
