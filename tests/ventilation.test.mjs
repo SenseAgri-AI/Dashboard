@@ -332,3 +332,20 @@ test('storm came early: house just dropped and sits well below the forecast → 
   // a house that simply runs cool (no sudden drop) still gets the hot prompt
   assert.ok(ids(view(o, inside(() => ({ tempC: 19, rhPct: 60, co2: 800 })))).includes('hot-day'));
 });
+
+test('fans/pads cooled a hot house (no rain signal): the hot prompt stays; a humidity jump counts as rain', () => {
+  const dry = outside((h, d) => (d === 8 ? (h >= 11 && h <= 16 ? 33 : 20) : 22)); // no rain forecast
+  const cooled = (rh) => inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 19 : d === 8 && h >= 9 ? 31 : 24, rhPct: rh(h, d), co2: 800 }));
+  // same sharp drop, humidity steady: fans/pads, not a storm → still told about the afternoon
+  assert.ok(ids(view(dry, cooled(() => 45))).includes('hot-day'));
+  // humidity up ~35 points with the drop: rain has come even though the forecast missed it
+  assert.ok(!ids(view(dry, cooled((h, d) => (d === 8 && h >= 11 ? 80 : 45)))).includes('hot-day'));
+});
+
+test('"(peak)" only while the inside sensor is still reporting', () => {
+  const o = outside((h, d) => (d === 8 ? (h >= 8 && h <= 9 ? 33 : 20) : 22)); // peak passed by NOW
+  const stormed = inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 19 : d === 8 && h >= 9 ? 31 : 24, rhPct: 70, co2: 800 }));
+  const stale = stormed.filter((x) => x.t < NOW - 2 * H);
+  assert.equal(view(o, stormed).outlook[0].insideMeasured, true);
+  assert.equal(view(o, stale).outlook[0].insideMeasured, false);
+});

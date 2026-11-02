@@ -46,6 +46,8 @@ export type VentThresholds = {
   stormDropC: number;
   /** Inside this far below the forecast outside temperature now → today's forecast is out of date (e.g. a storm came early): skip today's hot prompt. */
   forecastOffC: number;
+  /** Inside humidity rise (points, vs the last ~2 h) that counts as a rain signal for the storm-cooled check. */
+  stormRhRise: number;
   airOutMinHours: number;
   /** The suggested window is the warmest stretch of at most this many hours. */
   airOutMaxHours: number;
@@ -80,6 +82,7 @@ export const DEFAULT_VENT_THRESHOLDS: VentThresholds = {
   stormGustKmh: 50,        // 2 Nov call: ~"strong breeze/near gale"; tomorrow's storm forecast 65 km/h
   stormDropC: 6,           // 2 Nov call: today's storm showed ~9 °C forecast drop; routine evening cooling is 4–5 °C/h
   forecastOffC: 5,         // houses here run at or above outside by day
+  stormRhRise: 15,         // PROVISIONAL (2 Nov): p95 of daytime 2-h rises; storms gave +20–30
   airOutMinHours: 2,
   airOutMaxHours: 4,
   colderThanUsualC: 3,
@@ -269,11 +272,17 @@ export function buildVentilation(input: VentInput): VentView {
   const houseGain = gains.length >= t.minGainDays ? Math.max(0, median(gains)!) : null;
 
   // 3-day outlook, today first: outside high/low, plus the likely inside peak on warm days.
-  // Signs today's forecast is out of date: the house has just dropped sharply (≥ 4 °C in ~2 h) and sits
-  // well below the forecast outside temperature. Both are needed, so a pad-cooled house that simply runs
-  // below outside still gets its hot-day prompt.
-  const recentMax = Math.max(-Infinity, ...inside.filter((x) => x.tempC != null && x.t >= now - 2.5 * H && x.t <= now - 0.5 * H).map((x) => x.tempC as number));
-  const stormCooled = insideNow != null && outsideNow != null && insideNow.tempC <= outsideNow - t.forecastOffC && recentMax - insideNow.tempC >= 4;
+  // Signs today's forecast is out of date because a storm has come: the house has just dropped sharply
+  // (≥ 4 °C in ~2 h), sits well below the forecast outside temperature, AND there is a rain signal
+  // (rain forecast ≥ stormRainPct within ±2 h, or inside humidity up ≥ stormRhRise points). Fans/pads
+  // pulling a hot house down give the first two but not the third, so their hot prompt stays.
+  const recent = inside.filter((x) => x.t >= now - 2.5 * H && x.t <= now - 0.5 * H);
+  const recentMax = Math.max(-Infinity, ...recent.filter((x) => x.tempC != null).map((x) => x.tempC as number));
+  const recentMinRh = Math.min(Infinity, ...recent.filter((x) => x.rhPct != null).map((x) => x.rhPct as number));
+  const rainNear = hours.some((h) => Math.abs(h.t - now) <= 2 * H && (h.rainPct ?? 0) >= t.stormRainPct);
+  const rhJump = insideNow?.rhPct != null && insideNow.rhPct - recentMinRh >= t.stormRhRise;
+  const stormCooled = insideNow != null && outsideNow != null && insideNow.tempC <= outsideNow - t.forecastOffC
+    && recentMax - insideNow.tempC >= 4 && (rainNear || rhJump);
   const insideMax = (dayMax: number | null) => (houseGain != null && dayMax != null && dayMax >= t.gainMinOutsideC ? r0(dayMax + houseGain) : null);
   const outlook: DayOutlook[] = [];
   for (let i = Math.max(dayIdx, 0); dayIdx >= 0 && i < all.length && outlook.length < 3; i++) {
@@ -290,7 +299,7 @@ export function buildVentilation(input: VentInput): VentView {
     const dayHours = hours.filter((h) => h.t >= p.start && h.t < p.end);
     const peakT = dayHours.length ? dayHours.reduce((a, b) => (b.tempC > a.tempC ? b : a)).t : null;
     const soFar = insideIn(inside, { ...p, end: Math.min(p.end, now + 1) });
-    const measured = dDate === today0 && soFar.length >= 6 && ((peakT != null && now > peakT + H) || stormCooled);
+    const measured = dDate === today0 && insideNow != null && soFar.length >= 6 && ((peakT != null && now > peakT + H) || stormCooled);
     const inMax = measured ? r0(Math.max(...soFar)) : insideMax(dayMax);
     outlook.push({ label: dDate === today0 ? "Today" : dDate === tomorrow0 ? "Tomorrow" : p.label, dayMax, nightMin,
       hot: dayMax != null && dayMax >= t.hotDayC, cold: nightMin != null && nightMin <= t.coldNightC,
