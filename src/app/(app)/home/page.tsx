@@ -16,6 +16,7 @@ type Production = {
   hdep: number | null;
   mortality: { cumulative: number; rate: number | null };
   totalHens: number;
+  liveHens?: number | null;
   daily?: DailyRow[];
 } | null;
 type Health = { health: number; word: string; label: "good" | "normal" | "warning" | "danger" } | null;
@@ -131,10 +132,11 @@ export default function HomePage() {
         <div style={{ padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
           {/* Only worth a tile on a multi-house farm; one house is listed just below. */}
           {houses.length > 1 && <Stat label="Houses" value={String(houses.length)} />}
-          <Stat label="Live hens" value={prod ? prod.totalHens.toLocaleString() : "—"} />
+          {/* Housed flock minus every death in the daily log, so it falls as birds are lost. */}
+          <Stat label="Live hens" value={prod ? (prod.liveHens ?? prod.totalHens).toLocaleString() : "—"} />
           <Stat label={`Eggs (${shortDate(prod?.date)})`} value={prod ? prod.eggs.total.toLocaleString() : "—"} />
           <Stat label="Lay rate (hen-day)" value={prod?.hdep != null ? `${prod.hdep}%` : "—"} />
-          <Stat label="Mortality rate" value={prod?.mortality.rate != null ? `${prod.mortality.rate}%` : "—"} />
+          <Stat label="Deaths since housed" value={prod?.mortality.rate != null ? `${prod.mortality.cumulative.toLocaleString()} (${prod.mortality.rate}%)` : "—"} />
         </div>
       </section>
 

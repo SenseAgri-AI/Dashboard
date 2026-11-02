@@ -98,9 +98,9 @@ export async function GET(request: Request) {
     }
     const liveHens = Math.max(1, TOTAL_HENS - cumulativeMortality);
     const hdep = TOTAL_HENS > 0 ? (totalEggs / liveHens) * 100 : null;
-    const mortalityRate = TOTAL_HENS > 0
-      ? (cumulativeMortality / (TOTAL_HENS + cumulativeMortality)) * 100
-      : null;
+    // houseHens is the flock housed when the daily log began (Oct 2025, point of lay); live hens and the
+    // mortality rate both count logged deaths against it (docs/live-hens.md).
+    const mortalityRate = TOTAL_HENS > 0 ? (cumulativeMortality / TOTAL_HENS) * 100 : null;
 
     // Aggregate per day (a day may have several house rows). r[10] = avg egg weight (g).
     type DayAgg = {
@@ -169,6 +169,7 @@ export async function GET(request: Request) {
         rate: mortalityRate !== null ? Math.round(mortalityRate * 100) / 100 : null,
       },
       totalHens: TOTAL_HENS,
+      liveHens: TOTAL_HENS > 0 ? liveHens : null,
       daily: daily30d,
     });
   } catch (err) {
