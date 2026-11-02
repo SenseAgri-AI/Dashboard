@@ -21,12 +21,15 @@ function toMs(t: unknown): number | null {
 const num = (v: unknown) => (v == null ? null : Number.isFinite(Number(v)) ? Number(v) : null);
 
 
+const FORECAST_TIMEOUT_MS = 10_000;
+
 async function forecast(loc: { lat: number; lon: number }) {
   const url = "https://api.open-meteo.com/v1/forecast"
     + `?latitude=${loc.lat}&longitude=${loc.lon}`
     + "&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,wind_speed_10m,wind_gusts_10m"
     + "&daily=sunrise,sunset&past_days=8&forecast_days=4&timezone=GMT&timeformat=unixtime";
-  const res = await fetch(url, { next: { revalidate: 1800 } });
+  // Story: if the weather service hangs, I still want the inside readings, not a page that spins forever.
+  const res = await fetch(url, { next: { revalidate: 1800 }, signal: AbortSignal.timeout(FORECAST_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
   return parseOpenMeteo(await res.json());
 }

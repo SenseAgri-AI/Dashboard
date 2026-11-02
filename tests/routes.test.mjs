@@ -5,10 +5,10 @@ import vm from 'node:vm';
 import ts from 'typescript';
 
 // Route mapping: /api/freshness per house climate sensor list; /api/ventilation warmest reading (hotC); /api/sleep-score ?days.
-function load(file, mocks) {
+function load(file, mocks, globals = {}) {
   const js = ts.transpileModule(fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const m = { exports: {} };
-  vm.runInNewContext(js, { module: m, exports: m.exports, require: (n) => { if (!(n in mocks)) throw Error(`Unexpected import ${n}`); return mocks[n]; }, Date, URL, Request, console: { error() {} } });
+  vm.runInNewContext(js, { module: m, exports: m.exports, require: (n) => { if (!(n in mocks)) throw Error(`Unexpected import ${n}`); return mocks[n]; }, Date, URL, Request, console: { error() {} }, ...globals });
   return m.exports;
 }
 class FarmAccessError extends Error {}
@@ -65,4 +65,18 @@ test('sleep-score route: ?days=2 for the Today card, default and out-of-range gi
   assert.deepEqual(await days(''), ['15', '15']);
   assert.deepEqual(await days('?days=99'), ['15', '15']);
   assert.deepEqual(await days("?days=2'; DROP"), ['15', '15']);
+});
+
+test('ventilation route: forecast fetch has a timeout; a failed forecast still returns the inside readings', async () => {
+  let init;
+  const api = load('src/app/api/ventilation/route.ts', {
+    'next/server': { NextResponse: { json: (body) => ({ body }) } },
+    '@/lib/farms': { FarmAccessError, validLocation: () => ({ lat: 1, lon: 2 }), getFarmForRequest: async () => ({ farmId: 'f1', timezoneOffset: 2 }) },
+    '@/lib/ventilation': { mergeVentThresholds: () => ({}), parseOpenMeteo: () => null },
+    '@/lib/influxdb': { queryInflux: async () => [{ bucket: new Date(T0), temperature: 25, humidity: 50, co2: 800, temperature_max: 26 }] },
+  }, { fetch: async (_u, i) => { init = i; throw new DOMException('timed out', 'TimeoutError'); }, AbortSignal });
+  const { body } = await api.GET();
+  assert.ok(init.signal instanceof AbortSignal);
+  assert.equal(body.forecastError, true);
+  assert.equal(body.inside.length, 1);
 });

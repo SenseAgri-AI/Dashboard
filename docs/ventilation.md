@@ -158,3 +158,9 @@ then, and at midday I don't need "fans on now" and "Cooler outside now: fans on"
 - **"Cooler outside now"** is skipped while today's hot-day prompt already says "fans on now"; it still shows in the
   evening once the heat has passed. A replay over five recent days at 06/09/12/15/18 h removed the duplicate
   midday cards and the wrong evening "this afternoon" prompt (details in the private findings).
+
+## Forecast timeout (2 Nov)
+
+The Open-Meteo request in `/api/ventilation` now gives up after 10 s (`FORECAST_TIMEOUT_MS`). A slow or hung weather
+service then counts as a forecast error (`forecastError: true`), so the page and the Home heads-up still show the
+inside readings instead of waiting. (A replay script hung for minutes on a network call during testing on 2 Nov; this guards the forecast side.)
