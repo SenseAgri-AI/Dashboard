@@ -641,8 +641,8 @@ function AcousticExplorer() {
       <AnomalyInbox anomalies={anomalies} selected={selected} clip={clip} onPlay={playClip} />
       <audio ref={audioRef} onEnded={() => setClip((c) => ({ ...c, state: "idle" }))} onError={() => setClip((c) => ({ ...c, state: "error" }))} style={{ display: "none" }} />
       <div className="sa-chart-note" style={NOTE_PAD}>
-        Noise level (relative dBFS — 0 is loudest; currently includes fan/mechanical noise, not calibrated).
-        {" "}<span style={{ color: DANGER, fontWeight: 700 }}>Red dots</span> are sudden spikes vs the recent baseline — click one to hear the ~30 s clip. POC: house1 / mic_001.
+        Sound level in the house (higher = louder; includes fans, not calibrated).
+        {" "}<span style={{ color: DANGER, fontWeight: 700 }}>Red dots</span> are sudden loud sounds compared with the usual level: tap one to hear the ~30 s clip.
       </div>
     </section>
   );
