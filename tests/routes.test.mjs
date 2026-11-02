@@ -29,8 +29,8 @@ function route(sensorRows) {
 test('freshness: climateSensors per AM308-1 device, named in device-id order', async () => {
   const { body } = await route([{ device_id: 'bbbb000000000002', last: new Date(T0 - 4 * 3600e3) }, { device_id: 'aaaa000000000001', last: new Date(T0) }]).GET();
   assert.deepEqual(JSON.parse(JSON.stringify(body.climateSensors)), [
-    { name: 'House sensor 1', lastSeen: new Date(T0).toISOString() },
-    { name: 'House sensor 2', lastSeen: new Date(T0 - 4 * 3600e3).toISOString() },
+    { name: 'House sensor 1 (…0001)', lastSeen: new Date(T0).toISOString() },
+    { name: 'House sensor 2 (…0002)', lastSeen: new Date(T0 - 4 * 3600e3).toISOString() },
   ]);
 });
 

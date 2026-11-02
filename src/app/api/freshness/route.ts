@@ -74,7 +74,7 @@ export async function GET() {
         .map((r) => ({ deviceId: String(r.device_id ?? "").trim(), ms: toMs(r.last) }))
         .filter((r) => r.deviceId && !NON_PHYSICAL_DEVICE.test(r.deviceId))
         .sort((a, b) => a.deviceId.localeCompare(b.deviceId))
-        .map((r, i) => ({ name: `House sensor ${i + 1}`, lastSeen: r.ms == null ? null : new Date(r.ms).toISOString() }))
+        .map((r, i) => ({ name: `House sensor ${i + 1} (…${r.deviceId.slice(-4)})`, lastSeen: r.ms == null ? null : new Date(r.ms).toISOString() }))
       : undefined,
     // `undefined` (omitted in JSON) = that query failed; a radar silent for over 7 days drops out of
     // this list, and the silo cards (30-day window) still show it.

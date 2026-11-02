@@ -42,9 +42,9 @@ Farmer story: *"If the egg or deaths chart in Analytics just stops, tell me the 
 Story: the house has more than one climate sensor; if one stops, the house numbers quietly become the other
 one's, so "Climate" still looks fresh. I want to know so I check that sensor.
 
-- `/api/freshness` returns `climateSensors` (last reading per AM308-1 sensor over 30 days, named "House sensor 1, 2…"
-  in device-id order), only when the house has two or more.
-- Today card **Sensors** line, amber: "House sensor 2: no data for 4 h; house numbers are from the other sensor only",
+- `/api/freshness` returns `climateSensors` (last reading per AM308-1 sensor over 30 days, named "House sensor 1 (…abcd), 2…"
+  in device-id order; the tail is the end of its device id, the DevEUI), only when the house has two or more.
+- Today card **Sensors** line, amber: "House sensor 2 (…abcd): no data for 4 h; house numbers are from the other sensor only",
   using the climate stale window (`staleMinutes.climate`). "no data this month" when it has not reported in 30 days.
 - Only while the Climate stream itself is fresh; when every sensor is silent the usual Climate item shows instead.
 - A sensor removed on purpose keeps showing for up to 30 days (until it drops out of the 30-day window).
