@@ -113,5 +113,10 @@ Dylan asked for these to be decided, not left provisional:
 - `stormDropC` 6 °C: routine evening cooling is 4–5 °C an hour, so 6 °C+ around a rain hour points to a storm front.
 - `stormGustKmh` 50 km/h: strong enough to drive rain through open curtains.
 - `forecastOffC` 5 °C: by day these houses run at or above outside, so 5 °C below plus a sharp drop means the forecast is stale.
+- `stormRhRise` 15 points: about the 95th percentile of ordinary daytime 2-hour humidity rises; storms gave clearly more.
+- `stormRhRainPct` 40 %: a humidity jump only counts with at least this rain chance within ±3 h (pads raise humidity too).
+- `fansLeadHours` 2 h: on recent hot days the house was already warm by the time outside reached `heatStartC`.
+- `coldNightC` 10 °C now also applies to the likely inside low, not only the outside forecast.
+- Kept `forecastOffC` at 5 °C after a 4-week replay: 4 °C added night-time "cooled fast" lines without catching more storms.
 All are per-farm overridable via `ventilation` in the farm config.
 - Home placement (2 Nov): the heads-up sits inside the status band, right under the Today card and above the health dial on a phone (full width under both on a wide screen). Phone order: Today card → heads-up → health dial → This week → Farm overview → Houses.
