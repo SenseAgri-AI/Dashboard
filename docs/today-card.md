@@ -13,7 +13,7 @@ New read-only endpoint: `/api/freshness` (latest reading time for climate, each 
    - **Birds**: *when lay rate or deaths move against my own last weeks, or I forgot the log, tell me today.* DailyLog counts only (not the egg camera).
      - Lay: each day's hen-day % vs the median of the previous 7 plausible logged days (needs ≥ 3). Amber when the last **2 consecutive** days are each ≥ 5 pts down, red at **3**. A single-day dip is ignored (in the backtest, single-day ≥ 3 pts flagged 20 % of days, mostly collection timing).
      - A hen-day % outside 20–100 % is shown as "Lay X% looks wrong" (amber, "check the last egg count in the log") and is kept out of the baselines.
-     - Deaths: **one day** ≥ 3 deaths and ≥ 2× the usual daily rate (previous 7 days) → amber. **Red** when the last 7 logged days total ≥ 7 and ≥ 2× the prior weekly rate (previous 4 weeks, needs ≥ 2 weeks) → "call the vet".
+     - Deaths: **one day** ≥ 3 deaths and ≥ 2× the usual daily rate (previous 7 days) → amber. **Red** when the last 7 logged days total ≥ 7 and ≥ 2× the prior weekly rate (previous 4 weeks, needs ≥ 2 weeks) → "Check the birds today; consider calling the vet".
      - Log missing > 2 days → amber, > 5 days (`LOG_OVERDUE_DAYS`) → red.
      - Platform welfare alerts: only `sleep_decline` (2 poor nights) raises Birds. `night_disturbance` (17 firings in 7 weeks) does not.
    - **Climate**: *when the house gets hot or the air stays bad, give me one number and what to do.* Always "`T`°C (feels `F`°C)". "Feels" is capped at the actual temperature: below ~14.4 °C the Marai THI reads warmer than the air, which would be wrong for a cold house (heat bands are unaffected). The Dashboard's felt-temperature tile, the Analytics "Felt temp (THI)" series and the night-rest score's "felt" figure use the same cap.
@@ -58,3 +58,11 @@ Optional fields in SSM `/senseagri/farms/<slug>/config`:
 Without `waterMeters` the card falls back to the single `waterDeviceId`.
 
 All fields are optional and deep-merged over the defaults in `DEFAULT_TODAY_THRESHOLDS`; non-numeric or negative values are ignored.
+
+## Wording rule (all cards)
+
+Amber lines that come from a change against the flock's own normal start with **"Early warning: check …"**
+and name what to check, never a cause: lay drop ("check water, feed and the birds"), a bad day of deaths
+("check the birds"), water use ("check drinkers, pressure and the birds"), one quiet drinker line, and
+"Warming fast". Red lines drop the prefix and say "today" or "now". The This week card and the Ventilation
+prompts follow the same rule (docs/this-week.md, docs/ventilation.md).

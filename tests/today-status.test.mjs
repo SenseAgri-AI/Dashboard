@@ -126,7 +126,7 @@ test('birds: one bad day of deaths is amber, a bad week is red', () => {
   const red = birds([...quiet, ...bad]);
   assert.equal(red.rag, 'red');
   assert.match(red.text, /9 this week/);
-  assert.equal(red.action, 'Check for sick birds; call the vet');
+  assert.equal(red.action, 'Check the birds today; consider calling the vet');
   // the same week is not red when it is the farm's usual rate
   const usual = Array.from({ length: 28 }, (_, i) => day(`2026-09-${String(i + 1).padStart(2, '0')}`, 92, i % 7 < 2 ? 2 : 1));
   assert.notEqual(birds([...usual, ...bad]).rag, 'red');

@@ -265,7 +265,7 @@ export function birdsLine(input: TodayInput, t: TodayThresholds): TodayLine {
       if (run >= h.amberDays) {
         rag = run >= h.redDays ? "red" : "amber";
         s += `, down ${r1(drops.at(-1)!)} pts for ${run} days`;
-        action = "Check water, feed and the birds today";
+        action = rag === "red" ? "Check water, feed and the birds today" : "Early warning: check water, feed and the birds";
       }
       parts.push(s);
     }
@@ -288,7 +288,7 @@ export function birdsLine(input: TodayInput, t: TodayThresholds): TodayLine {
     mRag = "amber"; // a zero baseline must not turn one bird into an "infinite" rise
     dText += ` (usual ${r1(usual)})`;
   }
-  if (mRag !== "green" && RANK[mRag] >= RANK[rag]) action = mRag === "red" ? "Check for sick birds; call the vet" : "Check for sick or dead birds";
+  if (mRag !== "green" && RANK[mRag] >= RANK[rag]) action = mRag === "red" ? "Check the birds today; consider calling the vet" : "Early warning: check the birds";
   rag = worst(rag, mRag);
   parts.push(dText);
 
