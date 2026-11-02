@@ -95,6 +95,8 @@ test('cold night ahead, with the flock baseline', () => {
   const v = view(outside(cold));
   const p = v.prompts.find((x) => x.id === 'cold-night');
   assert.equal(p.text, 'Cold night ahead (min 7 °C): consider closing curtains and reducing fans by dusk (18:40)');
+  // past nights: inside 24 vs outside 18 (+6) → likely ~13 °C inside tonight
+  assert.match(p.why, /Inside likely about 13 °C, going by recent nights\./);
   // last night inside much colder than usual → mentioned
   const chilly = inside((h, d) => ({ tempC: d === 7 && (h >= 19 || h < 5) || d === 8 && h < 5 ? 15 : 22, rhPct: 60, co2: 900 }));
   assert.match(view(outside(cold), chilly).prompts.find((x) => x.id === 'cold-night').why, /down to 15 °C last night \(usual 22 °C\)/);
