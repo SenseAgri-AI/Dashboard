@@ -19,7 +19,7 @@ export default function VentilationPage() {
     let alive = true;
     const load = async () => {
       try {
-        const res = await fetch("/api/ventilation");
+        const res = await fetch("/api/ventilation", { signal: AbortSignal.timeout(30_000) }); // a hung request shows the error, not "Loading…" forever
         if (!res.ok) throw new Error(String(res.status));
         const d = await res.json();
         if (alive) { setData(d); setNow(Date.now()); setError(false); }

@@ -16,7 +16,7 @@ export default function WeatherHeadsUp({ style }: { style?: React.CSSProperties 
   // so re-check every 10 min (the route caches the forecast for 30 min; inside readings are 30-min means).
   useEffect(() => {
     let live = true;
-    const load = () => fetch("/api/ventilation")
+    const load = () => fetch("/api/ventilation", { signal: AbortSignal.timeout(30_000) })
       .then((r) => (r.ok ? (r.json() as Promise<VentData>) : null))
       .then((d) => {
         if (!live || !d?.outside) return;

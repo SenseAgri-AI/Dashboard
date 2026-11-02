@@ -163,4 +163,4 @@ then, and at midday I don't need "fans on now" and "Cooler outside now: fans on"
 
 The Open-Meteo request in `/api/ventilation` now gives up after 10 s (`FORECAST_TIMEOUT_MS`). A slow or hung weather
 service then counts as a forecast error (`forecastError: true`), so the page and the Home heads-up still show the
-inside readings instead of waiting. (On 2 Nov, 2 of 3 test requests to Open-Meteo from the dev machine hung for over 40 s; the third answered in under 1 s.)
+inside readings instead of waiting; the page and heads-up requests themselves give up after 30 s. (On 2 Nov, 2 of 3 test requests to Open-Meteo from the dev machine hung for over 40 s; the third answered in under 1 s.)
