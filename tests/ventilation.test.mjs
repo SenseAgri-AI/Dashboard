@@ -166,7 +166,7 @@ test('no forecast (no location): inside still shown, no outside prompts', () => 
 
 test('Open-Meteo parsing', () => {
   const p = V.parseOpenMeteo({ hourly: { time: [1, 2], temperature_2m: [10, null], relative_humidity_2m: [50, 60] }, daily: { sunrise: [100], sunset: [200] } });
-  assert.deepEqual(plain(p), { outside: [{ t: 1000, tempC: 10, rhPct: 50, rainPct: null, windKmh: null }], sun: [{ sunrise: 100000, sunset: 200000 }] });
+  assert.deepEqual(plain(p), { outside: [{ t: 1000, tempC: 10, rhPct: 50, rainPct: null, windKmh: null, gustKmh: null }], sun: [{ sunrise: 100000, sunset: 200000 }] });
   assert.equal(V.parseOpenMeteo({ error: true }), null);
 });
 
@@ -304,6 +304,8 @@ test('storm: rain likely in daylight → be ready to close curtains; none for ni
   assert.ok(p, 'expected a storm prompt');
   assert.equal(p.text, 'Rain likely tomorrow around 15:00 (90% chance): be ready to close curtains');
   assert.match(p.why, /drops from about 28 °C to 20 °C/);
+  const gusty = view(outside(temp, (h, d) => (d === 9 && h === 15 ? 90 : 10)).map((x) => ({ ...x, gustKmh: 65 }))).prompts.find((x) => x.id === 'storm');
+  assert.match(gusty.why, /Gusts up to about 65 km\/h\.$/);
   assert.equal(p.level, 'plan');
   assert.deepEqual(plain(v.outlook.map((d) => d.rainPct)), [10, 90, 10]); // outlook carries the day's highest rain chance
   // today 14:00, two hours from NOW (12:00) → act

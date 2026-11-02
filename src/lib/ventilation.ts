@@ -40,6 +40,8 @@ export type VentThresholds = {
   airOutMaxRainPct: number;
   /** Daylight hour with at least this rain chance (today's rest or tomorrow) → "Rain likely … be ready to close curtains". */
   stormRainPct: number;
+  /** Forecast gusts at/above this around the rain hour → mentioned in the why line. */
+  stormGustKmh: number;
   /** Inside this far below the forecast outside temperature now → today's forecast is out of date (e.g. a storm came early): skip today's hot prompt. */
   forecastOffC: number;
   airOutMinHours: number;
@@ -73,6 +75,7 @@ export const DEFAULT_VENT_THRESHOLDS: VentThresholds = {
   airOutMaxC: 28,
   airOutMaxRainPct: 50,
   stormRainPct: 70,        // PROVISIONAL
+  stormGustKmh: 50,        // PROVISIONAL
   forecastOffC: 5,         // houses here run at or above outside by day
   airOutMinHours: 2,
   airOutMaxHours: 4,
@@ -94,7 +97,7 @@ export function mergeVentThresholds(o?: unknown): VentThresholds {
   return out;
 }
 
-export type OutsideHour = { t: number; tempC: number; rhPct: number | null; rainPct: number | null; windKmh: number | null };
+export type OutsideHour = { t: number; tempC: number; rhPct: number | null; rainPct: number | null; windKmh: number | null; gustKmh?: number | null };
 export type InsidePoint = { t: number; tempC: number | null; rhPct: number | null; co2: number | null };
 export type SunDay = { sunrise: number; sunset: number };
 export type VentInput = {
@@ -338,11 +341,14 @@ export function buildVentilation(input: VentInput): VentView {
     const after = hours.filter((h) => h.t >= wet.t && h.t <= wet.t + 2 * H).map((h) => h.tempC);
     const from = before.length ? Math.max(...before) : null, to = after.length ? Math.min(...after) : null;
     const day0 = localDate(wet.t, offsetHours) === localDate(now, offsetHours) ? "today" : "tomorrow";
+    const gusts = hours.filter((h) => h.t >= wet.t - H && h.t <= wet.t + 2 * H && h.gustKmh != null).map((h) => h.gustKmh as number);
+    const gust = gusts.length ? Math.max(...gusts) : null;
     prompts.push({ id: "storm", level: wet.t - now < 3 * H ? "act" : "plan",
       text: `Rain likely ${day0} around ${hhmm(wet.t)} (${r0(wet.rainPct!)}% chance): be ready to close curtains`,
-      why: from != null && to != null && from - to >= 4
+      why: (from != null && to != null && from - to >= 4
         ? `Forecast outside drops from about ${r0(from)} °C to ${r0(to)} °C around then; storms can chill an open house fast.`
-        : "Forecast rain chance for that hour; storms can chill an open house fast." });
+        : "Forecast rain chance for that hour; storms can chill an open house fast.")
+        + (gust != null && gust >= t.stormGustKmh ? ` Gusts up to about ${r0(gust)} km/h.` : "") });
     break;
   }
 
@@ -421,7 +427,7 @@ export function parseOpenMeteo(j: unknown): { outside: OutsideHour[]; sun: SunDa
   h.time.forEach((tt, i) => {
     const ts = num(tt), temp = num(h.temperature_2m[i]);
     if (ts == null || temp == null) return;
-    outside.push({ t: ts * 1000, tempC: temp, rhPct: num(h.relative_humidity_2m?.[i]), rainPct: num(h.precipitation_probability?.[i]), windKmh: num(h.wind_speed_10m?.[i]) });
+    outside.push({ t: ts * 1000, tempC: temp, rhPct: num(h.relative_humidity_2m?.[i]), rainPct: num(h.precipitation_probability?.[i]), windKmh: num(h.wind_speed_10m?.[i]), gustKmh: num(h.wind_gusts_10m?.[i]) });
   });
   const d = o?.daily;
   const sun: SunDay[] = [];
