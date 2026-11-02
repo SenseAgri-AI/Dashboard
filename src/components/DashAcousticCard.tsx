@@ -1,5 +1,6 @@
 "use client";
 
+import { spikeBadge } from "@/lib/spikeBadge";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ComposedChart, Area, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { withFlockAge } from "@/lib/flockAge";
@@ -77,9 +78,10 @@ function computeWelfare(series: NoiseRow[], anomalies: AnomalyRow[], now: number
   const bl = recent.map((r) => r.baseline).filter((v): v is number => v != null);
   const base = bl.length ? bl.reduce((a, b) => a + b, 0) / bl.length : m;
   const delta = m - base; // dB above baseline (louder = higher, since dBFS)
-  const anomLastHour = anomalies.filter((a) => now - new Date(a.time).getTime() < HOUR_MS).length;
+  const lastHour = anomalies.filter((a) => now - new Date(a.time).getTime() < HOUR_MS);
   if (delta > 4) return { label: "Noisier than usual", color: DANGER };
-  if (anomLastHour >= 1) return { label: "Loud spike: listen to the clip", color: AMBER }; // early warning, not a diagnosis (a door or tractor sounds the same)
+  const spike = spikeBadge(lastHour.map((a) => new Date(a.time).getTime()), now); // farm-local = SAST here
+  if (spike) return { label: spike, color: AMBER };
   if (delta > 2) return { label: "A bit noisier than usual", color: AMBER };
   return { label: "Usual noise level", color: GREEN };
 }
