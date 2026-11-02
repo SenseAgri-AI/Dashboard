@@ -400,7 +400,7 @@ test('"(peak)" only while the inside sensor is still reporting', () => {
 
 test('house gain follows the wind: calm days run hotter, windy days cooler', () => {
   const W = [5, 20, 5, 20, 5, 20, 5, 20]; // past days' 09–17 h wind (km/h)
-  const withWind = (today) => outside((h, d) => sine(18, 28)(h)).map((x) => {
+  const withWind = (today) => outside((h) => sine(18, 28)(h)).map((x) => {
     const d = localDay(x.t);
     return { ...x, windKmh: d < 8 ? W[d] : d === 8 ? today : 10 };
   });
