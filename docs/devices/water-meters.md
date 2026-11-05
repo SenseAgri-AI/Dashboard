@@ -8,12 +8,12 @@ Last reviewed: 2026-10-29.
 
 | Logical meter | Device ID | Silver column | Conversion |
 |---|---|---|---|
-| Water Meter 1 | `24e124136f451854` | `water_l_wm1` | 10 L per pulse |
-| Water Meter 2 | `24e124136f456303` | `water_l_wm2` | 10 L per pulse |
+| Water Meter 1 | `<water-meter-1-id>` | `water_l_wm1` | 10 L per pulse |
+| Water Meter 2 | `<water-meter-2-id>` | `water_l_wm2` | 10 L per pulse |
 
 Dylan confirmed on 2026-10-29 that these two meters are the ones in use. The platform registry lists both as `water_meter`, `enabled: true`, which matches the meter pipeline (see platform PR 28).
 
-The house's other two EM300s, `24e124136f458449` and `24e124136f452271`, are feed (auger) meters. They are installed but unreliable, so their data is not used. The registry marks them `feed_meter`, `enabled: false`. The pipeline still writes `feed_pulses_auger1` and `feed_pulses_auger2`, and those columns should be treated as unreliable.
+The house's other two EM300s, `<feed-meter-1-id>` and `<feed-meter-2-id>`, are feed (auger) meters. They are installed but unreliable, so their data is not used. The registry marks them `feed_meter`, `enabled: false`. The pipeline still writes `feed_pulses_auger1` and `feed_pulses_auger2`, and those columns should be treated as unreliable.
 
 ## How to interpret readings
 
@@ -34,7 +34,7 @@ Do not forward-fill missing rows and then call them measured zero without explai
 
 ## Known installation timing
 
-The devices were installed around 13 April 2026. Data before installation is not physical meter evidence. Confirm the exact commissioning timestamp before formal analysis.
+The devices were installed partway through the data history. Data before installation is not physical meter evidence. Confirm the exact commissioning timestamp before formal analysis.
 
 ## Questions for the farmer or installer
 

@@ -1,0 +1,480 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import ts from 'typescript';
+
+function load(file, mocks = {}) {
+  const source = fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
+  const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const mod = { exports: {} };
+  vm.runInNewContext(js, { module: mod, exports: mod.exports, require: (name) => {
+    if (!(name in mocks)) throw Error(`Unexpected import ${name}`);
+    return mocks[name];
+  }, Date, Math, Number, JSON, console });
+  return mod.exports;
+}
+const thi = load('src/lib/thi.ts');
+const V = load('src/lib/ventilation.ts', { './thi': thi });
+const plain = (v) => JSON.parse(JSON.stringify(v));
+
+const H = 3_600_000;
+const NOW = Date.parse('2026-11-01T10:00:00Z'); // 12:00 SAST
+const DAY0 = Date.parse('2026-10-24T00:00:00Z') - 2 * H; // local midnight 24 Oct
+const sun = Array.from({ length: 12 }, (_, i) => ({ sunrise: DAY0 + i * 24 * H + 5.33 * H, sunset: DAY0 + i * 24 * H + 18.67 * H }));
+const localHour = (t) => ((t + 2 * H) % (24 * H)) / H;
+const localDay = (t) => Math.floor((t - DAY0) / (24 * H)); // 0 = 24 Oct, 8 = 1 Nov (today)
+// Outside: hourly, -8 days … +3 days; `f(localHour, dayIndex)` gives °C.
+const outside = (f, rain = () => 0) => Array.from({ length: 12 * 24 }, (_, i) => DAY0 + i * H)
+  .map((t) => ({ t, tempC: f(localHour(t), localDay(t)), rhPct: 60, rainPct: rain(localHour(t), localDay(t)), windKmh: 10 }));
+// A mild sine day: min at 05:00, max at 15:00.
+const sine = (lo, hi) => (h) => lo + (hi - lo) * (0.5 - 0.5 * Math.cos(((h - 5 + 24) % 24) / 10 * Math.PI * (h >= 5 && h <= 15 ? 1 : 0) + (h > 15 || h < 5 ? Math.PI * (1 + ((h - 15 + 24) % 24) / 14) : 0)));
+// Inside: 30-min points up to NOW, `f(localHour, dayIndex)` → {tempC, rhPct, co2}.
+const inside = (f) => Array.from({ length: Math.floor((NOW - DAY0) / (H / 2)) + 1 }, (_, i) => DAY0 + i * H / 2)
+  .map((t) => ({ t, ...f(localHour(t), localDay(t)) }));
+const calmInside = () => ({ tempC: 24, rhPct: 60, co2: 900 });
+const view = (o, i = inside(calmInside), thresholds) => V.buildVentilation({ now: NOW, outside: o, sun, inside: i, offsetHours: 2, thresholds });
+const ids = (v) => plain(v.prompts.map((p) => p.id));
+
+test('defaults and per-farm overrides', () => {
+  const t = V.mergeVentThresholds({ coldNightC: 8, hotDayC: 'x', chillOffsetC: 2, bogus: 1 });
+  assert.equal(t.coldNightC, 8);
+  assert.equal(t.hotDayC, 30);
+  assert.equal(t.chillOffsetC, 2);
+  assert.equal(t.bogus, undefined);
+  assert.equal(V.mergeVentThresholds(undefined).co2Ppm, 1400);
+});
+
+test('mild weather: no prompts; day/night rows and a 3-day outlook', () => {
+  const v = view(outside(sine(14, 24)));
+  assert.deepEqual(ids(v), []);
+  assert.equal(v.hasForecast, true);
+  assert.equal(v.today.period.kind, 'day');
+  assert.equal(v.tonight.period.kind, 'night');
+  assert.equal(v.outlook.length, 3);
+  assert.deepEqual(plain(v.outlook.map((d) => d.label)), ['Today', 'Tomorrow', 'Tue']);
+  assert.ok(v.today.outside.max >= 23 && v.today.outside.max <= 24);
+  assert.equal(v.tonight.inside.min, 24); // last night, measured
+  assert.ok(v.outlook.every((d) => !d.insideHot)); // a house that tracks outside on a mild day: never flagged hot
+});
+
+test('inside now: felt temperature and the chill estimate (felt − 3 °C)', () => {
+  const v = view(outside(sine(14, 24)), inside(() => ({ tempC: 30, rhPct: 70, co2: 800 })));
+  assert.equal(v.insideNow.tempC, 30);
+  assert.equal(v.insideNow.feltC, Math.round(thi.thi(30, 70) * 10) / 10);
+  assert.equal(v.insideNow.chillEstC, Math.round((thi.thi(30, 70) - 3) * 10) / 10);
+  // stale inside (> 90 min) is not shown as "now"
+  const stale = inside(calmInside).filter((x) => x.t < NOW - 2 * H);
+  assert.equal(view(outside(sine(14, 24)), stale).insideNow, null);
+  // ...but the page can still say how old the last reading is
+  assert.equal(view(outside(sine(14, 24)), stale).insideLastAt, stale.at(-1).t);
+  assert.equal(view(outside(sine(14, 24)), []).insideLastAt, null);
+});
+
+test('hot afternoon: fans before the heat, only while heat is still ahead', () => {
+  // today: 27.5 °C from 15:00, 33 °C 16:00–17:00 → fans 2 h before the warm-up
+  const later = view(outside((h, d) => (d === 8 ? (h >= 16 && h <= 17 ? 33 : h >= 15 ? 27.5 : 20) : 22)));
+  assert.equal(later.prompts.find((x) => x.id === 'hot-day').text, 'Hot afternoon forecast (33 °C around 16:00): consider opening up and fans on before 13:00');
+  // already warm: "now"
+  const already = view(outside((h, d) => (d === 8 ? (h >= 11 && h <= 17 ? 33 : 20) : 22)));
+  assert.match(already.prompts.find((x) => x.id === 'hot-day').text, /fans on now$/);
+  // heat over for today and a mild tomorrow → nothing
+  assert.ok(!ids(view(outside((h, d) => (d === 8 && h < 11 ? 33 : 22)))).includes('hot-day'));
+  // tomorrow: planned, not urgent
+  const tmr = view(outside((h, d) => (d === 9 && h >= 10 && h <= 16 ? 34 : 20)));
+  assert.equal(tmr.prompts[0].text, 'Hot tomorrow forecast (34 °C around 10:00): consider opening up and fans on before 08:00');
+  assert.equal(tmr.prompts[0].level, 'plan');
+  // below the farm threshold → nothing; with a lower per-farm threshold → prompt
+  const warm = outside((h, d) => (d === 8 && h >= 14 && h <= 16 ? 29 : 20));
+  assert.ok(!ids(view(warm)).includes('hot-day'));
+  assert.ok(ids(view(warm, inside(calmInside), V.mergeVentThresholds({ hotDayC: 28 }))).includes('hot-day'));
+});
+
+test('cold night ahead, with the flock baseline', () => {
+  const cold = (h, d) => (d === 8 && (h >= 19 || h < 5) ? 8 : d === 9 && h < 5 ? 7 : 18);
+  const v = view(outside(cold));
+  const p = v.prompts.find((x) => x.id === 'cold-night');
+  assert.equal(p.text, 'Cold night ahead (min 7 °C): consider closing curtains and reducing fans by dusk (18:40)');
+  // past nights: inside 24 vs outside 18 (+6) → likely ~13 °C inside tonight
+  assert.match(p.why, /Inside likely about 13 °C, going by recent nights\./);
+  // last night inside much colder than usual → mentioned
+  const chilly = inside((h, d) => ({ tempC: d === 7 && (h >= 19 || h < 5) || d === 8 && h < 5 ? 15 : 22, rhPct: 60, co2: 900 }));
+  assert.match(view(outside(cold), chilly).prompts.find((x) => x.id === 'cold-night').why, /down to 15 °C last night \(usual 22 °C\)/);
+  // 11 °C is not a cold night at the default 10 °C, but is with a farm override of 12
+  const mild = outside((h, d) => (d === 8 && (h >= 19 || h < 5) ? 11 : 18));
+  assert.ok(!ids(view(mild)).includes('cold-night'));
+  assert.ok(ids(view(mild, inside(calmInside), V.mergeVentThresholds({ coldNightC: 12 }))).includes('cold-night'));
+});
+
+test('cold night by the house: an 11 °C forecast, but the open house runs ~3 °C below outside at night', () => {
+  const mild = outside((h, d) => (d === 8 && (h >= 19 || h < 5) ? 11 : 18));
+  const opened = inside((h) => ({ tempC: h >= 19 || h < 5 ? 15 : 24, rhPct: 60, co2: 900 })); // nights 15 vs 18 outside
+  const p = view(mild, opened).prompts.find((x) => x.id === 'cold-night');
+  assert.ok(p, 'expected a cold-night prompt from the inside estimate');
+  assert.equal(p.text, 'Cold night inside likely (about 8 °C): consider closing curtains and reducing fans by dusk (18:40)');
+  assert.match(p.why, /^Forecast outside minimum 11 °C, and on recent nights the house ran about 3 °C below outside\./);
+  // the outlook marks tonight cold by the house too, with the likely inside low
+  const v = view(mild, opened);
+  assert.deepEqual(plain([v.outlook[0].cold, v.outlook[0].insideMinLikely]), [true, 8]);
+  assert.equal(view(mild).outlook[0].insideMinLikely, null); // house warmer than outside at night: nothing extra
+});
+
+test('high CO₂ with cold outside → minimum ventilation; not when warm outside or not sustained', () => {
+  const co2High = inside((h, d) => ({ tempC: 20, rhPct: 60, co2: d === 8 && h >= 10 ? 1650 : 900 }));
+  const coldDay = outside(() => 9);
+  const v = view(coldDay, co2High);
+  assert.equal(v.prompts.find((x) => x.id === 'co2-cold').text.replace(/\u00a0/g, ' '), "High CO₂ (1 650 ppm) with cold outside (9 °C): consider minimum ventilation, don't close fully");
+  assert.ok(!ids(view(outside(() => 22), co2High)).includes('co2-cold'));
+  const blip = inside((h, d) => ({ tempC: 20, rhPct: 60, co2: d === 8 && h >= 11.75 ? 1650 : 900 }));
+  assert.ok(!ids(view(coldDay, blip)).includes('co2-cold'));
+});
+
+test('damp night risk only when closing up, vs the flock baseline', () => {
+  const cold = outside((h, d) => (d === 8 && (h >= 19 || h < 5) ? 6 : 17));
+  const dampLastNight = inside((h, d) => ({ tempC: 20, rhPct: (d === 7 && h >= 19) || (d === 8 && h < 5) ? 86 : 65, co2: 900 }));
+  const p = view(cold, dampLastNight).prompts.find((x) => x.id === 'damp-night');
+  assert.match(p.text, /^Damp when closed up: inside reached 86% RH last night \(usual 65%\)/);
+  assert.ok(!ids(view(outside(() => 17), dampLastNight)).includes('damp-night')); // no cold night → not closing up
+});
+
+test('cooler outside now while warm inside → flush heat', () => {
+  const v = view(outside(() => 22), inside(() => ({ tempC: 31, rhPct: 60, co2: 800 })));
+  assert.equal(v.prompts.find((x) => x.id === 'cooler-outside').text, 'Cooler outside now (22 °C vs 31 °C inside): consider opening up or fans on to flush heat');
+  assert.ok(!ids(view(outside(() => 22), inside(() => ({ tempC: 24, rhPct: 60, co2: 800 })))).includes('cooler-outside'));
+  // dry heat (29 °C at 33 % RH "feels" 26) still counts as warm
+  const dry = view(outside(() => 25.6), inside(() => ({ tempC: 29.1, rhPct: 33, co2: 500 })));
+  assert.equal(dry.prompts.find((x) => x.id === 'cooler-outside').text, 'Cooler outside now (26 °C vs 29 °C inside): consider opening up or fans on to flush heat');
+  assert.match(dry.prompts.find((x) => x.id === 'cooler-outside').why, /dry air/);
+  assert.ok(!ids(view(outside(() => 25.6), inside(() => ({ tempC: 28.5, rhPct: 33, co2: 500 })))).includes('cooler-outside'));
+});
+
+test('best window to air out: mildest dry daylight hours, only when the house will be closed', () => {
+  const cold = (h, d) => (d === 8 ? (h >= 13 && h < 16 ? 19 : h >= 12 && h < 17 ? 15 : (h >= 19 ? 6 : 12)) : 6);
+  const v = view(outside(cold));
+  assert.equal(v.prompts.find((x) => x.id === 'air-out').text, 'Best time to air out today: 13:00–16:00 (outside 19–19 °C)');
+  // a long mild afternoon → the warmest 4 h, never past sunset (18:40)
+  const long = view(outside((h, d) => (d === 8 ? (h >= 12 && h < 20 ? 17 + (h === 17 || h === 18 ? 4 : h === 16 ? 3 : 0) : (h >= 19 ? 6 : 12)) : 6)));
+  assert.equal(long.prompts.find((x) => x.id === 'air-out').text, 'Best time to air out today: 15:00–18:40 (outside 17–21 °C)');
+  // rain in that window → no window long enough
+  const wet = view(outside(cold, (h, d) => (d === 8 && h >= 14 && h < 15 ? 80 : 0)));
+  assert.ok(!ids(wet).includes('air-out'));
+  // nothing to air out → no prompt
+  assert.ok(!ids(view(outside((h) => (h >= 13 && h < 16 ? 19 : 14)))).includes('air-out'));
+});
+
+test('prompts are suggestions and "act" sorts before "plan"', () => {
+  const v = view(outside((h, d) => (d === 8 && (h >= 19 || h < 5) ? 6 : d === 8 ? 9 : 6)),
+    inside((h, d) => ({ tempC: 20, rhPct: 60, co2: d === 8 && h >= 10 ? 1650 : 900 })));
+  assert.ok(v.prompts.length >= 2);
+  for (const p of v.prompts) assert.match(p.text, /consider|Best time/);
+  const levels = plain(v.prompts.map((p) => p.level));
+  assert.deepEqual(levels, [...levels].sort((a, b) => (a === 'act' ? 0 : 1) - (b === 'act' ? 0 : 1)));
+});
+
+test('no forecast (no location): inside still shown, no outside prompts', () => {
+  const v = V.buildVentilation({ now: NOW, outside: null, sun: [], inside: inside(calmInside), offsetHours: 2 });
+  assert.equal(v.hasForecast, false);
+  assert.equal(v.insideNow.tempC, 24);
+  assert.deepEqual(ids(v), []);
+  assert.equal(v.today.period.kind, 'day'); // 06:00/18:00 fallback
+});
+
+test('Open-Meteo parsing', () => {
+  const p = V.parseOpenMeteo({ hourly: { time: [1, 2], temperature_2m: [10, null], relative_humidity_2m: [50, 60] }, daily: { sunrise: [100], sunset: [200] } });
+  assert.deepEqual(plain(p), { outside: [{ t: 1000, tempC: 10, rhPct: 50, rainPct: null, windKmh: null, gustKmh: null }], sun: [{ sunrise: 100000, sunset: 200000 }] });
+  assert.equal(V.parseOpenMeteo({ error: true }), null);
+});
+
+test('cold night: felt never above the air, chill = min(actual, felt) − 3', () => {
+  assert.ok(thi.thi(10, 60) > 10); // the Marai index reads warm below ~14.4 °C
+  assert.equal(thi.feltTemp(10, 60), 10);
+  const v = view(outside(() => 8), inside(() => ({ tempC: 10, rhPct: 60, co2: 900 })));
+  assert.equal(v.insideNow.feltC, 10);
+  assert.equal(v.insideNow.chillEstC, 7);
+});
+
+test('hot-day wording uses the farm-local date: before sunrise, today is "afternoon"', () => {
+  const early = Date.parse('2026-11-01T02:00:00Z'); // 04:00 SAST, before sunrise
+  const o = outside((h, d) => (d === 8 && h >= 11 && h <= 15 ? 33 : 20));
+  const v = V.buildVentilation({ now: early, outside: o, sun, inside: inside(calmInside).filter((x) => x.t <= early), offsetHours: 2 });
+  const p = v.prompts.find((x) => x.id === 'hot-day');
+  assert.match(p.text, /^Hot afternoon forecast \(33 °C around 11:00\): consider opening up and fans on before 09:00$/);
+});
+
+test('ventilation CO₂: a lone reading after a gap does not count as sustained', () => {
+  const lone = [{ t: NOW - 10 * 60_000, tempC: 20, rhPct: 60, co2: 1800 }];
+  assert.equal(V.co2Sustained(lone, NOW, 1400, 60), null);
+});
+
+test('3-day outlook labels by local date: in the evening the first day is tomorrow', () => {
+  const evening = Date.parse('2026-11-01T19:00:00Z'); // 21:00 SAST
+  const v = V.buildVentilation({ now: evening, outside: outside(() => 20), sun, inside: [], offsetHours: 2 });
+  assert.deepEqual(plain(v.outlook.map((d) => d.label)), ['Tomorrow', 'Tue', 'Wed']);
+});
+
+test('farmId format is checked before it can reach SQL', () => {
+  const F = load('src/lib/farms.ts', { '@aws-sdk/client-ssm': {}, '@clerk/nextjs/server': {} });
+  for (const ok of ['farm_example_001', 'farm-x-2', 'a']) assert.equal(F.isValidFarmId(ok), true, ok);
+  for (const bad of ["farm' OR 1=1 --", 'Farm_A', 'farm id', '', null, 42, 'x'.repeat(65)]) assert.equal(F.isValidFarmId(bad), false, String(bad));
+});
+
+test('device ids in the farm config must be 16-hex devEUIs (or empty)', () => {
+  const F = load('src/lib/farms.ts', { '@aws-sdk/client-ssm': {}, '@clerk/nextjs/server': {} });
+  const ok = { farmId: 'farm_x_001', waterDeviceId: '0123456789abcdef', feedDeviceId: '' };
+  assert.equal(F.farmConfigIdProblem(ok), null);
+  assert.equal(F.farmConfigIdProblem({ ...ok, feedDeviceId: 'ABCDEF0123456789' }), null);
+  assert.equal(F.farmConfigIdProblem({ ...ok, waterDeviceId: "x' OR '1'='1" }), 'invalid waterDeviceId');
+  assert.equal(F.farmConfigIdProblem({ ...ok, feedDeviceId: '0123456789abcde' }), 'invalid feedDeviceId');
+  assert.equal(F.farmConfigIdProblem({ ...ok, waterMeters: [{ deviceId: '0123456789abcdef', name: 'A' }] }), null);
+  assert.equal(F.farmConfigIdProblem({ ...ok, waterMeters: [{ deviceId: 'nope', name: 'A' }] }), 'invalid waterMeters deviceId');
+  assert.equal(F.farmConfigIdProblem({ ...ok, farmId: 'Bad Id' }), 'invalid farmId');
+});
+
+test('farm location validation', () => {
+  const F = load('src/lib/farms.ts', { '@aws-sdk/client-ssm': {}, '@clerk/nextjs/server': {} });
+  assert.deepEqual(plain(F.validLocation({ lat: -25.0, lon: 28.0 })), { lat: -25, lon: 28 }); // placeholder, not a real farm
+  assert.equal(F.validLocation({ lat: 'x', lon: 28.0 }), null);
+  assert.equal(F.validLocation({ lat: -126, lon: 28.0 }), null);
+  assert.equal(F.validLocation(undefined), null);
+});
+
+test('after sunset the Day box is tomorrow and shows the day that just ended (not a blank)', () => {
+  const evening = Date.parse('2026-11-01T20:45:00Z'); // 22:45 SAST
+  const pts = Array.from({ length: Math.floor((evening - DAY0) / (H / 2)) + 1 }, (_, i) => DAY0 + i * H / 2)
+    .map((t) => ({ t, tempC: localHour(t) >= 12 && localHour(t) < 16 ? 28 : 20, rhPct: 60, co2: 900 }));
+  const v = V.buildVentilation({ now: evening, outside: outside(() => 20), sun, inside: pts, offsetHours: 2 });
+  assert.equal(v.today.upcoming, true);
+  assert.equal(v.today.when, 'tomorrow');
+  assert.equal(v.today.insideWhen, 'today');
+  assert.ok(v.today.period.start > evening);
+  assert.deepEqual(plain(v.today.inside), { min: 20, max: 28 }); // 1 Nov daytime, measured
+  // the live sensor is not reported as quiet
+  assert.ok(v.insideNow != null);
+  assert.equal(v.insideLastAt, pts.at(-1).t);
+  // during the day it is still "so far"
+  assert.equal(view(outside(sine(14, 24))).today.upcoming, false);
+});
+
+test('after midnight, before sunrise: the Day box is today and the inside range is yesterday', () => {
+  for (const at of ['2026-11-01T23:00:00Z', '2026-11-02T01:30:00Z']) { // 01:00 and 03:30 SAST, 2 Nov
+    const now = Date.parse(at);
+    const pts = Array.from({ length: Math.floor((now - DAY0) / (H / 2)) + 1 }, (_, i) => DAY0 + i * H / 2)
+      .map((t) => ({ t, tempC: localDay(t) === 8 && localHour(t) >= 12 && localHour(t) < 16 ? 30 : 20, rhPct: 60, co2: 900 }));
+    const v = V.buildVentilation({ now, outside: outside(() => 20), sun, inside: pts, offsetHours: 2 });
+    assert.equal(v.today.upcoming, true);
+    assert.equal(v.today.when, 'today');
+    assert.equal(v.today.insideWhen, 'yesterday');
+    assert.deepEqual(plain(v.today.inside), { min: 20, max: 30 }); // 1 Nov daytime
+  }
+  // midday: today, so far
+  const mid = view(outside(sine(14, 24))).today;
+  assert.equal(mid.when, 'today');
+  assert.equal(mid.insideWhen, 'today');
+});
+
+test('hot inside likely: a warm (not hot) forecast plus the house\'s own afternoon gain', () => {
+  // past days: outside peaks 28, inside peaks 33 (gain 5); today forecast 28 → ~33 inside
+  const warm = outside(sine(16, 28));
+  const hotHouse = inside((h) => ({ tempC: h >= 12 && h < 17 ? 33 : 22, rhPct: 40, co2: 600 }));
+  const morning = Date.parse('2026-11-01T06:00:00Z'); // 08:00 SAST
+  const v = V.buildVentilation({ now: morning, outside: warm, sun, inside: hotHouse.filter((x) => x.t <= morning), offsetHours: 2 });
+  const p = v.prompts.find((x) => x.id === 'hot-day');
+  assert.ok(p, 'expected a hot-inside prompt');
+  assert.match(p.text, /^Hot inside likely this afternoon \(about 33 °C\): consider opening up and fans on before \d\d:00$/);
+  assert.match(p.why, /warm days this past week the house peaked about 5 °C above outside\. Birds drink more in the heat: check drinkers are flowing\.$/);
+  assert.equal(v.outlook[0].insideMeasured, false); // morning: still an estimate
+  // 3-day outlook carries the likely inside peak (outside high + gain), flagged when 32 °C+
+  assert.deepEqual(plain(v.outlook.map((d) => [d.insideMax, d.insideHot])), [[33, true], [33, true], [33, true]]);
+  // a house that stays at or below outside: no prompt for the same forecast
+  assert.ok(!ids(V.buildVentilation({ now: morning, outside: warm, sun, inside: inside(calmInside).filter((x) => x.t <= morning), offsetHours: 2 })).includes('hot-day'));
+  // too few days of history: no gain, no prompt
+  const short = hotHouse.filter((x) => x.t > morning - 2 * 24 * H && x.t <= morning);
+  assert.ok(!ids(V.buildVentilation({ now: morning, outside: warm, sun, inside: short, offsetHours: 2 })).includes('hot-day'));
+  assert.ok(V.buildVentilation({ now: morning, outside: warm, sun, inside: short, offsetHours: 2 }).outlook.every((d) => d.insideMax == null)); // no history → no inside guess
+});
+
+test('Home heads-up: only an "act" hot-day or cold-night prompt', () => {
+  const P = (id, level) => ({ id, level, text: id, why: '' });
+  assert.equal(V.headsUpPrompt([P('air-out', 'act'), P('hot-day', 'plan')]), null);
+  assert.equal(V.headsUpPrompt([P('cooler-outside', 'act'), P('hot-day', 'act')]).id, 'hot-day');
+  assert.equal(V.headsUpPrompt([P('cold-night', 'act')]).id, 'cold-night');
+  assert.equal(V.headsUpPrompt([P('storm', 'act')]).id, 'storm');
+  assert.equal(V.headsUpPrompt([P('storm', 'plan')]), null);
+  assert.equal(V.headsUpPrompt([P('hot-day', 'act'), P('storm', 'act'), P('storm-now', 'act')]).id, 'storm-now'); // most urgent wins, whatever the order
+  assert.equal(V.headsUpPrompt([P('hot-day', 'act'), P('storm', 'act')]).id, 'storm');
+});
+
+test('hot inside likely: fires when the shown "about N °C" reaches 32 (rounded), not below', () => {
+  const warm = outside(sine(16, 28));
+  const morning = Date.parse('2026-11-01T06:00:00Z');
+  const house = (peakC) => inside((h) => ({ tempC: h >= 12 && h < 17 ? peakC : 22, rhPct: 40, co2: 600 })).filter((x) => x.t <= morning);
+  const at = (peakC) => V.buildVentilation({ now: morning, outside: warm, sun, inside: house(peakC), offsetHours: 2 });
+  assert.match(at(31.5).prompts.find((x) => x.id === 'hot-day').text, /about 32 °C/);
+  assert.ok(!ids(at(31.4)).includes('hot-day'));
+});
+
+test('storm: rain likely in daylight → be ready to close curtains; none for night rain or low chance', () => {
+  // tomorrow (day 9) 15:00 local: 90 % rain and outside drops from 28 to 20 °C
+  const temp = (h, d) => (d === 9 && h >= 15 && h <= 17 ? 20 : sine(16, 28)(h));
+  const v = view(outside(temp, (h, d) => (d === 9 && h === 15 ? 90 : 10)));
+  const p = v.prompts.find((x) => x.id === 'storm');
+  assert.ok(p, 'expected a storm prompt');
+  assert.equal(p.text, 'Rain likely tomorrow around 15:00 (90% chance): be ready to close curtains');
+  assert.match(p.why, /drops from about 28 °C to 20 °C/);
+  const gusty = view(outside(temp, (h, d) => (d === 9 && h === 15 ? 90 : 10)).map((x) => ({ ...x, gustKmh: 65 }))).prompts.find((x) => x.id === 'storm');
+  assert.match(gusty.why, /Gusts up to about 65 km\/h\.$/);
+  assert.equal(p.level, 'plan');
+  assert.deepEqual(plain(v.outlook.map((d) => d.rainPct)), [10, 90, 10]); // outlook carries the day's highest rain chance
+  // today 14:00, two hours from NOW (12:00) → act
+  // today 14:00, two hours from NOW (12:00): plain rain stays plan; with a big outside drop or strong gusts → act
+  assert.equal(view(outside(sine(16, 28), (h, d) => (d === 8 && h === 14 ? 80 : 0))).prompts.find((x) => x.id === 'storm').level, 'plan');
+  const dropToday = (h, d) => (d === 8 && h >= 14 && h <= 16 ? 18 : sine(16, 28)(h));
+  assert.equal(view(outside(dropToday, (h, d) => (d === 8 && h === 14 ? 80 : 0))).prompts.find((x) => x.id === 'storm').level, 'act');
+  assert.equal(view(outside(sine(16, 28), (h, d) => (d === 8 && h === 14 ? 80 : 0)).map((x) => ({ ...x, gustKmh: 60 }))).prompts.find((x) => x.id === 'storm').level, 'act');
+  // night-time rain or 60 %: no prompt
+  assert.ok(!ids(view(outside(sine(16, 28), (h, d) => (d === 9 && h === 22 ? 95 : 0)))).includes('storm'));
+  assert.ok(!ids(view(outside(sine(16, 28), () => 60))).includes('storm'));
+});
+
+test('storm came early: house just dropped and sits well below the forecast → no "fans on now" today', () => {
+  const o = outside((h, d) => (d === 8 ? (h >= 11 && h <= 16 ? 33 : 20) : 22), (h, d) => (d === 8 && h === 13 ? 90 : 0));
+  // inside 31 until 10:30 local, then 19 °C (storm) at NOW = 12:00
+  const stormed = inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 19 : d === 8 && h >= 9 ? 31 : 24, rhPct: 70, co2: 800 }));
+  const v = view(o, stormed);
+  assert.ok(!ids(v).includes('hot-day'));
+  assert.ok(!ids(v).includes('storm'));
+  const now = v.prompts.find((x) => x.id === 'storm-now');
+  assert.equal(now.text, 'House cooled fast (31 → 19 °C in about 2 h): if a storm is passing, check curtains');
+  assert.equal(V.headsUpPrompt(v.prompts).id, 'storm-now');
+  assert.deepEqual(plain([v.outlook[0].insideMax, v.outlook[0].insideMeasured]), [31, true]); // today's card shows the measured peak
+  // a house that simply runs cool (no sudden drop) still gets the hot prompt
+  assert.ok(ids(view(o, inside(() => ({ tempC: 19, rhPct: 60, co2: 800 })))).includes('hot-day'));
+});
+
+test('fans/pads cooled a hot house (no rain signal): the hot prompt stays; a humidity jump counts only with some rain forecast', () => {
+  const dry = outside((h, d) => (d === 8 ? (h >= 11 && h <= 16 ? 33 : 20) : 22)); // no rain forecast
+  const cooled = (rh) => inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 19 : d === 8 && h >= 9 ? 31 : 24, rhPct: rh(h, d), co2: 800 }));
+  // same sharp drop, humidity steady: fans/pads, not a storm → still told about the afternoon
+  assert.ok(ids(view(dry, cooled(() => 45))).includes('hot-day'));
+  assert.ok(!ids(view(dry, cooled(() => 45))).includes('storm-now'));
+  // humidity up ~35 points with the drop but no rain forecast: could be pads → hot prompt stays, no "cooled fast"
+  const padded = view(dry, cooled((h, d) => (d === 8 && h >= 11 ? 80 : 45)));
+  assert.ok(ids(padded).includes('hot-day'));
+  assert.ok(!ids(padded).includes('storm-now'));
+  // same jump with a 50 % rain chance within 3 h (below the 70 % "rain near" level): counts as a storm
+  const showery = outside((h, d) => (d === 8 ? (h >= 11 && h <= 16 ? 33 : 20) : 22), (h, d) => (d === 8 && h === 14 ? 50 : 0));
+  const wet = view(showery, cooled((h, d) => (d === 8 && h >= 11 ? 80 : 45)));
+  assert.ok(!ids(wet).includes('hot-day'));
+  assert.ok(ids(wet).includes('storm-now'));
+});
+
+test('storm came earlier today: later the same day, no "Rain likely today" or "fans on now" either', () => {
+  // inside 31 until 08:00 local, 19 °C from 08:30 with humidity up; rain forecast 09:00 and 14:00; NOW = 12:00
+  const o = outside((h, d) => (d === 8 ? (h >= 7 && h <= 16 ? 33 : 20) : 22), (h, d) => (d === 8 && (h === 9 || h === 14) ? 90 : 0));
+  const early = inside((h, d) => ({ tempC: d === 8 && h >= 8.5 ? 19 : d === 8 && h >= 6 ? 31 : 24, rhPct: d === 8 && h >= 8.5 ? 85 : 45, co2: 800 }));
+  const v = view(o, early);
+  assert.ok(!ids(v).includes('storm-now')); // the sharp drop is now > 2 h old
+  assert.ok(!ids(v).includes('hot-day'));
+  assert.ok(!ids(v).includes('storm'));
+});
+
+test('morning storm, house re-heats: the hot prompt comes back (latch ends on recovery)', () => {
+  const o = outside((h, d) => (d === 8 ? (h >= 7 && h <= 16 ? 33 : 20) : 22), (h, d) => (d === 8 && h === 8 ? 90 : 0));
+  // 31 °C until 07:00, storm 19 °C 07:30–09:30, back to 33 °C from 10:30; NOW = 12:00
+  const reheat = inside((h, d) => ({ tempC: d === 8 && h >= 10.5 ? 33 : d === 8 && h >= 7.5 ? 19 : d === 8 && h >= 5 ? 31 : 24, rhPct: 60, co2: 800 }));
+  assert.ok(ids(view(o, reheat)).includes('hot-day'));
+  // same storm, house stays cool: still quiet
+  const cool = inside((h, d) => ({ tempC: d === 8 && h >= 7.5 ? 19 : d === 8 && h >= 5 ? 31 : 24, rhPct: 60, co2: 800 }));
+  assert.ok(!ids(view(o, cool)).includes('hot-day'));
+  // ...but only for stormLatchHours: with a 2-h latch the 09:30 storm reading has expired by 12:00
+  assert.ok(ids(view(o, cool, V.mergeVentThresholds({ stormLatchHours: 2 }))).includes('hot-day'));
+});
+
+test('"(peak)" only while the inside sensor is still reporting', () => {
+  const o = outside((h, d) => (d === 8 ? (h >= 8 && h <= 9 ? 33 : 20) : 22)); // peak passed by NOW
+  const stormed = inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 19 : d === 8 && h >= 9 ? 31 : 24, rhPct: 70, co2: 800 }));
+  const stale = stormed.filter((x) => x.t < NOW - 2 * H);
+  assert.equal(view(o, stormed).outlook[0].insideMeasured, true);
+  assert.equal(view(o, stale).outlook[0].insideMeasured, false);
+});
+
+test('house gain follows the wind: calm days run hotter, windy days cooler', () => {
+  const W = [5, 20, 5, 20, 5, 20, 5, 20]; // past days' 09–17 h wind (km/h)
+  const withWind = (today) => outside((h) => sine(18, 28)(h)).map((x) => {
+    const d = localDay(x.t);
+    return { ...x, windKmh: d < 8 ? W[d] : d === 8 ? today : 10 };
+  });
+  // past days: inside peak = 28 + (6 − 0.2 × wind) → 5 °C on calm days, 2 °C on windy days
+  const ins = inside((h, d) => ({ tempC: d < 8 ? sine(18, 28 + 6 - 0.2 * W[d])(h) : 24, rhPct: 60, co2: 900 }));
+  const calm = view(withWind(4), ins);
+  const p = calm.prompts.find((x) => x.id === 'hot-day');
+  assert.ok(p, 'calm day: hot prompt expected');
+  assert.match(p.text, /^Hot inside likely this afternoon \(about 33 °C\)/);
+  assert.match(p.why, /calmer than usual forecast, so likely a bit more\./);
+  assert.equal(calm.outlook[0].insideMax, 33);
+  const windy = view(withWind(25), ins);
+  assert.ok(!windy.prompts.some((x) => x.id === 'hot-day' && /this afternoon/.test(x.text))); // ~29 °C inside today
+  assert.equal(windy.outlook[0].insideMax, 29);
+});
+
+test('warm end: the warmest sensor shows when it usually peaks ≥ 1 °C above the average', () => {
+  const o = outside((h) => sine(18, 28)(h));
+  const plain = inside((h, d) => ({ tempC: d < 8 ? sine(18, 33)(h) : 24, rhPct: 60, co2: 900 }));
+  const withHot = plain.map((x) => ({ ...x, hotC: x.tempC == null ? null : x.tempC + (x.tempC > 30 ? 2 : 0.5) }));
+  const v = view(o, withHot);
+  assert.equal(v.outlook[0].insideMax, 33);
+  assert.equal(v.outlook[0].warmEndMax, 35);
+  const p = v.prompts.find((x) => x.id === 'hot-day');
+  assert.match(p.why, /warmest sensor usually peaks about 2 °C above the house average/);
+  // no per-sensor data (old API) or a small gap → nothing extra
+  const none = view(o, plain);
+  assert.equal(none.outlook[0].warmEndMax, null);
+  assert.doesNotMatch(none.prompts.find((x) => x.id === 'hot-day').why, /warmest sensor/);
+  const small = view(o, plain.map((x) => ({ ...x, hotC: x.tempC == null ? null : x.tempC + 0.5 })));
+  assert.equal(small.outlook[0].warmEndMax, null);
+});
+
+test('warm end note also on the hot-outside prompt', () => {
+  const o = outside((h) => sine(18, 34)(h));
+  const ins = inside((h, d) => ({ tempC: d < 8 ? sine(18, 37)(h) : 24, rhPct: 60, co2: 900 })).map((x) => ({ ...x, hotC: x.tempC == null ? null : x.tempC + (x.tempC > 30 ? 2 : 0.5) }));
+  const p = view(o, ins).prompts.find((x) => x.id === 'hot-day');
+  assert.match(p.text, /^Hot afternoon forecast/);
+  assert.match(p.why, /warmest sensor usually peaks about 2 °C above the house average/);
+});
+
+test('inside now: warm end reading only when it is clearly above the average', () => {
+  const o = outside((h) => sine(18, 28)(h));
+  const base = inside((h, d) => ({ tempC: d < 8 ? sine(18, 33)(h) : 24, rhPct: 60, co2: 900 }));
+  const at = (gap) => view(o, base.map((x) => ({ ...x, hotC: x.tempC == null ? null : x.tempC + gap }))).insideNow;
+  assert.equal(at(1.6).warmC, Math.round((base.at(-1).tempC + 1.6) * 10) / 10);
+  assert.equal(at(0.4).warmC, null);
+  assert.equal(view(o, base).insideNow.warmC, null);
+});
+
+test('warm end ignores implausible readings', () => {
+  const o = outside((h) => sine(18, 28)(h));
+  const base = inside((h, d) => ({ tempC: d < 8 ? sine(18, 33)(h) : 24, rhPct: 60, co2: 900 }));
+  const v = view(o, base.map((x) => ({ ...x, hotC: x.tempC == null ? null : x.tempC > 30 ? 85 : x.tempC })));
+  assert.equal(v.outlook[0].warmEndMax, null);
+  assert.equal(v.insideNow.warmC, null);
+});
+
+test("today's 'Hot inside likely' stops once the day's peak has passed, unless the house is hot now", () => {
+  // past week: house peaks ~6 °C above a 28 °C outside. Today outside peaked 28 °C at 08–09 h, 26 °C since; NOW = 12:00
+  const o = outside((h, d) => (d === 8 ? (h >= 8 && h <= 9 ? 28 : 26) : d < 8 ? sine(18, 28)(h) : 22));
+  const past = (h, d) => (d < 8 ? { tempC: sine(18, 34)(h), rhPct: 60, co2: 800 } : null);
+  const cooling = view(o, inside((h, d) => past(h, d) ?? { tempC: 28, rhPct: 60, co2: 800 }));
+  assert.ok(!cooling.prompts.some((x) => x.id === 'hot-day' && /this afternoon/.test(x.text)));
+  const hotNow = view(o, inside((h, d) => past(h, d) ?? { tempC: 32.5, rhPct: 60, co2: 800 }));
+  assert.match(hotNow.prompts.find((x) => x.id === 'hot-day').text, /^Hot inside likely this afternoon/);
+});
+
+test('"Cooler outside now" stays quiet when the hot-day prompt already says fans on now', () => {
+  const o = outside((h, d) => (d === 8 ? (h >= 14 && h <= 15 ? 33 : 25) : 22));
+  const v = view(o, inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 33 : 24, rhPct: 40, co2: 800 })));
+  assert.match(v.prompts.find((x) => x.id === 'hot-day').text, /fans on now$/);
+  assert.ok(!ids(v).includes('cooler-outside'));
+  // evening, heat over and no hot prompt today: the flush suggestion is back
+  const o2 = outside((h, d) => (d === 8 ? (h >= 8 && h <= 9 ? 33 : 25) : 22));
+  assert.ok(ids(view(o2, inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 31 : 24, rhPct: 40, co2: 800 })))).includes('cooler-outside'));
+});

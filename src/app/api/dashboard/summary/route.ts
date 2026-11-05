@@ -19,7 +19,11 @@ interface SparkRow {
   tvoc?: number;
 }
 
+import { sumMeterPoints } from "@/lib/meterPoints";
+import { mergeThresholds, warmestFreshSeries, type SensorTempBucket } from "@/lib/todayStatus";
+
 interface MeterRow {
+  device_id?: unknown;
   bucket: string | Date;
   cumulative?: number;
 }
@@ -27,6 +31,11 @@ interface MeterRow {
 // Device IDs and litres-per-pulse now come from per-farm config (src/lib/farms.ts).
 // SAST offset stays a constant — all current farms are UTC+2.
 const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
+
+function isoOf(t: unknown): string | null {
+  const d = t instanceof Date ? t : typeof t === "string" || typeof t === "number" ? new Date(t) : null;
+  return d && Number.isFinite(d.getTime()) ? d.toISOString() : null;
+}
 
 function toPoint(bucket: string | Date, value: unknown): { time: string; value: number } | null {
   const n = toNum(value);
@@ -78,6 +87,8 @@ function cumulativeMeterPoints(rows: MeterRow[], unitPerPulse = 1): { time: stri
   });
 }
 
+const DEVICE_ID = /^[0-9a-f]{16}$/i;
+
 function rebaseCumulative(points: { time: string; value: number; cumulative: number }[]) {
   let runningTotal = 0;
   return points.map((pt) => {
@@ -111,20 +122,20 @@ function tempAlertMessage(
   const v = Math.round(val * 10) / 10;
 
   // Heat stress thresholds apply day and night
-  if (val > 30) return { status: "danger", message: `Critical. ${v}°C — heat stress threshold exceeded. Check cooling immediately.` };
-  if (val > 26) return { status: "warning", message: `Elevated. ${v}°C approaching heat stress threshold — monitor closely.` };
+  if (val > 30) return { status: "danger", message: `Hot: ${v}°C inside. Fans on and check drinkers.` };
+  if (val > 26) return { status: "warning", message: `Warm: ${v}°C inside. Early warning: keep an eye on it.` };
 
   const night = isNightSast();
 
   if (night) {
-    if (val < 10) return { status: "danger", message: `Cold night. ${v}°C — below 10°C threshold. Birds diverting energy to thermoregulation. Expect increased feed intake.` };
-    if (val < 14) return { status: "warning", message: `Cool night. ${v}°C — below optimal. Monitor feed consumption tomorrow.` };
+    if (val < 10) return { status: "danger", message: `Cold night: ${v}°C inside. Early warning: check curtains and draughts.` };
+    if (val < 14) return { status: "warning", message: `Cool night: ${v}°C inside.` };
     return { status: "normal", message: `${v}°C — within acceptable night range.` };
   } else {
     if (val < 14 && sustainedBelowThreshold(sparkline, 14, 3)) {
-      return { status: "warning", message: `Sustained cold. ${v}°C for 3+ hours — birds burning extra energy on thermoregulation. Expect higher feed intake today.` };
+      return { status: "warning", message: `Cold for 3+ hours: ${v}°C inside. Early warning: check curtains and draughts.` };
     }
-    if (val < 14) return { status: "warning", message: `Low. ${v}°C — below optimal daytime range. Monitor closely.` };
+    if (val < 14) return { status: "warning", message: `Cool: ${v}°C inside.` };
     return { status: "normal", message: `Within range. ${v}°C — no action required.` };
   }
 }
@@ -162,7 +173,9 @@ export async function GET() {
 
   try {
     // Latest AM308 reading
-    const [latestRows, sparkRows, waterSparkRows, feedSparkRows, pmSparkRows, lightRows] = await Promise.all([
+    const waterIds = (farm.waterMeters?.length ? farm.waterMeters.map((m) => m.deviceId) : [farm.waterDeviceId])
+      .filter((id, i, all): id is string => typeof id === "string" && DEVICE_ID.test(id) && all.indexOf(id) === i); // de-duplicated, so a meter listed twice isn't counted twice
+    const [latestRows, sparkRows, waterSparkRows, feedSparkRows, pmSparkRows, lightRows, sensorTempRows] = await Promise.all([
       queryInflux<Record<string, unknown>>(`
         SELECT
           AVG(temperature) AS temperature,
@@ -194,12 +207,13 @@ export async function GET() {
       queryInflux<MeterRow>(`
         SELECT
           date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
+          device_id,
           MAX(pulse_total) AS cumulative
         FROM sensors
         WHERE farm_id = '${farm.farmId}'
-          AND device_id = '${farm.waterDeviceId}'
+          AND device_id IN (${waterIds.map((id) => `'${id}'`).join(", ") || "''"})
           AND time > now() - INTERVAL '25 hours'
-        GROUP BY bucket
+        GROUP BY device_id, bucket
         ORDER BY bucket ASC
       `),
       queryInflux<MeterRow>(`
@@ -237,6 +251,22 @@ export async function GET() {
         GROUP BY bucket
         ORDER BY bucket ASC
       `).catch(() => [] as Record<string, unknown>[]),
+      // Per sensor, last 6 h: enough for a sustained 32 °C check. A failure leaves the heat series
+      // unset so the card keeps the house-average backstop instead of failing the whole dashboard.
+      queryInflux<{ bucket: string | Date; device_id?: unknown; temperature?: unknown; read_at?: unknown }>(`
+        SELECT
+          date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
+          device_id,
+          AVG(temperature) AS temperature,
+          MAX(time) AS read_at
+        FROM sensors
+        WHERE farm_id = '${farm.farmId}'
+          AND device_type = 'AM308-1'
+          AND time > now() - INTERVAL '6 hours'
+          AND temperature IS NOT NULL
+        GROUP BY device_id, bucket
+        ORDER BY bucket ASC
+      `).catch(() => null),
     ]);
 
     const latest = latestRows[0] ?? {};
@@ -246,6 +276,18 @@ export async function GET() {
     const tvocCurrent = toNum(latest.tvoc);
 
     const tempSpark = sparkRows.map((r) => toPoint(r.bucket, r.temperature)).filter((v): v is { time: string; value: number } => v !== null);
+    // Warmest fresh valid sensor. null = the per-sensor query failed (caller keeps the average).
+    const heatSpark = sensorTempRows == null ? null : warmestFreshSeries(
+      sensorTempRows.flatMap((r): SensorTempBucket[] => {
+        const time = isoOf(r.bucket);
+        const deviceId = String(r.device_id ?? "").trim();
+        if (!time || !deviceId) return [];
+        const readAt = isoOf(r.read_at);
+        return [{ time, deviceId, value: toNum(r.temperature), ...(readAt ? { readAt } : {}) }];
+      }),
+      Date.now(),
+      mergeThresholds(farm.today).staleMinutes.climate.amber,
+    );
     const humiditySpark = sparkRows.map((r) => toPoint(r.bucket, r.humidity)).filter((v): v is { time: string; value: number } => v !== null);
     const co2Spark = sparkRows.map((r) => toPoint(r.bucket, r.co2)).filter((v): v is { time: string; value: number } => v !== null);
     const tvocSpark = sparkRows.map((r) => toPoint(r.bucket, r.tvoc)).filter((v): v is { time: string; value: number } => v !== null);
@@ -268,7 +310,9 @@ export async function GET() {
     const lightCurrent = lightSpark.length ? lightSpark[lightSpark.length - 1].value : null;
 
     // Consumption is derived from consecutive cumulative meter readings.
-    const allWaterPoints = cumulativeMeterPoints(waterSparkRows, farm.waterLitresPerPulse);
+    // Every in-use meter (one per A-frame), each differenced on its own counter, then summed per bucket.
+    const allWaterPoints = sumMeterPoints(waterIds.map((id) =>
+      cumulativeMeterPoints(waterSparkRows.filter((r) => String(r.device_id) === id), farm.waterLitresPerPulse)));
     const cutoff3h = Date.now() - 3 * 60 * 60 * 1000;
     const waterLast3h = allWaterPoints
       .filter((pt) => new Date(pt.time).getTime() >= cutoff3h)
@@ -300,7 +344,7 @@ export async function GET() {
 
     return NextResponse.json({
       env: {
-        temperature: { current: temp, status: ts, sparkline: tempSpark },
+        temperature: { current: temp, status: ts, sparkline: tempSpark, ...(heatSpark != null ? { heatSparkline: heatSpark } : {}) },
         humidity: { current: humidity, status: hs, sparkline: humiditySpark },
         co2: { current: co2, status: cs, sparkline: co2Spark },
         tvoc: {
@@ -318,6 +362,7 @@ export async function GET() {
           sparkline: waterSpark,
           mean: waterStats.mean,
           std: waterStats.std,
+          meters: waterIds.length,
         },
       },
       metrics: {

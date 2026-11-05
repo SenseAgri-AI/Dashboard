@@ -1,7 +1,8 @@
 "use client";
 
 import { AreaChart, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip } from "recharts";
-import { thi, thiZone, THI_COMFORT, THI_EXTREME } from "@/lib/thi";
+import { feltTemp, THI_EXTREME, THI_SEVERE } from "@/lib/thi";
+import { DEFAULT_TODAY_THRESHOLDS, heatTileStatus } from "@/lib/todayStatus";
 import { withFlockAge } from "@/lib/flockAge";
 import { SeriesMark, TIP_BOX, TIP_LABEL, TipRow } from "@/components/ChartTooltip";
 
@@ -10,14 +11,14 @@ import { SeriesMark, TIP_BOX, TIP_LABEL, TipRow } from "@/components/ChartToolti
 // working min/max on the y-axis. Fine + coarse dust share one plot; light level added.
 
 export interface EnvData {
-  temperature: { current: number | null; status: string; sparkline: SparklinePoint[] };
+  temperature: { current: number | null; status: string; sparkline: SparklinePoint[]; heatSparkline?: SparklinePoint[] };
   humidity:    { current: number | null; status: string; sparkline: SparklinePoint[] };
   co2:         { current: number | null; status: string; sparkline: SparklinePoint[] };
   tvoc:        { current: number | null; sparkline: SparklinePoint[]; mean: number; std: number };
   pm2_5?:      { current: number | null; sparkline: SparklinePoint[] };
   pm10?:       { current: number | null; sparkline: SparklinePoint[] };
   light?:      { current: number | null; sparkline: SparklinePoint[] };
-  water:       { current: number | null; today: number | null; sparkline: SparklinePoint[]; mean: number; std: number };
+  water:       { current: number | null; today: number | null; sparkline: SparklinePoint[]; mean: number; std: number; meters?: number };
 }
 export interface SparklinePoint { time: string; value: number; cumulative?: number; lo?: number | null; hi?: number | null; }
 
@@ -127,6 +128,23 @@ function EnvTile({ name, value, unit, status, normal, chart }: {
   );
 }
 
+// Story: when the climate sensor stops reporting, say so (and since when) instead of a row of "—",
+// so I check the sensor and power rather than wondering whether the house is fine.
+function ClimateStale({ lastIso }: { lastIso: string | null }) {
+  // Chart points are 30-min averages stamped at the block start; the last reading fell somewhere in
+  // that block, so show its end time as "around" (never earlier than the real reading).
+  const last = lastIso ? Date.parse(lastIso) + 30 * 60_000 : NaN;
+  const when = Number.isFinite(last)
+    ? new Date(last).toLocaleString("en-GB", { timeZone: "Africa/Johannesburg", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })
+    : null;
+  return (
+    <div role="status" style={{ gridColumn: "1 / -1", background: "var(--warn-bg)", color: "var(--warn)", fontSize: 13, padding: "9px 12px", borderRadius: 8 }}>
+      {when ? `No climate reading in the last hour (last around ${when}).` : "No climate readings in the last 24 hours."}
+      {" "}Check the climate sensor and gateway power. Charts show the last 24 h.
+    </div>
+  );
+}
+
 function LegendDot({ color, label }: { color: string; label: string }) {
   return <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, color: "var(--t2)" }}><span style={{ width: 9, height: 3, borderRadius: 2, background: color }} />{label}</span>;
 }
@@ -142,29 +160,39 @@ export default function DashEnvCol({ env, narrow, house = null }: { env: EnvData
   const lightScale = autoScale((env?.light?.sparkline ?? []).map((p) => p.value));
 
   // Felt temperature (THI) — derived per point from temp + humidity (same time buckets). Zone drives
-  // the tile's status colour; comfort < 27.8 °C reads green, severe/extreme trips the alert colour.
+  // the tile's status colour via heatTileStatus below (same levels as the Today card).
   const tSpk = env?.temperature.sparkline ?? [], hSpk = env?.humidity.sparkline ?? [];
   const thiSpark: SparklinePoint[] = tSpk.map((tp, i) => {
     const t = tp.value, h = hSpk[i]?.value;
-    return { time: tp.time, value: Number.isFinite(t) && Number.isFinite(h) ? Math.round(thi(t, h as number) * 10) / 10 : NaN };
+    return { time: tp.time, value: Number.isFinite(t) && Number.isFinite(h) ? Math.round(feltTemp(t, h as number) * 10) / 10 : NaN };
   });
   let thiCurrent: number | null = null;
-  for (let i = thiSpark.length - 1; i >= 0; i--) { if (Number.isFinite(thiSpark[i].value)) { thiCurrent = thiSpark[i].value; break; } }
-  const thiZoneVal = thiCurrent != null ? thiZone(thiCurrent) : null;
-  const thiStatus = thiZoneVal === "extreme" || thiZoneVal === "severe" ? "danger"
-    : thiZoneVal === "moderate" ? "warning" : thiCurrent != null ? "good" : undefined;
+  // Only when there is a current temperature (last hour): otherwise the newest felt point may be hours
+  // old and would read as "now" next to the "—" temperature tile.
+  if (env?.temperature.current != null) {
+    for (let i = thiSpark.length - 1; i >= 0; i--) { if (Number.isFinite(thiSpark[i].value)) { thiCurrent = thiSpark[i].value; break; } }
+  }
+  // Same heat rules as the Today card (felt temperature + dry-bulb backstop), so the two never disagree.
+  // Cold side keeps the summary's own status. The health gauge is unchanged.
+  // "now" = the newest reading (only used while the temperature is current, i.e. within the last hour).
+  const heat = heatTileStatus(thiCurrent, tSpk, tSpk.length ? Date.parse(tSpk[tSpk.length - 1].time) : 0, DEFAULT_TODAY_THRESHOLDS, env?.temperature.heatSparkline);
+  const tempNow = env?.temperature.current ?? null;
+  const tempStatus = tempNow == null ? env?.temperature.status : heat ?? (tempNow < 14 ? env?.temperature.status : "normal");
+  const thiStatus = thiCurrent == null ? undefined
+    : thiCurrent >= DEFAULT_TODAY_THRESHOLDS.feltTempC.red ? "danger" : thiCurrent >= DEFAULT_TODAY_THRESHOLDS.feltTempC.amber ? "warning" : "good";
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "repeat(2, minmax(0,1fr))", gap: 12 }}>
-      <EnvTile name="Temperature" value={r1(env?.temperature.current)} unit="°C" status={env?.temperature.status} normal="18–26°C"
-        chart={<EnvChart data={env?.temperature.sparkline ?? []} domain={[8, 36]} ticks={[10, 20, 30]} band={[18, 26]} tipUnit="°C" height={H} house={house} />} />
+      {env && env.temperature.current == null && <ClimateStale lastIso={tSpk.at(-1)?.time ?? null} />}
+      <EnvTile name="Temperature" value={r1(env?.temperature.current)} unit="°C" status={tempStatus} normal={`hot: ${DEFAULT_TODAY_THRESHOLDS.dryBulbC.amber}°+ or felt ${THI_SEVERE}°+`}
+        chart={<EnvChart data={env?.temperature.sparkline ?? []} domain={[8, 36]} ticks={[10, 20, 30]} band={[14, DEFAULT_TODAY_THRESHOLDS.dryBulbC.amber]} tipUnit="°C" height={H} house={house} />} />
       <EnvTile name="Humidity" value={r0(env?.humidity.current)} unit="% RH" status={env?.humidity.status} normal="50–70%"
         chart={<EnvChart data={env?.humidity.sparkline ?? []} domain={[20, 105]} ticks={[30, 60, 90]} band={[50, 70]} tipUnit="%" height={H} house={house} />} />
-      <EnvTile name="Felt temp · THI" value={r1(thiCurrent)} unit="°C" status={thiStatus} normal={`<${THI_COMFORT}° comfort`}
-        chart={<EnvChart data={thiSpark} domain={[10, 34]} ticks={[14, 22, 30]} band={[10, THI_COMFORT]} threshold={THI_EXTREME} tipUnit="°C" height={H} house={house} />} />
+      <EnvTile name="Felt temperature" value={r1(thiCurrent)} unit="°C" status={thiStatus} normal={`watch from ${THI_SEVERE}°`}
+        chart={<EnvChart data={thiSpark} domain={[10, 34]} ticks={[14, 22, 30]} band={[10, THI_SEVERE]} threshold={THI_EXTREME} tipUnit="°C" height={H} house={house} />} />
       <EnvTile name="CO₂ / Ventilation" value={r0(env?.co2.current)} unit="ppm" status={env?.co2.status} normal="max 1,400"
         chart={<EnvChart data={env?.co2.sparkline ?? []} domain={[300, 2200]} ticks={[500, 1200, 1900]} threshold={1400} tipUnit="ppm" height={H} house={house} />} />
-      <EnvTile name="Air quality" value={env?.tvoc.current != null ? `${Math.round(env.tvoc.current * 100) / 100}` : null} unit="TVOC" normal="±2σ baseline"
+      <EnvTile name="Air quality" value={env?.tvoc.current != null ? `${Math.round(env.tvoc.current * 100) / 100}` : null} unit="TVOC" normal="shaded = usual range"
         chart={<EnvChart data={env?.tvoc.sparkline ?? []} domain={tvocScale.domain} ticks={tvocScale.ticks} band={tvocStd > 0 ? [Math.max(0, Math.round((tvocMean - 2 * tvocStd) * 10) / 10), Math.round((tvocMean + 2 * tvocStd) * 10) / 10] : undefined} tipUnit="idx" height={H} house={house} />} />
 
       {/* Particulates — fine + coarse dust on one plot */}
@@ -182,7 +210,7 @@ export default function DashEnvCol({ env, narrow, house = null }: { env: EnvData
         <ParticulatesChart pm25={env?.pm2_5?.sparkline ?? []} pm10={env?.pm10?.sparkline ?? []} height={H} house={house} />
       </TileShell>
 
-      <EnvTile name="Light" value={r0(env?.light?.current)} unit="lux" normal="photoperiod"
+      <EnvTile name="Light" value={r0(env?.light?.current)} unit="lux" normal="shows lights on/off"
         chart={<EnvChart data={env?.light?.sparkline ?? []} domain={lightScale.domain} ticks={lightScale.ticks} tipUnit="lux" height={H} house={house} />} />
     </div>
   );

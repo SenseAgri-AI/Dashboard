@@ -20,7 +20,9 @@ export async function GET() {
   const r = await resolveFarm();
   if (r.error) return r.error;
   try {
-    return NextResponse.json({ deliveries: await listFeedDeliveries(r.farm!.spreadsheetId) });
+    // Hens (all houses) let the Feed tab turn delivery weights into g/hen/day and sanity-check them.
+    const totalHens = Object.values(r.farm!.houseHens ?? {}).reduce((a, b) => a + (Number(b) || 0), 0);
+    return NextResponse.json({ deliveries: await listFeedDeliveries(r.farm!.spreadsheetId), totalHens });
   } catch (e) {
     return err(500, e instanceof Error ? e.message : "Failed to load feed deliveries");
   }

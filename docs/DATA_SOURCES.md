@@ -32,4 +32,4 @@ Use this map before adding a query. Status labels mean:
 - Platform meter transform: `../senseagri-platform/pipeline/meters_to_silver.py`
 - Platform device registry: `../senseagri-platform/registry/devices.json`
 
-EM300 roles were confirmed on 2026-10-29. `…1854` and `…6303` are the water meters and are in use. `…8449` and `…2271` are feed meters that are installed but unreliable and not used. The platform registry matches this (platform PR 28). The pipeline's feed columns are still produced but are unreliable. See `docs/devices/water-meters.md`.
+EM300 roles are confirmed. Two are the water meters and are in use; two are feed meters that are installed but unreliable and not used. The platform registry matches this (platform PR 28). The pipeline's feed columns are still produced but are unreliable. See `docs/devices/water-meters.md`.

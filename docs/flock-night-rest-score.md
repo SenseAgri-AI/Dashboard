@@ -157,14 +157,11 @@ Full alert entry: [alerts-spec.md → Welfare → Poor flock sleep](../alerts-sp
 
 Tuned and checked on real farm audio (see the notebook). Behaviour on the backtest window:
 
-- **~15 quiet nights → 100.** The quiet baseline correctly scores clean; fans and rain do *not* drag it
-  down (the −32 line sits above them).
-- **The 08 Aug night → 72** (its real ~8-min disturbance lands in the early hours of 09 Aug). This is the
-  worst night in the window and the score reflects it.
-- **09 Aug / 12 Aug → 84** — genuine but milder disturbance.
+- **Quiet nights → 100.** The quiet baseline scores clean; fans and rain do *not* drag it down (the −32 line
+  sits above them).
+- **The worst disturbed night in the window scored lowest**, and milder disturbances scored in between.
 
-This mirrors the night-disturbance alert's own backtest (09 Aug mean −29.7 for ~8 min; 10 Aug mean −29.9)
-— the same events that trip the instantaneous alert are the ones that pull the nightly score down.
+This mirrors the night-disturbance alert's own backtest — the same events that trip the instantaneous alert are the ones that pull the nightly score down.
 
 ## Constants (all tunable, in `src/lib/sleepScore.ts`)
 
@@ -257,3 +254,9 @@ and a [temperature/humidity performance review](https://pmc.ncbi.nlm.nih.gov/art
   night predict a production dip? — the link the paper asserts but doesn't quantify).
 - A dedicated **pre-dawn red-mite** flag (the `predawn` component is already computed per night).
 - Per-farm calibration of `DISRUPT_DB` if a different site's background sits at a different absolute level.
+
+## Cold-night flag (2 Nov, not scored)
+
+*As a farmer, I don't want a freezing night to look "Restful" just because the birds were quiet.*
+
+Cold birds huddle and go quiet, so on the coldest recent nights the score read 100. The score is unchanged (it is the validated model). Instead each night carries `coldMinC`, the lowest inside reading over 20:00–05:00 when at least three readings were at or below `COLD_NIGHT_C` (10 °C, provisional, the same level as the Today card and Ventilation). The tile then shows, in amber: "Cold night: inside down to N°C. Quiet birds may have been huddling, so check the house was closed up." Early warning only.

@@ -17,6 +17,14 @@ The `sensors` measurement mixes device types under one farm — filter by `devic
 the dashboard/analytics/telemetry routes. A raw `FROM sensors WHERE farm_id = …` sweeps in the meters
 and produces garbage.
 
+**A house can have more than one `AM308-1`** (different `device_id`s). `AVG(...)` over
+`device_type = 'AM308-1'` (what most routes do) is the house average; sensors can differ by a few degrees on a
+hot afternoon. Group by `device_id` to see each sensor, or use `MAX(temperature)` per bucket for the warmest raw reading
+(`/api/ventilation` returns it as `hotC`; ventilation prompts still use the house average). The Today card's 32 °C
+dry-bulb backstop and the Live temperature tile's matching hot status use each sensor's 30-min average, then the
+warmest sensor that still has a valid reading inside the climate freshness window (`/api/dashboard/summary`
+`temperature.heatSparkline`). Per-sensor freshness: `/api/freshness` `climateSensors`.
+
 ## `light_level` — a 0–5 index, NOT lux
 
 The AM308 reports light as a **discrete level 0–5**, each mapping to a lux band:

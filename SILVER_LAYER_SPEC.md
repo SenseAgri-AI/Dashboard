@@ -1,6 +1,6 @@
 # Analytics Data Layer — Spec (handover to data-engineering)
 
-Verified against the live AWS account **336814727818**, region **af-south-1**, on 2026-07-05/06.
+Verified against the live dev AWS account, region **af-south-1**, on 2026-07-05/06.
 
 > **What we're building now: the SILVER layer** — all raw device telemetry aligned onto a
 > common **hourly** grid per house and **joined with the farm's Google-Sheet logs** (eggs, egg
@@ -51,7 +51,7 @@ ChirpStack LoRaWAN uplinks:
 { "ingested_at": "...", "request_id": "...",
   "payload": {
     "time": "2026-07-05T07:54:11.305+00:00",             // UTC
-    "deviceInfo": { "devEui": "24e124707e424191", "deviceName": "BUILDING REAR - ...", "deviceProfileName": "AM308-868M" },
+    "deviceInfo": { "devEui": "<climate-sensor-id>", "deviceName": "<device name>", "deviceProfileName": "AM308-868M" },
     "object": { /* decoded metrics — only present on measurement uplinks */ }
 } }
 ```
@@ -79,8 +79,7 @@ ChirpStack LoRaWAN uplinks:
 ### Accessing the Sheets (where + how)
 - **Where** — each farm's `spreadsheetId` is in its **per-farm SSM config
   `/senseagri/farms/<slug>/config`** (same JSON blob as the `devices` map). Read it from there;
-  do **not** hard-code an ID. (DATA_ACCESS.md still shows Anike's single hard-coded ID
-  `1KjAr1wjfptYbE0n3qCWY_7gTVnR-XMTRy8xzRgCDpkA` — pre-multitenant, use it only as a fallback.)
+  do **not** hard-code an ID.
 - **Auth** — Google **service-account JSON in SSM `/senseagri/dev/google/service-account`**
   (region `af-south-1`). Read-only scope `https://www.googleapis.com/auth/spreadsheets.readonly`
   is enough for the pipeline. DATA_ACCESS.md §2 has a working `gspread`/Python snippet — reuse it.
@@ -187,21 +186,21 @@ expanders drift.
 Raw sensor JSON has **no farm/house** — only `devEui`. Supply a mapping (extend the per-farm SSM
 config `/senseagri/farms/<slug>/config` with a `devices` map, so **pipeline and app share one source of truth**):
 ```jsonc
-{ "24e124136f451854": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "water_meter" },
-  "24e124136f456303": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "water_meter" },  // 2nd water meter — confirmed Sep 2026 by hour-of-day profile
-  "24e124136f458449": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "feed_meter" },   // auger-rotation counter #1 — live, feed-time bursts
-  "24e124136f452271": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "feed_meter" },   // auger-rotation counter #2 — ⚠️ frozen at 864,891, stopped counting (hardware check needed)
-  // "24e124136f455672": likely PHANTOM — appeared 3 Sep 2026, single burst, no known install; the 4 physical sensors are accounted for. Verify at device console before mapping.
-  "24e124707e424191": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "env" } }
+{ "<water-meter-1-id>": { "farm_id": "farm_example_001", "house_id": "house1", "role": "water_meter" },
+  "<water-meter-2-id>": { "farm_id": "farm_example_001", "house_id": "house1", "role": "water_meter" },  // 2nd water meter — confirmed by hour-of-day profile
+  "<feed-meter-1-id>": { "farm_id": "farm_example_001", "house_id": "house1", "role": "feed_meter" },   // auger-rotation counter #1 — live, feed-time bursts
+  "<feed-meter-2-id>": { "farm_id": "farm_example_001", "house_id": "house1", "role": "feed_meter" },   // auger-rotation counter #2 — ⚠️ frozen, stopped counting (hardware check needed)
+  // "<unmapped-device-id>": likely PHANTOM — single burst, no known install; the 4 physical sensors are accounted for. Verify at device console before mapping.
+  "<climate-sensor-id>": { "farm_id": "farm_example_001", "house_id": "house1", "role": "env" } }
 ```
 `role` (function) complements `device_type` (hardware, from the path): `device_type` says AM308 vs
 EM300; `role` disambiguates the **multiple** same-type EM300s (2 water meters + augers) and maps every
 device to its farm + house. You need both.
 
 > **Two water meters, not one.** `water_litres` for a house must **sum both** `water_meter`
-> devices' per-bucket consumption (`24e124136f451854` + `24e124136f456303`), each as
+> devices' per-bucket consumption (`<water-meter-1-id>` + `<water-meter-2-id>`), each as
 > `MAX(pulse_total)` per bucket diffed and × 10 L/pulse. The dashboard historically read only
-> `…451854`, which under-counts drinking by ~half — the silver aggregate should not repeat that.
+> water meter 1, which under-counts drinking by ~half — the silver aggregate should not repeat that.
 
 ---
 
@@ -250,7 +249,7 @@ does, since every query is farm+house scoped. Keeps projection cheap.)
 -- 90 days of temp + humidity for one house (the chart's default fetch)
 SELECT bucket_start, temperature, humidity
 FROM senseagri_silver.aligned_hourly
-WHERE farm_id='farm_anike_001' AND house_id='house1'
+WHERE farm_id='farm_example_001' AND house_id='house1'
   AND year=2026 AND month IN (5,6,7)
   AND bucket_start >= timestamp '2026-05-01 00:00'
 ORDER BY bucket_start;
@@ -258,19 +257,19 @@ ORDER BY bucket_start;
 -- daily egg totals + avg weight (broadcast values → take one row per day)
 SELECT date(bucket_start) d, max(eggs_total) eggs, max(avg_egg_weight) avg_wt
 FROM senseagri_silver.aligned_hourly
-WHERE farm_id='farm_anike_001' AND house_id='house1' AND year=2026
+WHERE farm_id='farm_example_001' AND house_id='house1' AND year=2026
 GROUP BY date(bucket_start) ORDER BY d;
 
 -- water vs feed consumption per day
 SELECT date(bucket_start) d, sum(water_litres) water_l, sum(feed_kg) feed_kg
 FROM senseagri_silver.aligned_hourly
-WHERE farm_id='farm_anike_001' AND house_id='house1' AND year=2026
+WHERE farm_id='farm_example_001' AND house_id='house1' AND year=2026
 GROUP BY date(bucket_start) ORDER BY d;
 
 -- events/interventions to overlay on the plot
 SELECT bucket_start, event_type, event_note
 FROM senseagri_silver.aligned_hourly
-WHERE farm_id='farm_anike_001' AND house_id='house1' AND event_flag AND year=2026
+WHERE farm_id='farm_example_001' AND house_id='house1' AND event_flag AND year=2026
 ORDER BY bucket_start;
 ```
 
@@ -342,7 +341,7 @@ convention: `s3://senseagri-dev-gold/…`, own Glue DB `senseagri_gold`.
 2. **Unit-per-pulse** — payload has `pulse_conv`/`pulse_unit_conv` (sample = 1.0), but the app uses
    water = 10 L/pulse. Reconcile the true conversion per meter.
 3. **Real vs demo** — sensor uplinks carry no `farm_id`; camera events show `farm_demo_001`. Which
-   devEuis/cameras are the real Anike farm?
+   devEuis/cameras are the real pilot farm?
 4. **Refresh cadence** (hourly append) + **backfill** from the full raw history (~191k objects ≈ 217 MB).
 5. **Bronze split** — keep bronze as a decode/dedup stage, or fold into silver? (see note above)
 6. **Athena vs Lambda reader** — Athena table (above) is the default; a thin Lambda returning

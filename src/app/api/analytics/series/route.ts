@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { usesDailyLog } from "@/lib/logFreshness";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
-import { fetchSilverDaily, isSilverMetric, fetchMetersDaily, type DailyRow, type MeterDay } from "@/lib/silverSource";
+import { fetchLastLogDay, fetchSilverDaily, isSilverMetric, fetchMetersDaily, type DailyRow, type MeterDay } from "@/lib/silverSource";
 import { queryInflux } from "@/lib/influxdb";
 import { nightScores, type NoiseSample, type ClimateSample } from "@/lib/sleepScore";
-import { thi, plausibleClimate } from "@/lib/thi";
+import { feltTemp, plausibleClimate } from "@/lib/thi";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -177,7 +178,7 @@ export async function GET(req: NextRequest) {
           if (day < fromDay || day > toDay) continue;
           const t = row.temperature as number | null, h = row.humidity as number | null;
           const point = byDay.get(day) ?? { time: row.time };
-          point[THI] = t != null && h != null && plausibleClimate(t, h) ? round(thi(t, h), 1) : null;
+          point[THI] = t != null && h != null && plausibleClimate(t, h) ? round(feltTemp(t, h), 1) : null;
           byDay.set(day, point);
         }
       } catch (e) {
@@ -204,7 +205,9 @@ export async function GET(req: NextRequest) {
     }
 
     const series = [...byDay.values()].sort((a, b) => String(a.time).localeCompare(String(b.time)));
-    return NextResponse.json({ series, metrics, grain: "daily", house: houseId });
+    // When daily-log metrics are shown, say how fresh the analytics copy of the log is (null = unknown).
+    const logLastDay = usesDailyLog(metrics) ? await fetchLastLogDay(farm.farmId, houseId).catch(() => null) : undefined;
+    return NextResponse.json({ series, metrics, grain: "daily", house: houseId, logLastDay });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Silver query failed" }, { status: 500 });
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import ListEmptyRow, { type LoadState } from "./ListEmptyRow";
 import HouseSelect, { houseLabel } from "@/components/HouseSelect";
 
 type FarmEvent = { id: string; date: string; time: string; type: string; title: string; details: string; notes: string; loggedBy: string; house: string };
@@ -50,9 +51,16 @@ export default function EventsTab() {
   const [editingId, setEditingId] = useState("");
   const [status, setStatus] = useState<{ kind: "idle" | "saving" | "ok" | "error"; msg?: string }>({ kind: "idle" });
 
+  const [loadState, setLoadState] = useState<LoadState>("loading");
   const load = useCallback(async () => {
-    const res = await fetch("/api/events");
-    if (res.ok) setEvents((await res.json()).events ?? []);
+    try {
+      const res = await fetch("/api/events");
+      if (!res.ok) throw new Error(String(res.status));
+      setEvents((await res.json()).events ?? []);
+      setLoadState("ok");
+    } catch {
+      setLoadState("error");
+    }
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -180,7 +188,7 @@ export default function EventsTab() {
                   </tr>
                 );
               })}
-              {recent.length === 0 && <tr><td colSpan={6} style={{ padding: "20px 12px", color: "var(--t3)", textAlign: "center" }}>No events logged yet.</td></tr>}
+              {recent.length === 0 && <ListEmptyRow state={loadState} colSpan={6} what="events" empty="No events logged yet." onRetry={() => { setLoadState("loading"); load(); }} />}
             </tbody>
           </table>
         </div>

@@ -9,7 +9,7 @@
 # approach was explored (`adaptive_floor` / `night_rest_score_v3`) and rejected — it's confounded.
 #
 # `noise_db_mean` is dBFS (higher = louder). Dark period = 20:00–05:00 SAST. A "night" is named by the
-# **evening it starts** (so the "08 Aug" night = Fri 8th 20:00 → Sat 9th 05:00).
+# **evening it starts** (so the "Fri" night = Fri 20:00 → Sat 05:00).
 
 # %%
 %matplotlib inline

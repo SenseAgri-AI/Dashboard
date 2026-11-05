@@ -8,6 +8,7 @@ import { chartWindow } from "@/lib/chartWindow";
 import { standardHdepForWeek } from "@/lib/henStandard";
 import { THI_COMFORT, THI_SEVERE, THI_EXTREME } from "@/lib/thi";
 import { withFlockAge } from "@/lib/flockAge";
+import { logStaleNotice } from "@/lib/logFreshness";
 import { RECHARTS_TIP, TIP_BOX, TIP_LABEL } from "@/components/ChartTooltip";
 
 // Heat-stress reference bands for the felt-temperature (THI) axis — comfort (< 27.8 °C) stays clear;
@@ -105,21 +106,21 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
   { key: "temperature", label: "Temperature", unit: "°C", env: true },
   { key: "humidity", label: "Humidity", unit: "%", env: true },
   { key: "co2", label: "CO₂", unit: "ppm", env: true },
-  { key: "tvoc", label: "TVOC", unit: "idx", env: true },
-  { key: "pm2_5", label: "PM2.5", unit: "µg/m³", env: true },
-  { key: "pm10", label: "PM10", unit: "µg/m³", env: true },
+  { key: "tvoc", label: "Air quality (TVOC)", unit: "idx", env: true },
+  { key: "pm2_5", label: "Dust (PM2.5)", unit: "µg/m³", env: true },
+  { key: "pm10", label: "Dust (PM10)", unit: "µg/m³", env: true },
   { key: "pressure", label: "Pressure", unit: "hPa", env: true },
   { key: "light_level", label: "Light", unit: "lux", env: true },
   { key: "battery", label: "Battery", unit: "%", env: true },
-  { key: "thi", label: "Felt temp (THI)", unit: "°C", env: false }, // derived from temp + humidity
+  { key: "thi", label: "Felt temperature", unit: "°C", env: false }, // derived from temp + humidity
   { key: "noise", label: "Sound level", unit: "dB", env: false },
   { key: "eggs_total", label: "Eggs / day", unit: "", env: false },
   { key: "egg_sizes", label: "Egg sizes (all)", unit: "", env: false },
   { key: "avg_egg_weight", label: "Egg weight", unit: "g", env: false },
-  { key: "cum_mortality", label: "Cumulative mortality", unit: "%", env: false },
+  { key: "cum_mortality", label: "Deaths since housed", unit: "%", env: false },
   { key: "eggs_damaged", label: "Eggs broken / day", unit: "", env: false },
   { key: "breakage_rate", label: "Breakage rate", unit: "%", env: false },
-  { key: "hdep", label: "Hen-day %", unit: "%", env: false },
+  { key: "hdep", label: "Lay rate (hen-day)", unit: "%", env: false },
   { key: "night_rest", label: "Night-rest score", unit: "", env: false },
   { key: "water", label: "Drinking rate", unit: "L", env: false },
   // Feed & water from the silver meters table (daily). Groups plot both members together.
@@ -134,7 +135,10 @@ const ENV_OPTIONS = CATALOG.filter((c) => c.env);
 // High-res chart draws from InfluxDB: env sensors + acoustic sound level + drinking rate (water meter).
 const HR_OPTIONS = CATALOG.filter((c) => c.env || c.key === "noise" || c.key === "water" || c.key === "thi");
 // Daily history: everything except the high-res-only drinking rate (its daily form is "water_daily").
-const SILVER_OPTIONS = CATALOG.filter((c) => c.key !== "water");
+// Feed auger pulse meters are offline and never calibrated to kg (long flat stretches and implausible
+// bursts), so they are kept out of the picker until they are fixed.
+const FEED_METER_KEYS = new Set(["feed_augers", "feed_a1", "feed_a2"]);
+const SILVER_OPTIONS = CATALOG.filter((c) => c.key !== "water" && !FEED_METER_KEYS.has(c.key));
 // Only sensor metrics vary within a day → only they get a min–max band. Sheet-derived daily
 // values (eggs, sizes, breakages, weight, mortality) are broadcast across the 24 hours, so their
 // min = max = the day's value (a flat, meaningless band).
@@ -403,7 +407,7 @@ function HighResExplorer() {
         )}
       </div>
       <div className="sa-chart-note" style={NOTE_PAD}>
-        Recent, from InfluxDB (≤1 month) at {HR_RES.find((r) => r.key === resKey)?.label} resolution. Drag across the plot to zoom.
+        Last month, at {HR_RES.find((r) => r.key === resKey)?.label} resolution. Drag across the plot to zoom.
         {showWindows && <> Shaded blocks are the day&apos;s schedule windows + run-times.</>}
         {showEvents && <> Markers: <span style={{ color: PRIMARY, fontWeight: 700 }}>schedule change</span> · <span style={{ color: DANGER, fontWeight: 700 }}>event</span> · <span style={{ color: STD, fontWeight: 700 }}>feed</span>.</>}
       </div>
@@ -420,6 +424,7 @@ function SilverExplorer() {
   const [overlays, setOverlays] = useState(false);
   const [showRange, setShowRange] = useState(false);
   const [raw, setRaw] = useState<Frame[]>([]);
+  const [logNotice, setLogNotice] = useState<string | null>(null);
   const [house, setHouse] = useState<House | null>(null);
   const [sched, setSched] = useState<SchedVersion[]>([]);
   const [events, setEvents] = useState<FarmEvent[]>([]);
@@ -452,8 +457,10 @@ function SilverExplorer() {
     const metrics = [...new Set([...expandKeys(left), ...expandKeys(right)])];
     const q = new URLSearchParams({ metrics: metrics.join(","), from: fromIso, to: toIso });
     const res = await fetch(`/api/analytics/series?${q}`);
-    if (!res.ok) { setErr((await res.json().catch(() => ({}))).error ?? "Failed to load"); setRaw([]); setLoading(false); return; }
-    setRaw((await res.json()).series ?? []);
+    if (!res.ok) { setErr((await res.json().catch(() => ({}))).error ?? "Failed to load"); setRaw([]); setLogNotice(null); setLoading(false); return; }
+    const body = await res.json();
+    setRaw(body.series ?? []);
+    setLogNotice(logStaleNotice(body.logLastDay, new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Johannesburg" }).format(new Date())));
     setLoading(false);
   }, [left, right, rangeKey]);
   useEffect(() => { load(); }, [load]);
@@ -504,13 +511,15 @@ function SilverExplorer() {
         <div style={GROUP_END}>
           <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
             <Toggle checked={showStd} onChange={setShowStd} disabled={!hdepAxis} accent={STD} label="Standard"
-              title={hdepAxis ? "Overlay the breed-standard lay curve" : "Select Hen-day % to compare against the standard"} />
+              title={hdepAxis ? "Overlay the breed-standard lay curve" : "Select Lay rate to compare against the breed standard"} />
             <Toggle checked={showRange} onChange={setShowRange} label="Min–max" title="Show each metric's daily min–max range" />
             <Toggle checked={overlays} onChange={setOverlays} label="Events" title="Mark schedule changes, events and feed deliveries" />
           </div>
           <Group label="Range"><Segmented options={SILVER_RANGES} value={rangeKey} onChange={setRangeKey} /></Group>
         </div>
       </div>
+      {/* Above the chart, so a line that just stops is explained before it is read as a drop. */}
+      {logNotice && <div role="status" style={{ margin: "0 16px 8px", background: "#FFF7ED", border: "1px solid #FED7AA", color: "#9A3412", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600 }}>{logNotice}</div>}
       <div style={CHART_PAD}>
         {loading ? <div style={{ height: 340 }}><Placeholder text="Loading…" /></div>
           : err ? <div style={{ height: 340 }}><Placeholder text={err} /></div>
@@ -523,7 +532,7 @@ function SilverExplorer() {
               labelFormat={(ms) => new Date(ms).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "2-digit" })} house={house} />}
       </div>
       <div className="sa-chart-note" style={NOTE_PAD}>
-        Daily, from the AWS silver layer. Drag across the plot to zoom.
+        One point per day. Drag across the plot to zoom.
         {overlays && <> Markers: <span style={{ color: PRIMARY, fontWeight: 700 }}>schedule change</span> · <span style={{ color: DANGER, fontWeight: 700 }}>event</span> · <span style={{ color: STD, fontWeight: 700 }}>feed</span>.</>}
       </div>
     </section>
@@ -615,8 +624,8 @@ function AcousticExplorer() {
       <div className="sa-panel-hd sa-panel-hd--welfare">Flock noise (welfare)</div>
       <div style={TOOLBAR}>
         <div style={GROUP}>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--t2)" }}>Noise level &amp; spike anomalies</span>
-          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--t3)" }}>{anomalies.length} anomal{anomalies.length === 1 ? "y" : "ies"}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--t2)" }}>Noise level &amp; sudden loud sounds</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--t3)" }}>{anomalies.length} loud spike{anomalies.length === 1 ? "" : "s"}</span>
         </div>
         <div style={GROUP_END}>
           <Group label="Range"><Segmented options={ACOUSTIC_RANGES} value={rangeKey} onChange={setRangeKey} /></Group>
@@ -633,8 +642,8 @@ function AcousticExplorer() {
       <AnomalyInbox anomalies={anomalies} selected={selected} clip={clip} onPlay={playClip} />
       <audio ref={audioRef} onEnded={() => setClip((c) => ({ ...c, state: "idle" }))} onError={() => setClip((c) => ({ ...c, state: "error" }))} style={{ display: "none" }} />
       <div className="sa-chart-note" style={NOTE_PAD}>
-        Noise level (relative dBFS — 0 is loudest; currently includes fan/mechanical noise, not calibrated).
-        {" "}<span style={{ color: DANGER, fontWeight: 700 }}>Red dots</span> are sudden spikes vs the recent baseline — click one to hear the ~30 s clip. POC: house1 / mic_001.
+        Sound level in the house (higher = louder; includes fans, not calibrated).
+        {" "}<span style={{ color: DANGER, fontWeight: 700 }}>Red dots</span> are sudden loud sounds compared with the usual level: tap one to hear the ~30 s clip.
       </div>
     </section>
   );
@@ -726,7 +735,7 @@ function AcousticChart({ data, domainMs, selectedT, onPick, tickFormat, labelFor
           <Area type="monotone" dataKey="band" name="Loudest (per bucket)" stroke="none" fill={TEAL} fillOpacity={0.16} legendType="none" isAnimationActive={false} connectNulls />
           <Line type="monotone" dataKey="baseline" name="Baseline" stroke={AXIS} strokeWidth={1} strokeDasharray="5 4" dot={false} connectNulls isAnimationActive={false} />
           <Line type="monotone" dataKey="mean" name="Noise level" stroke={TEAL} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-          <Scatter name="Anomaly" dataKey="anomY" isAnimationActive={false}
+          <Scatter name="Loud spike" dataKey="anomY" isAnimationActive={false}
             shape={(p) => <AnomalyDot {...(p as { cx?: number; cy?: number; payload?: NoiseDatum })} selectedT={selectedT} />}
             onClick={(d) => { const a = (d as unknown as { payload?: NoiseDatum }).payload?.anom; if (a) onPick(a); }} />
           {sel && sel[0] !== sel[1] && <ReferenceArea x1={Math.min(sel[0], sel[1])} x2={Math.max(sel[0], sel[1])} strokeOpacity={0} fill={PRIMARY} fillOpacity={0.08} />}
@@ -740,12 +749,12 @@ function AnomalyInbox({ anomalies, selected, clip, onPlay }: {
   anomalies: AnomalyRow[]; selected: AnomalyRow | null; clip: ClipState; onPlay: (a: AnomalyRow) => void;
 }) {
   if (anomalies.length === 0) {
-    return <div style={{ padding: "2px 16px 4px", fontSize: 12, color: "var(--t3)" }}>No spike anomalies detected in this range.</div>;
+    return <div style={{ padding: "2px 16px 4px", fontSize: 12, color: "var(--t3)" }}>No sudden loud sounds in this range.</div>;
   }
   const recent = [...anomalies].reverse(); // newest first
   return (
     <div style={{ padding: "4px 12px 6px" }}>
-      <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)", padding: "2px 4px 6px" }}>Anomaly inbox</div>
+      <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)", padding: "2px 4px 6px" }}>Loud spikes: tap to listen</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 176, overflowY: "auto" }}>
         {recent.map((a) => {
           const key = anomKey(a);

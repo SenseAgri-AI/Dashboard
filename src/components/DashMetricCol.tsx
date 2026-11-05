@@ -1,7 +1,7 @@
 export type DailyEntry = {
   date: string; eggs: number; small: number; medium: number; large: number; xl: number; jumbo: number;
   damaged: number; mortality: number; liveHens: number; avgWeight: number | null; revenue: number;
-  hdep: number | null; hhep?: number | null; feedPulses: number | null; fcr: number | null;
+  hdep: number | null; hhep?: number | null;
 };
 
 export interface ProductionData {
@@ -156,6 +156,7 @@ export function DashKpiGrid({ production, narrow }: { production: ProductionData
   const col = (k: keyof DailyEntry): number[] => daily.map((d) => d[k]).filter((v): v is number => typeof v === "number");
 
   const liveHens = col("liveHens"), hdep = col("hdep"), hhep = col("hhep"), eggs = col("eggs"), weight = col("avgWeight"), damaged = col("damaged"), rev = col("revenue");
+  const lastWeighed = [...daily].reverse().find((d) => typeof d.avgWeight === "number")?.date ?? null;
   const weeklyRev = rev.slice(-7).reduce((a, b) => a + b, 0);
   const weeklyRevSeries = rev.map((_, index) => sum(rev.slice(Math.max(0, index - 6), index + 1)));
   const sizeBars = ([
@@ -178,10 +179,12 @@ export function DashKpiGrid({ production, narrow }: { production: ProductionData
       </div>
       <div style={{ display: "grid", gridTemplateColumns: narrow ? "repeat(2, minmax(0,1fr))" : "repeat(4, minmax(0,1fr))", gap: 10, alignItems: "stretch" }}>
         <KpiTile label="Live hens" value={lastOf(liveHens)?.toLocaleString() ?? null} delta={stockChange(liveHens)} goodUp values={liveHens} compact={narrow} />
-        <KpiTile label="Hen-day %" value={lastOf(hdep) != null ? `${lastOf(hdep)!.toFixed(1)}%` : null} delta={flowChange(hdep)} goodUp values={hdep} compact={narrow}
-          sub={lastOf(hhep) != null ? `Hen-housed ${lastOf(hhep)!.toFixed(1)}%` : null} />
+        <KpiTile label="Lay rate" value={lastOf(hdep) != null ? `${lastOf(hdep)!.toFixed(1)}%` : null} delta={flowChange(hdep)} goodUp values={hdep} compact={narrow}
+          sub={lastOf(hhep) != null ? `hen-day · hen-housed ${lastOf(hhep)!.toFixed(1)}%` : "hen-day"} />
         <KpiTile label="Egg count" value={lastOf(eggs)?.toLocaleString() ?? null} delta={flowChange(eggs)} goodUp values={eggs} compact={narrow} />
-        <KpiTile label="Egg weight" value={lastOf(weight) != null ? `${lastOf(weight)!.toFixed(1)} g` : null} delta={flowChange(weight)} goodUp values={weight} compact={narrow} />
+        {/* Eggs are weighed only now and then: hide the tile when none were weighed in the window, and say when they were. */}
+        {weight.length > 0 && <KpiTile label="Egg weight" value={`${lastOf(weight)!.toFixed(1)} g`} delta={weight.length >= 14 ? flowChange(weight) : null} goodUp values={weight} compact={narrow}
+          sub={lastWeighed && lastWeighed !== production?.date ? `weighed ${fmtDate(lastWeighed)}` : null} />}
 
         <div style={cardStyle}>
           <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--t3)" }}>

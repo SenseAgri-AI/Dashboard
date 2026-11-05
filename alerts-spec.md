@@ -101,7 +101,7 @@ it's that single device, not an outage. That's what lets us give the farmer the 
 - **Logic:** Use the **mean, not the peak** — validated by ear on real clips. The mean = *how much of the flock* is vocalising; a single loud bang spikes the peak but barely moves the mean. Quiet-night baseline is ~−38 dBFS; a real disturbance jumps the mean ~9 dB (to ~−29) and **holds** for minutes. −32 sits cleanly between the two.
   - Detect: night points where `noise_db_mean > −32`, grouped into consecutive runs; a run counts if it spans ≥ 2 min.
   - On a hit, attach the nearest saved anomaly **clip** (S3) so the farmer can listen.
-  - Backtested on 18 nights: **2 alerts (~1/week)** — 09 Aug (mean −29.7, 8 min) and 10 Aug (mean −29.9, ~2–6 min); the loud-but-brief 08 Aug transient (mean only −33) is correctly ignored.
+  - Backtested on a few weeks of nights: about one alert a week, on real sustained disturbances; a loud-but-brief transient (mean below −32) is correctly ignored.
   - Built in `pipeline/alert_rules.py` (platform) (`nightDisturbanceAlert`) + `/api/alerts` (clip lookup via `acousticSource`).
   - _Note: baseline includes fan noise; an absolute mean threshold sidesteps the per-night fan-count variation (per-night baselines were too unstable to use)._
 

@@ -1,0 +1,10 @@
+# Live hens and deaths on Home
+
+Farmer story: *"When I glance at Home I want to see how many birds I actually have, and how many I've lost since they were housed, so I don't have to work it out myself."*
+
+- `houseHens` (farm config) is the flock housed when the daily log began.
+- **Live hens** = `houseHens` − every death in the daily log (`/api/production` → `liveHens`). Before, the tile showed `houseHens` for ever.
+- **Deaths since housed (N %)** = cumulative logged deaths (value) and `deaths ÷ houseHens × 100` (in the label, so it fits a phone tile). Before, the rate was `deaths ÷ (houseHens + deaths)`, which treats `houseHens` as the *current* flock. Analytics "Cumulative mortality" and the assistant's `mortality_rate_pct` already used `÷ houseHens`, so all three now agree.
+- If `houseHens` is ever changed to a mid-flock head count, deaths logged before that would be counted twice; change it only with a new flock (new daily-log start).
+- Analytics "Cumulative mortality" is now "Deaths since housed" (%), matching Home.
+- Maths in `src/lib/flock.ts` (`flockCounts`, tested). With no `houseHens`, Live hens and the mortality % show "—", not 0.

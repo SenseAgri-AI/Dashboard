@@ -6,7 +6,7 @@
 // suppresses sleep even when the birds are quiet; darkness checks they got ENOUGH dark time to rest
 // (one-sided — too little is penalised, too much is fine). Pure — the route supplies noise + climate.
 
-import { thi, thiZone, heatPenalty, plausibleClimate, type ThiZone } from "./thi";
+import { feltTemp, thiZone, heatPenalty, plausibleClimate, type ThiZone } from "./thi";
 
 export const NIGHT_START_SAST = 20;   // dark period 20:00–05:00 SAST
 export const NIGHT_END_SAST = 5;
@@ -41,6 +41,8 @@ export type NightScore = {
   darknessHours: number | null; // hours of darkness over the dusk→dawn scan (null if no light coverage)
   breakdown: ScoreBreakdown;
   points: number;      // acoustic samples that scored the night
+  /** Lowest inside °C over the night when it was cold (3+ readings ≤ COLD_NIGHT_C), else null. Not scored. */
+  coldMinC: number | null;
 };
 
 // A night is labelled by the evening it starts (subtract the night-start hours, take the date).
@@ -81,7 +83,7 @@ function nightThi(pts: ClimateSample[]): number | null {
   let sum = 0, n = 0;
   for (const c of pts) {
     if (c.temp == null || c.rh == null || !plausibleClimate(c.temp, c.rh)) continue;
-    sum += thi(c.temp, c.rh); n++;
+    sum += feltTemp(c.temp, c.rh); n++; // shown as "felt"; same as THI in the heat-penalty range
   }
   return n ? sum / n : null;
 }
@@ -100,6 +102,15 @@ function nightDarkness(pts: ClimateSample[]): number | null {
 }
 
 const r1 = (v: number) => Math.round(v * 10) / 10;
+
+/** Story: cold birds huddle and go quiet, so a freezing night can score
+ *  "Restful". Flag the cold next to the score instead of changing the
+ *  validated score. Same 10 °C as the Today card and Ventilation. PROVISIONAL (2 Nov). */
+export const COLD_NIGHT_C = 10;
+function nightColdMin(pts: ClimateSample[]): number | null {
+  const cold = pts.filter((c) => c.temp != null && c.temp > -20 && c.temp < 60 && c.temp <= COLD_NIGHT_C).map((c) => c.temp as number);
+  return cold.length >= 3 ? r1(Math.min(...cold)) : null;
+}
 
 /** Score each night in the series, oldest → newest. Nights with too few acoustic points are skipped.
  *  `climate` is optional — without it the heat factor is simply zero. */
@@ -159,6 +170,7 @@ export function nightScores(samples: NoiseSample[], climate: ClimateSample[] = [
       darknessHours: darknessHours == null ? null : r1(darknessHours),
       breakdown,
       points: m.points,
+      coldMinC: nightColdMin(climateByNight.get(date) ?? []),
     });
   }
   return out.sort((a, b) => a.date.localeCompare(b.date));

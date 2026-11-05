@@ -2,7 +2,7 @@
 
 Status: analysis notes requiring a reproducible notebook/script before production use.
 
-- The meters were installed around 13 April 2026; earlier dates must be excluded.
+- The meters were installed partway through the history; earlier dates must be excluded.
 - Historical consumption appeared substantially lower in the earlier installed period even during hot weather.
 - Counting intervals above the reported 50 L/hour reliable-flow threshold showed fewer reliable-range readings in the earlier period.
 - Temperature and mature flock age alone did not explain the observed step-up.

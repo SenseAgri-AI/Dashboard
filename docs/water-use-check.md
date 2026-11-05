@@ -1,0 +1,66 @@
+# Water use check (Today card)
+
+Last reviewed: 2026-11-01. Status: dashboard only (the platform notifier is unchanged). Thresholds PROVISIONAL.
+
+## Farmer stories
+
+- *When my hens drink much less than they normally do, tell me early, because a water drop often comes
+  before a drop in feed intake and eggs, so I check the drinkers, the pressure and the birds that morning.*
+- *When one drinker line goes quiet while the other is normal, tell me which meter, so I walk to that line
+  instead of guessing.*
+
+Both appear as the **Water** line on the Home Today card, only when something is unusual. The wording is
+an early warning ("Early warning: check …"); it never names a cause.
+
+## Data
+
+`/api/water-use` reads daily litres per meter for the last 17 complete days from the silver table
+`meters_hourly` (`water_l_wm1`, `water_l_wm2`; see [devices/water-meters.md](devices/water-meters.md)).
+Read-only, farm-scoped, Athena-cached.
+
+- A meter's day counts only with at least 22 hourly rows. A gap is never read as zero water.
+- Missing calendar days are filled as gaps, so "2 days" always means 2 calendar days in a row.
+- A meter with no reading in the whole 17-day window is treated as not installed (one-meter farms get the
+  farm check only).
+- First house only (every farm today has one metered house); multi-house farms need a per-house check.
+- Days are farm-local (SAST midnight to midnight). The backtest used UTC days (02:00–02:00 SAST); hens drink little at night, so the totals barely differ.
+- The silver batch runs once a day, so yesterday appears in the early morning. If the newest complete day
+  is more than 2 days old the check stays silent; the Sensors line covers stale meters.
+
+## Rules (`waterUseCheck` in `src/lib/todayStatus.ts`, thresholds `today.waterDrop`)
+
+| Rule | Fires when | Line |
+|---|---|---|
+| Farm drop (amber) | Each of the last 2 complete days is below 70 % of the median of the 14 days before them (at least 10 valid days, median at least 300 L) | "Down 40% on usual for 2 days: 600 L/day vs ~1 000 L" / "Early warning: check drinkers, pressure and the birds" |
+| Farm drop (red) | Same, for 3 days | same wording, red |
+| One line quiet (amber) | One meter's latest day is below 30 % of its own 14-day median (median at least 100 L) while the other meter is at least 70 % of its median | "Meter 1 used 0 L on 17 Sep vs ~640 L usual; the other line was normal" |
+
+A firing platform water alert still overrides the line, as before.
+
+## Backtest (pilot farm, several months)
+
+A small number of days a month were flagged at most. They included two-day farm dips, one meter reading
+zero while the other was normal (the kind of event the line rule is for), and a sustained drop in use during
+hot weather, when hens should drink more, not less. That needs checking with the farm (pressure, regulator,
+valves, filters, or the meters under-reading; see the questions in devices/water-meters.md). The baseline then
+adapts to the new level, so the card stops flagging after about two weeks of low use. Figures are in the
+private findings.
+
+A single-day farm rule at 70 % flagged many more days, mostly normal day-to-day swings; two days is the minimum
+that stays quiet on normal weeks.
+
+## Limits and follow-ups
+
+- No temperature adjustment yet: a sudden cold snap can lower use. The 2-day rule absorbs most single
+  cold days.
+- Meter names are "Meter 1 / Meter 2" until the farm confirms which A-frame each meter serves.
+- Water-to-feed ratio is not checked: the feed meters are off and deliveries are too coarse for a daily ratio.
+
+## Live dashboard "Drinking rate today" (2 Nov)
+
+Farmer story: *"When I look at today's drinking rate, I want it to be the whole house, not one A-frame, so a dip means something."*
+
+- The card now sums every meter in `farm.waterMeters` (each differenced on its own counter, then added per 30-min bucket, `src/lib/meterPoints.ts`). Without `waterMeters` it falls back to `waterDeviceId` alone and says **"One water meter only"**.
+- With two meters and only one configured, the single-meter card shows about half the house. **Adding `waterMeters` (both A-frame meters) to the farm config fixes this with no code change.**
+- The subtitle also says *"Compare with other days, not a target"*: the meters under-read at low flow (see `docs/data-findings.md`), so ml/hen targets would mislead.
+- Day boundaries use the farm's fixed `timezoneOffset`; a fixed offset doesn't follow daylight saving.

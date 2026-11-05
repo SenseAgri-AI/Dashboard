@@ -10,6 +10,7 @@ type Breakdown = { noise: number; bouts: number; severity: number; predawn: numb
 type NightScore = {
   date: string; score: number; disruptMin: number; bouts: number; severity: number; predawn: number;
   thi: number | null; thiZone: ThiZone | null; darknessHours: number | null; breakdown: Breakdown;
+  coldMinC?: number | null;
 };
 
 const PRIMARY = "#002E35", TEAL = "#2A8E9A", GREEN = "#166534", AMBER = "#D97706", RED = "#B91C1C", INK = "#4A5A5E";
@@ -145,6 +146,8 @@ export default function DashSleepScore() {
               </div>
               <div style={{ flex: 1, minWidth: 150 }}>
                 <div style={{ fontSize: 11.5, color: "var(--t2)", lineHeight: 1.4, marginBottom: 6 }}>{reason}</div>
+                {/* Not scored: a cold flock huddles and goes quiet, so a quiet night can still have been a hard one. */}
+                {cur.coldMinC != null && <div style={{ fontSize: 11.5, color: AMBER, fontWeight: 700, lineHeight: 1.4, marginBottom: 6 }}>Cold night: inside down to {Math.round(cur.coldMinC)}°C. Quiet birds may have been huddling, so check the house was closed up.</div>}
                 <Spark nights={n} activeIdx={idx} onPick={setSel} />
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
                   <Step dir="prev" disabled={idx <= 0} onClick={() => setSel(Math.max(0, idx - 1))} />

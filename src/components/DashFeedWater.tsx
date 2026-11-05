@@ -205,14 +205,20 @@ function SiloHistoryCard({ data, height, house }: { data: SiloLevelsData | null;
   );
 }
 
-function WaterRateCard({ points, height, house }: { points: SparklinePoint[]; height: number; house?: { startDate: string; startAgeDays: number } | null }) {
+// Meters can under-read at low flow, so the farmer compares with other days, not a ml/hen target.
+export function waterRateSubtitle(meters?: number): string {
+  const which = meters != null && meters > 1 ? `All ${meters} water meters, each 30 minutes.` : meters === 1 ? "One water meter only, each 30 minutes." : "Water used in each 30-minute period.";
+  return `${which} Compare with other days, not a target.`;
+}
+
+function WaterRateCard({ points, height, house, meters }: { points: SparklinePoint[]; height: number; meters?: number; house?: { startDate: string; startAgeDays: number } | null }) {
   const today = todaySast(points).map((point) => ({ t: new Date(point.time).getTime(), value: point.value })).filter((point) => Number.isFinite(point.t));
   const total = today.reduce((sum, point) => sum + point.value, 0);
   const latest = today.at(-1)?.value ?? null;
   return (
     <article style={cardStyle}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
-        <div><div style={{ fontFamily: "var(--font-d)", fontSize: 15, fontWeight: 800, color: INK }}>Drinking rate today</div><div style={{ fontSize: 9.5, color: "var(--t3)", marginTop: 2 }}>Water used by the flock in each 30-minute period</div></div>
+        <div><div style={{ fontFamily: "var(--font-d)", fontSize: 15, fontWeight: 800, color: INK }}>Drinking rate today</div><div style={{ fontSize: 9.5, color: "var(--t3)", marginTop: 2 }}>{waterRateSubtitle(meters)}</div></div>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 8.5, fontWeight: 800, color: GREEN }}><span style={{ width: 6, height: 6, borderRadius: "50%", background: GREEN }} /> LIVE METER</span>
       </div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 5, marginTop: 12 }}>
@@ -238,7 +244,7 @@ function WaterRateCard({ points, height, house }: { points: SparklinePoint[]; he
   );
 }
 
-export default function DashFeedWater({ silos, water, narrow = false, house = null }: { silos: SiloLevelsData | null; water: SparklinePoint[]; narrow?: boolean; house?: { startDate: string; startAgeDays: number } | null }) {
+export default function DashFeedWater({ silos, water, meters, narrow = false, house = null }: { silos: SiloLevelsData | null; water: SparklinePoint[]; meters?: number; narrow?: boolean; house?: { startDate: string; startAgeDays: number } | null }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <DashSiloLevels data={silos} narrow={narrow} />
@@ -246,7 +252,7 @@ export default function DashFeedWater({ silos, water, narrow = false, house = nu
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10, flexWrap: "wrap" }}><span style={{ fontFamily: "var(--font-d)", fontWeight: 800, fontSize: 15, color: "var(--primary)" }}>Consumption history</span><span style={{ fontSize: 10, color: "var(--t3)" }}>Confirm stock is falling at the expected rate</span></div>
         <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "repeat(2, minmax(0, 1fr))", gap: 12 }}>
           <SiloHistoryCard data={silos} height={narrow ? 160 : 190} house={house} />
-          <WaterRateCard points={water} height={narrow ? 160 : 190} house={house} />
+          <WaterRateCard points={water} meters={meters} height={narrow ? 160 : 190} house={house} />
         </div>
       </section>
     </div>
