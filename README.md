@@ -86,8 +86,11 @@ hens per house, and egg prices.
   ingest pipeline, separate from this dashboard, which only reads.)
 - **Google credentials** — one shared service account reads/writes every farm's sheet (once shared).
 - **Every device ID** — environment sensors (`AM308-1`) are auto-discovered by `farm_id` +
-  `device_type`. Only the water + feed **meters** are referenced individually (they need pulse→
-  consumption math). Current assumption: one water + one feed meter per farm.
+  `device_type`. The SSM config still has one `waterDeviceId` and one `feedDeviceId`
+  ([src/lib/farms.ts](src/lib/farms.ts)); the production route's short feed series uses
+  `feedDeviceId` only. Analytics does not. It reads both water meters and both augers from
+  `meters_hourly` ([src/lib/silverSource.ts](src/lib/silverSource.ts),
+  [docs/devices/water-meters.md](docs/devices/water-meters.md)).
 - **A per-org AWS role** — see multi-tenancy above.
 
 > Production note: the `/admin` SSM write needs the app's AWS IAM user to have `ssm:PutParameter`
@@ -100,13 +103,18 @@ hens per house, and egg prices.
 - `src/lib/farms.ts` — per-farm config loader/writer (SSM). `src/lib/admin.ts` — super-admin gate.
 - `src/lib/influxdb.ts`, `src/lib/sheets.ts`, `src/lib/logService.ts` — data access.
 - `src/proxy.ts` — Clerk middleware (route protection).
-- `poultry-layer-log-/` — reference clone the Farm Logs section was ported from (not part of the build).
+- Farm Logs logging was ported from the `SenseAgri-AI/poultry-layer-log-` repo
+  ([src/lib/logService.ts](src/lib/logService.ts)). That repo is separate. It is not a directory in this build.
 
 ## Not yet built (future)
 
 - Farmer-editable settings (e.g. egg-size **weight thresholds** — sizes are currently hand-entered
   counts, not weight-derived).
-- Long-horizon analytics from the AWS **gold bucket** (Influx retains ~1 month; the analytics
-  data-source seam is in [src/lib/timeseriesSource.ts](src/lib/timeseriesSource.ts)).
-- WhatsApp config + notifications, Help requests, logo swap.
+- A gold layer for derived metrics (HDEP, FCR, and similar). Long-horizon analytics already
+  reads Athena **silver** through [src/lib/silverSource.ts](src/lib/silverSource.ts) and
+  [src/app/api/analytics/series/route.ts](src/app/api/analytics/series/route.ts).
+  [src/lib/timeseriesSource.ts](src/lib/timeseriesSource.ts) is not imported by the app.
+- WhatsApp delivery. Push notifications are live ([src/lib/push.ts](src/lib/push.ts),
+  [docs/PROJECT_STATE.md](docs/PROJECT_STATE.md)). WhatsApp is planned and not live.
+- Help requests.
 - Locking down self-serve org creation so only `/admin` can create orgs.

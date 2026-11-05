@@ -9,8 +9,8 @@ The `sensors` measurement mixes device types under one farm — filter by `devic
 
 | `device_type` | What it is | Fields to trust |
 |---|---|---|
-| **`AM308-1`** | The **climate sensor** | `temperature`, `humidity`, `co2`, `tvoc`, `pressure`, `pm2_5`, `pm10`, `light_level`, `battery` |
-| **`EM300-1`** | **Water meters (2) + feeders** (some not working) — pulse/tacho devices | `pulse_total`, `pulse_conv`, `pulse_unit_conv` (via `device_id` = the farm's water/feed device) |
+| **`AM308-1`** | The **climate sensor**. There is no ammonia field | `temperature`, `humidity`, `co2`, `tvoc`, `pressure`, `pm2_5`, `pm10`, `light_level`, `battery` |
+| **`EM300-1`** | Pulse meters (water and feed). Water-meter identity is [devices/water-meters.md](devices/water-meters.md). This page does not say which feeders are currently counting | `pulse_total`, `pulse_conv`, `pulse_unit_conv` |
 
 ⚠️ **The EM300 `temperature`/`humidity` fields are junk** — the temperature sits at the 6553.5 °C
 (0xFFFF ÷ 10) placeholder. **All climate queries must filter `device_type = 'AM308-1'`**, exactly like

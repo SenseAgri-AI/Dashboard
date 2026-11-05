@@ -6,11 +6,14 @@ Open security items for the SenseAgri portal. Owned by the app/services team.
 
 ## 1. `dashboard-app` IAM user is over-privileged (AdministratorAccess) — HIGH
 
-**Found:** 2026-07-08 · account `336814727818` (af-south-1)
+**Found:** 2026-07-08 · account `336814727818` (af-south-1). Group membership below is that
+date's finding. It was not re-checked against IAM for this note. The follow-up stays open
+until the static key is retired.
 
 The Vercel app authenticates to AWS as the IAM **user `dashboard-app`** (static
-`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` in Vercel env; one active access key
-`AKIAU425Y4KFFNAMSIFU`). That user is in the **`admins` group → `AdministratorAccess`**.
+`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` in Vercel env; one active access key,
+the dashboard-app IAM user's key). On 2026-07-08 that user was in the **`admins` group →
+`AdministratorAccess`**.
 
 **Risk:** a Next.js app holding static keys with **full account admin**. If those env keys
 leak (Vercel misconfig, log spill, repo, etc.) the **entire AWS account is compromised** —
@@ -26,8 +29,12 @@ delete buckets, exfiltrate secrets, spin up resources. Classic least-privilege v
 
 No DynamoDB, Lambda, EC2, IAM, or other S3. That's it.
 
-**Current state:** the least-privilege read policy **`senseagri-dev-silver-app-read` is attached**
-(done 2026-07-08). Admin has **not** been removed yet — so the read policy is currently redundant.
+**Status as of 2026-07-08 (not re-checked against IAM in this note):** the least-privilege
+read policy **`senseagri-dev-silver-app-read` was attached**. On that date, admin had **not**
+been removed — so the read policy was redundant while the user stayed in `admins`. This
+follow-up stays open. Do not read the July note as proof of today's group membership.
+PR #28 (not merged) is the planned retirement of the static key. Vercel remains the live
+host until that change lands.
 
 **Remediation (ready to apply; breaking-risk → verify on preview after):**
 1. Create + attach a scoped SSM policy, e.g. `senseagri-dev-app-ssm`:

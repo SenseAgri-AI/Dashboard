@@ -20,8 +20,8 @@ each morning turns "the birds seem unsettled lately" into something measurable a
 The **dark period 20:00–05:00 SAST** (SAST = UTC+2; the queries run in UTC and convert). A night is
 **labelled by the evening it starts** — the 20:00 Fri → 05:00 Sat window is "Friday's" night.
 
-A night needs **≥ 120 data points** (`MIN_NIGHT_POINTS`) to be scored at all. The mic reports ~1/min, so
-120 points ≈ 2 h of coverage; below that we skip the night rather than score it unfairly on a fragment.
+A night needs **≥ 120 acoustic points** (`MIN_NIGHT_POINTS` in [`src/lib/sleepScore.ts`](../src/lib/sleepScore.ts))
+to be scored at all. Below that the night is skipped. This file does not state how often the mic reports.
 
 ## The signal — absolute mean level, not relative
 
@@ -46,7 +46,7 @@ wake birds), below real eruptions (which do).
 
 ## The score
 
-Start at **100** and subtract five penalties, then clamp to **0–100**:
+Start at **100** and subtract **six** penalties, then clamp to **0–100**:
 
 ```
 score = 100
@@ -63,7 +63,7 @@ score = 100
 | **disruptMin** | total minutes above −32 | The bulk measure: how much of the night was noisy. −2/min. |
 | **bouts** | separate episodes — a run of ≥ 2 min above the line (`BOUT_MIN`) | Repeated waking is worse than one continuous event of the same length. −5 each. |
 | **severity** | average dB *above* −32 during disrupted minutes | How loud, not just how long. −2 per dB over the line. |
-| **predawn** | fraction of **03:00–05:00 SAST** that was disrupted | Weighted heavily (−25 × fraction) — pre-dawn is the window that most damages restorative REM sleep. *(Earlier notes tied this to red mite; the mite research (research.md #8) shows the mite signature is sustained whole-night restlessness, NOT a pre-dawn spike — so this factor rests on the REM rationale, not mites.)* |
+| **predawn** | fraction of **03:00–05:00 SAST** that was disrupted | Weighted heavily (−25 × fraction). The factor rests on the REM rationale in the Research basis section below. |
 | **heat** | mean **experienced heat** over the dark period, as a feels-like °C | Heat is the single biggest sleep disruptor and suppresses sleep (esp. REM) *even when the birds are quiet* — a dimension the mic can't hear. Zero in the comfort zone; scales above 27.8 °C-eff; **capped at 25**. See *Experienced heat* below. |
 | **darkness** | **hours of darkness** over dusk→dawn vs the ~8 h they need | Hens only rest in the dark and need enough of it. **One-sided** — only a *shortfall* below 8 h is penalised (too much darkness is fine). Penalty = (8 − darkHours) × 3, **capped at 20**. See *Darkness* below. |
 
@@ -112,7 +112,7 @@ needs to rest.
 
 > **Not in the sleep score (separate concern):** *too much* darkness means too little **light**, and
 > layers need ~14–16 h of light for peak **egg production**. That's a photoperiod/production check, not a
-> sleep/welfare one — parked for later, see [research.md](research.md).
+> sleep/welfare one — parked, and not a rule in this repo.
 
 ### Score bands (the tile)
 
@@ -143,13 +143,13 @@ mic data renders a quiet "no night acoustic data yet" state, never an error.
 
 ## The alert — poor sleep several nights running
 
-A single bad night is a one-off; **several in a row** is a recurring problem worth a WhatsApp. The
-`sleepDeclineAlert` rule ([`src/lib/alerts.ts`](../src/lib/alerts.ts)) fires when the score is below
-**70** (`SLEEP_POOR_SCORE`) for **2 consecutive nights** (`SLEEP_BAD_RUN`) — both tunable. It's evaluated
-in [`/api/alerts`](../src/app/api/alerts/route.ts) over the same night series and lists the offending
-scores. **Cause attribution:** if those poor nights all ran in the THI danger/emergency zone, the message
-names **overnight heat** as the likely cause ("improve night ventilation / cooling") — the research puts
-heat first; otherwise it points at the generic recurring causes (predator, light leak, red mite, equipment).
+A single bad night is a one-off; **several in a row** is a recurring problem. The live notifier is the
+senseagri-platform hourly job ([docs/PROJECT_STATE.md](PROJECT_STATE.md)). Outbound delivery in this
+repo is push ([`src/lib/push.ts`](../src/lib/push.ts)); WhatsApp is planned and not live. The dashboard
+fallback `sleepDeclineAlert` ([`src/lib/legacyAlerts.ts`](../src/lib/legacyAlerts.ts)) fires when the
+score is below **70** (`SLEEP_POOR_SCORE`) for **2 consecutive nights** (`SLEEP_BAD_RUN`).
+**Cause attribution in that fallback:** all poor nights in the severe/extreme heat zone → **overnight heat**;
+else all with **under 6 h darkness** → **too little darkness**; else predator, light leak, red mite, or equipment.
 
 Full alert entry: [alerts-spec.md → Welfare → Poor flock sleep](../alerts-spec.md).
 
@@ -185,12 +185,11 @@ This mirrors the night-disturbance alert's own backtest (09 Aug mean −29.7 for
 
 ## Research basis
 
-The full papers list (per feature, with what each contributes) lives in [research.md](research.md). The
-studies underpinning this score are summarised below — each with what it found and the decision it
-justifies. The **darkness factor** rests on a second sleep paper (Putyora et al., "Mild Disturbances")
-and the lighting/dark-period literature: **brief light is compensated the same night, so what matters is
-getting *enough* darkness** — hence a one-sided hours-of-darkness factor, not a light-blip penalty. See
-research.md for those sources.
+There is no `research.md` in this repo. The studies used for this score are summarised below — each
+with what it found and the decision it justifies. The one-sided darkness factor (only a shortfall
+below 8 h is penalised) is the decision this file records. An earlier sentence pointed at a
+Putyora et al. paper titled "Mild Disturbances" only through the missing `research.md` link. That
+citation is not in this file, so it is not restated as a source.
 
 ### 1. Sleep paper — the backbone of the score
 

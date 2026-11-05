@@ -1,19 +1,33 @@
-# Implemented Alerts (live)
+# Implemented Alerts
 
-The alerts that **actually run today** in `/api/alerts`, with their real logic and thresholds. Planned /
-not-yet-built alerts (climate, ventilation, production) live separately in
-[../alerts-spec.md](../alerts-spec.md) — this file is only what's shipped.
+Alert **rules run in the senseagri-platform hourly notifier**, not in [`src/lib/alerts.ts`](../src/lib/alerts.ts).
+That file only maps a stored row to an `Alert` (`storedAlert`). The notifier writes DynamoDB
+`senseagri-dev-alerts` (override `ALERTS_TABLE`). [`/api/alerts`](../src/app/api/alerts/route.ts) reads
+the farm's firing rows when a notifier heartbeat (`_status#notifier`) is present.
 
-## How the engine works
+If there is no heartbeat and `ALERTS_REQUIRE_SHARED` is not `true`, the route falls back to
+[`src/lib/legacyAlertReader.ts`](../src/lib/legacyAlertReader.ts), which evaluates
+[`src/lib/legacyAlerts.ts`](../src/lib/legacyAlerts.ts). Whether the deployed farm has a heartbeat, and
+whether that env var is set on Vercel, is not visible in this repo.
 
-- **Pure rules** in [`src/lib/alerts.ts`](../src/lib/alerts.ts) turn already-fetched farm state into an
-  `Alert` (or `null`). Data fetching lives in [`src/app/api/alerts/route.ts`](../src/app/api/alerts/route.ts).
-- **Farm-scoped** — the farm is resolved server-side (`getFarmForRequest`); every query is bounded by
-  `farm.farmId`. Climate reads `device_type = 'AM308-1'` only (see [sensors.md](sensors.md)).
-- **Fault-isolated** — each data source is fetched with `Promise.allSettled`, so one feed failing never
+Planned rules that are not in the dashboard fallback (ventilation, production, water deviation) stay in
+[../alerts-spec.md](../alerts-spec.md) and [calculations/water-deviation-alerts.md](calculations/water-deviation-alerts.md).
+This file does not claim those are deployed.
+
+**Delivery.** Push is implemented in [`src/lib/push.ts`](../src/lib/push.ts). WhatsApp is planned and not live.
+Showing an alert does not prove a push was sent ([PRODUCT_INVARIANTS.md](PRODUCT_INVARIANTS.md)).
+
+The sections below are the **dashboard fallback** (`legacyAlerts.ts` / `legacyAlertReader.ts`), which is
+what this repo can actually show. They are not a listing of platform function names.
+
+## How the fallback works
+
+- **Farm-scoped** — `getFarmForRequest`; every query is bounded by `farm.farmId`. Climate reads
+  `device_type = 'AM308-1'` only (see [sensors.md](sensors.md)).
+- **Fault-isolated** — each source is fetched with `Promise.allSettled`, so one feed failing never
   blocks, or falsely fires, another rule.
-- The route returns the currently-firing alerts to the dashboard. The platform owns sending them on
-  WhatsApp (Twilio); the dashboard reads and displays the same set.
+- The fallback returns `{ alerts, updatedAt, source: "legacy" }`. The shared-store path returns
+  `{ alerts, updatedAt, source: "shared", stale, partial }`.
 
 **Alert shape:** `{ id, category, severity, title, message, since, clipKey? }` · severity is
 `info | warning | danger`.
@@ -26,14 +40,16 @@ not-yet-built alerts (climate, ventilation, production) live separately in
 | 2 | Fill in the daily log | `logs_overdue` | reminder | 🟠 warning | last log > 5 days old / none |
 | 3 | Birds unsettled overnight | `night_disturbance` | welfare | 🟠 warning | sustained raised night noise |
 | 4 | Poor flock sleep | `sleep_decline` | welfare | 🟠 warning | low sleep score 2 nights running |
+| 5 | Heat stress | `heat_stress` | climate | 🟠 warning or 🔴 danger | felt temperature in the severe or extreme zone |
 
 ---
 
 ## 1. Power / connectivity  ·  `powerOutageAlert`
 
-Two independent feeds come off the shed, each writing ~1 point/min: **climate sensors** (gateway →
-InfluxDB `sensors`) and the **acoustics/mic** (Jetson → InfluxDB `audio_noise`). A live device keeps
-writing; a dead one goes silent. The rule compares each feed's newest timestamp to a staleness window.
+Two independent feeds come off the shed: **climate sensors** (gateway → InfluxDB `sensors`) and the
+**acoustics/mic** (Jetson → InfluxDB `audio_noise`). A live device keeps writing; a dead one goes silent.
+This file does not state the reporting interval. The fallback compares each feed's newest timestamp to
+a staleness window.
 
 - **Staleness window:** `FEED_STALE_MIN = 15` min (a feed with no point for longer counts as down).
 - **Which feeds are silent tells us what's wrong:**
@@ -91,7 +107,20 @@ Score ([flock-night-rest-score.md](flock-night-rest-score.md)).
 
 ---
 
-## Constants (all in `src/lib/alerts.ts`, tunable)
+## 5. Heat stress  ·  `heatStressAlert`
+
+Felt temperature from temperature and humidity ([`src/lib/thi.ts`](../src/lib/thi.ts)), not raw °C.
+
+- **Fires when:** the current felt temperature is in the **severe** zone (≥ `THI_SEVERE` 28.9 °C) or
+  **extreme** zone (≥ `THI_EXTREME` 30 °C). Severe is 🟠 warning; extreme is 🔴 danger.
+- **Data:** latest plausible AM308 climate sample in the fallback reader.
+- **Id:** `heat_stress`.
+
+Water-deviation rules are not in this fallback.
+
+---
+
+## Constants (dashboard fallback in `src/lib/legacyAlerts.ts` and `src/lib/thi.ts`)
 
 | Constant | Value | Alert |
 |---|---|---|
@@ -102,3 +131,4 @@ Score ([flock-night-rest-score.md](flock-night-rest-score.md)).
 | `NIGHT_START_SAST` / `NIGHT_END_SAST` | 20 / 5 | night disturbance |
 | `SLEEP_POOR_SCORE` | 70 | poor flock sleep |
 | `SLEEP_BAD_RUN` | 2 nights | poor flock sleep |
+| `THI_SEVERE` / `THI_EXTREME` | 28.9 / 30 °C felt | heat stress |

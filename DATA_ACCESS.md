@@ -92,7 +92,7 @@ Everything lives in one measurement/table: **`sensors`**.
 
 | Tag | Notes |
 |-----|-------|
-| `farm_id` | Currently only `farm_anike_001` (the one live farm — see `FARM_ID` in [src/lib/influxdb.ts](src/lib/influxdb.ts)) |
+| `farm_id` | Per farm, from SSM `/senseagri/farms/<slug>/config` via `getFarmForRequest` ([src/lib/farms.ts](src/lib/farms.ts)). There is no global `FARM_ID` ([src/lib/influxdb.ts](src/lib/influxdb.ts)). Example queries below use `farm_anike_001` as a filter string, not as a claim that it is the only live farm |
 | `device_id` | Hardware ID, e.g. `24e124136f451854` |
 | `device_type` | Sensor model — distinguishes which fields are populated |
 
@@ -106,24 +106,28 @@ Everything lives in one measurement/table: **`sensors`**.
   - `pulse_total` is a **cumulative counter** — to get consumption you take the
     **difference between consecutive readings** (see "Gotchas" below).
 
-**Known device IDs.** Five `EM300-1` device IDs report to InfluxDB, but the farm has
-only **four physical pulse sensors** (2 water meters + 2 feed meters) — so one ID is a
-phantom/dead registration. A **"feed meter" here is a pulse counter on a feed auger** —
-it counts auger rotations to meter feed, so "feed meter" and "auger" name the same
-device. Roles were read from each device's **pulse activity by hour of day** (water
-meters = a broad drinking curve across all waking hours; feed augers = sharp bursts at
-feed times). See `pulse-profiles.png`.
+**Known device IDs.** Water-meter identity is canonical in
+[docs/devices/water-meters.md](docs/devices/water-meters.md): two meters, one per A-frame,
+10 litres per pulse. The dashboard sums both from `meters_hourly`
+(`water_l_wm1` + `water_l_wm2`) in `fetchMetersDaily`
+([src/lib/silverSource.ts](src/lib/silverSource.ts)). It does not read only Water Meter 1.
+A **"feed meter" is a pulse counter on a feed auger**. Analytics reads
+`feed_pulses_auger1` and `feed_pulses_auger2` (pulses, not kg).
 
-| Device | `device_id` | Role | Status | Notes |
-|--------|-------------|------|--------|-------|
-| Water meter 1 | `24e124136f451854` | `water_meter` | ✅ confirmed | 1 pulse = **10 litres** (`WATER_LITRES_PER_PULSE`). Broad daytime drinking curve. **The dashboard reads only this meter today.** |
-| Water meter 2 | `24e124136f456303` | `water_meter` | ✅ confirmed | Identical drinking-curve profile to WM1 — a genuine 2nd water meter. **Not yet summed** by the app, so drinking is under-counted by ~half. |
-| Feed meter 1 (auger) | `24e124136f458449` | `feed_meter` | ✅ confirmed | Live. Counts auger rotations; two sharp bursts (~8am & ~2pm) = the auger running at feed times, ~8× the pulse volume of the water meters. |
-| Feed meter 2 (auger) | `24e124136f452271` | `feed_meter` | ⚠️ dead / frozen | The originally-documented feed meter (the other auger's rotation counter). `pulse_total` frozen at 864,891 with zero movement (6 Aug–5 Sep 2026) — it has **stopped counting** (faulty/detached pickup). Role is from the repo docs; can't be re-confirmed from behaviour while it's frozen. Needs a hardware check. |
-| Phantom | `24e124136f455672` | — | ❓ likely phantom | Appeared **3 Sep 2026**, single ~5pm burst, no known install. With the four physical sensors accounted for above, this is the leftover 5th ID — probably a stray/duplicate registration. Worth a quick check at the device console. |
+| Device | `device_id` | Role | Notes |
+|--------|-------------|------|-------|
+| Water meter 1 | `24e124136f451854` | `water_meter` | Silver column `water_l_wm1`. 1 pulse = **10 litres**. [docs/devices/water-meters.md](docs/devices/water-meters.md) |
+| Water meter 2 | `24e124136f456303` | `water_meter` | Silver column `water_l_wm2`. Included in the dashboard total. |
+| Feed meter | `24e124136f458449` | `feed_meter` | Listed in the September 2026 notes as one auger. This file does not bind it to `feed_pulses_auger1` or `auger2` |
+| Feed meter | `24e124136f452271` | `feed_meter` | Listed in the same notes as the other auger. Same caveat |
+| Unassigned id | `24e124136f455672` | — | Seen in an early-September 2026 Influx window. Not a confirmed install |
 
-> **Retention caveat:** InfluxDB keeps only ~1 month, so the hour-of-day profiles above
-> cover ~30 days (6 Aug–5 Sep 2026), not "many months".
+> **Status snapshot, not current health.** Hour-of-day profiles, the "frozen at 864,891"
+> note, and the 3 Sep 2026 single burst were an Influx window of about 6 Aug–5 Sep 2026
+> (Influx keeps roughly a month). They are not a live device status. Re-run the discovery
+> query below before saying a meter has stopped or that an id is a phantom. The platform
+> device registry and the meter mapping still disagree on some EM300 roles; do not guess
+> ([docs/DATA_SOURCES.md](docs/DATA_SOURCES.md)).
 
 To discover everything that's actually reporting:
 
@@ -182,23 +186,29 @@ df["litres"] = df["pulses"] * 10
 ## 2. Google Sheet (egg-production daily log)
 
 The egg counts, sizes, damaged and mortality figures are **not** in InfluxDB — they're
-hand-entered into a Google Sheet and read read-only via a service account.
+hand-entered into a Google Sheet. The app **reads and writes** that sheet with the full
+`spreadsheets` scope ([src/lib/sheets.ts](src/lib/sheets.ts),
+[src/lib/logService.ts](src/lib/logService.ts)). An analyst pulling a copy should use
+`spreadsheets.readonly` instead.
 
 | Setting | Value |
 |---------|-------|
-| Spreadsheet ID | `1KjAr1wjfptYbE0n3qCWY_7gTVnR-XMTRy8xzRgCDpkA` |
-| Range used | `DailyLog!A:J` |
+| Spreadsheet ID | Per farm: `spreadsheetId` in SSM `/senseagri/farms/<slug>/config`. Do not hard-code one |
+| Range used | Per farm: `sheetRange`. The admin template default is `DailyLog!A:R` ([src/components/AdminClient.tsx](src/components/AdminClient.tsx)). The logger writes columns A–Q ([src/lib/logService.ts](src/lib/logService.ts)) |
 | Auth | Service-account JSON in SSM `/senseagri/dev/google/service-account` |
-| Scope | `spreadsheets.readonly` |
+| App scope | `https://www.googleapis.com/auth/spreadsheets` (read-write) |
+| Analyst scope | `https://www.googleapis.com/auth/spreadsheets.readonly` |
 
 ### Column layout (`DailyLog` sheet)
 
-Parsed by 0-based index in [src/app/api/production/route.ts](src/app/api/production/route.ts):
+Written by `entryToRow` in [src/lib/logService.ts](src/lib/logService.ts). The production
+route still sums by these indexes ([src/app/api/production/route.ts](src/app/api/production/route.ts)):
+date `r[0]`, sizes `r[2]`–`r[6]`, damaged `r[7]`, mortality `r[8]`, average egg weight `r[10]`.
 
 | Col | Index | Meaning |
 |-----|-------|---------|
 | A | 0 | Date (`DD/MM/YYYY` or `YYYY-MM-DD` — both handled) |
-| B | 1 | (unused by dashboard) |
+| B | 1 | House id |
 | C | 2 | Small eggs |
 | D | 3 | Medium eggs |
 | E | 4 | Large eggs |
@@ -206,7 +216,9 @@ Parsed by 0-based index in [src/app/api/production/route.ts](src/app/api/product
 | G | 6 | Jumbo eggs |
 | H | 7 | Damaged eggs |
 | I | 8 | Mortality (birds died that day) |
-| J | 9 | (within range, unused) |
+| J | 9 | Notes |
+| K | 10 | Average egg weight (g) |
+| L–Q | 11–16 | Optional water pH, yolk colour, hen weight, water intake, feed type, water additives |
 
 There can be **multiple rows per date** (e.g. per collection) — the dashboard sums them
 per day. Dates can repeat and arrive unsorted.
@@ -236,8 +248,10 @@ creds = Credentials.from_service_account_info(
 )
 gc = gspread.authorize(creds)
 
-ws = gc.open_by_key("1KjAr1wjfptYbE0n3qCWY_7gTVnR-XMTRy8xzRgCDpkA").worksheet("DailyLog")
-rows = ws.get("A:J")   # list of lists, same shape the dashboard reads
+# spreadsheetId from /senseagri/farms/<slug>/config — do not paste a farm's id into the repo
+SPREADSHEET_ID = "<spreadsheetId>"
+ws = gc.open_by_key(SPREADSHEET_ID).worksheet("DailyLog")
+rows = ws.get("A:R")
 ```
 
 > The service account only has whatever sheets are **shared with its email**. If you get
@@ -247,17 +261,20 @@ rows = ws.get("A:J")   # list of lists, same shape the dashboard reads
 
 ## 3. Domain constants worth knowing
 
-Hard-coded in [src/app/api/production/route.ts](src/app/api/production/route.ts) — useful for reproducing the dashboard's KPIs:
+From [src/app/api/production/route.ts](src/app/api/production/route.ts) and
+[src/lib/farms.ts](src/lib/farms.ts) — there is no `HOUSE_HENS`, `TOTAL_HENS`, or `PRICE_TIERS` constant:
 
-- **Flock size:** house1 = **4479 hens** (`HOUSE_HENS` / `TOTAL_HENS`).
-- **Live hens** = `TOTAL_HENS − cumulative mortality`.
+- **Flock size** is the sum of `farm.houseHens` from the per-farm SSM config.
+- **Price tiers** are `farm.priceTiers` in that same config (newest first).
+- **Live hens** = that sum − cumulative mortality (floor 1 in the route).
 - **HDEP (Hen-Day Egg %)** = `total eggs / live hens × 100`.
-- **FCR (Feed Conversion Ratio)** = `feed consumed Day N-1 / eggs collected Day N`.
-- **Egg prices** are tiered by date (`PRICE_TIERS`); revenue = per-size count × tier price.
-- **Feed-day attribution:** the *first* meter fill of each UTC calendar day is treated as
+- **Production-route `fcr`** = previous UTC day's feed **pulses** from the single `feedDeviceId`
+  ÷ eggs collected that day. It is not kilograms, and it is not the silo FCR in
+  [docs/calculations/feed-conversion-ratio.md](docs/calculations/feed-conversion-ratio.md).
+- **Feed-day attribution** in that route: the *first* fill of each UTC calendar day is treated as
   the previous evening's top-up and attributed to the **previous** day.
-- **Timezone:** the farm is **SAST (UTC+2)**; some dashboard aggregations offset for this
-  (`SAST_OFFSET_MS`). InfluxDB stores everything in **UTC** — convert when bucketing by farm-day.
+- **Timezone:** farm-facing times are **SAST (UTC+2)** unless a feature says otherwise.
+  InfluxDB stores **UTC**. The config field is `timezoneOffset` (template value 2).
 
 ---
 
@@ -270,8 +287,7 @@ Hard-coded in [src/app/api/production/route.ts](src/app/api/production/route.ts)
   down in the code — confirm the per-pulse weight before reporting absolute feed mass.
 - **Token TTL:** the app caches the InfluxDB token for 1h; for ad-hoc scripts just re-pull
   from SSM each run.
-- **One farm today:** `farm_id = 'farm_anike_001'` is the only live farm. Keep the filter
-  in queries so things still work when more farms are added.
+- **Scope every query by farm.** The app resolves `farm_id` per request. Do not assume a single live farm from this file.
 - The dashboard's read paths are the source of truth for schema — see
   [src/lib/influxdb.ts](src/lib/influxdb.ts), [src/lib/sheets.ts](src/lib/sheets.ts), and the routes under
   [src/app/api/](src/app/api/).
