@@ -10,7 +10,11 @@ import { timeoutSignal } from "@/lib/timeoutSignal";
 // /api/silo-levels plus the production + climate data Home already loads; /api/freshness (last-reading times)
 // and /api/water-use (daily litres per meter) are the card's own endpoints.
 
-export type TodayClimate = { temperatureC: number | null; humidityPct: number | null; co2Series: SeriesPoint[]; tempSeries: SeriesPoint[] };
+export type TodayClimate = {
+  temperatureC: number | null; humidityPct: number | null; co2Series: SeriesPoint[]; tempSeries: SeriesPoint[];
+  /** Warmest fresh sensor per bucket, when the summary computed it. Empty = none fresh. */
+  heatSeries?: SeriesPoint[];
+};
 type FreshnessResponse = {
   streams: { climate?: string | null };
   silos?: { name: string; lastSeen?: string | null }[];

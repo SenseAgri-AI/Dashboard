@@ -97,6 +97,36 @@ test('freshness route: 403 without farm access; every query is scoped to the cal
   for (const q of sqls) assert.match(q, /farm_id = 'f1'' OR ''1''=''1'/); // quotes escaped, never a bare OR
 });
 
+test('summary route: heatSparkline is the warmest fresh sensor and is omitted when that query fails', async () => {
+  const thi = load('src/lib/thi.ts');
+  const legacy = load('src/lib/legacyAlerts.ts', { './thi': thi });
+  const today = load('src/lib/todayStatus.ts', { './thi': thi, './legacyAlerts': legacy });
+  const now = Date.now();
+  const row = (id, mins, temp, readMins = mins) => ({ bucket: new Date(now - mins * 60e3), device_id: id, temperature: temp, read_at: new Date(now - readMins * 60e3) });
+  let sql = '';
+  const api = (sensor) => load('src/app/api/dashboard/summary/route.ts', {
+    'next/server': { NextResponse: { json: (body) => ({ body }) } },
+    '@/lib/farms': { FarmAccessError, getFarmForRequest: async () => ({ farmId: 'f1', feedDeviceId: 'bbbb000000000002', waterDeviceId: 'aaaa000000000001' }) },
+    '@/lib/influxdb': { queryInflux: async (q) => { if (!/MAX\(time\) AS read_at/.test(q)) return []; sql = q; if (sensor instanceof Error) throw sensor; return sensor; } },
+    '@/lib/thresholds': { tempStatus: () => 'normal', humidityStatus: () => 'normal', co2Status: () => 'normal', computeHealth: () => 1, healthLabel: () => 'ok', healthWord: () => 'ok', vpd: () => null },
+    '@/lib/meterPoints': { sumMeterPoints: () => [] },
+    '@/lib/todayStatus': today,
+  });
+  const ok = await api([
+    row('aaaa000000000001', 30, 28), row('aaaa000000000001', 0, 28),
+    row('bbbb000000000002', 30, 33.2), row('bbbb000000000002', 0, 33.4),
+    row('cccc000000000003', 30, 40, 120), row('cccc000000000003', 0, 40, 120),
+    row('dddd000000000004', 0, 85),
+  ]).GET();
+  assert.match(sql, /AVG\(temperature\) AS temperature/);
+  assert.match(sql, /GROUP BY device_id, bucket/);
+  assert.match(sql, /farm_id = 'f1'/);
+  assert.deepEqual(JSON.parse(JSON.stringify(ok.body.env.temperature.heatSparkline.map((p) => p.value))), [33.2, 33.4]);
+  assert.equal(JSON.stringify(ok.body).includes('cccc000000000003'), false);
+  const failed = await api(new Error('down')).GET();
+  assert.equal(failed.body.env.temperature.heatSparkline, undefined);
+});
+
 test('timeoutSignal: native AbortSignal.timeout or a timer fallback', async () => {
   const T = load('src/lib/timeoutSignal.ts', {}, { AbortSignal, AbortController, setTimeout });
   assert.ok(T.timeoutSignal(1000) instanceof AbortSignal);

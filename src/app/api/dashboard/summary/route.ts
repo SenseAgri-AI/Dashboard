@@ -20,6 +20,7 @@ interface SparkRow {
 }
 
 import { sumMeterPoints } from "@/lib/meterPoints";
+import { mergeThresholds, warmestFreshSeries, type SensorTempBucket } from "@/lib/todayStatus";
 
 interface MeterRow {
   device_id?: unknown;
@@ -30,6 +31,11 @@ interface MeterRow {
 // Device IDs and litres-per-pulse now come from per-farm config (src/lib/farms.ts).
 // SAST offset stays a constant — all current farms are UTC+2.
 const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
+
+function isoOf(t: unknown): string | null {
+  const d = t instanceof Date ? t : typeof t === "string" || typeof t === "number" ? new Date(t) : null;
+  return d && Number.isFinite(d.getTime()) ? d.toISOString() : null;
+}
 
 function toPoint(bucket: string | Date, value: unknown): { time: string; value: number } | null {
   const n = toNum(value);
@@ -169,7 +175,7 @@ export async function GET() {
     // Latest AM308 reading
     const waterIds = (farm.waterMeters?.length ? farm.waterMeters.map((m) => m.deviceId) : [farm.waterDeviceId])
       .filter((id, i, all): id is string => typeof id === "string" && DEVICE_ID.test(id) && all.indexOf(id) === i); // de-duplicated, so a meter listed twice isn't counted twice
-    const [latestRows, sparkRows, waterSparkRows, feedSparkRows, pmSparkRows, lightRows] = await Promise.all([
+    const [latestRows, sparkRows, waterSparkRows, feedSparkRows, pmSparkRows, lightRows, sensorTempRows] = await Promise.all([
       queryInflux<Record<string, unknown>>(`
         SELECT
           AVG(temperature) AS temperature,
@@ -245,6 +251,22 @@ export async function GET() {
         GROUP BY bucket
         ORDER BY bucket ASC
       `).catch(() => [] as Record<string, unknown>[]),
+      // Per sensor, last 6 h: enough for a sustained 32 °C check. A failure leaves the heat series
+      // unset so the card keeps the house-average backstop instead of failing the whole dashboard.
+      queryInflux<{ bucket: string | Date; device_id?: unknown; temperature?: unknown; read_at?: unknown }>(`
+        SELECT
+          date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
+          device_id,
+          AVG(temperature) AS temperature,
+          MAX(time) AS read_at
+        FROM sensors
+        WHERE farm_id = '${farm.farmId}'
+          AND device_type = 'AM308-1'
+          AND time > now() - INTERVAL '6 hours'
+          AND temperature IS NOT NULL
+        GROUP BY device_id, bucket
+        ORDER BY bucket ASC
+      `).catch(() => null),
     ]);
 
     const latest = latestRows[0] ?? {};
@@ -254,6 +276,18 @@ export async function GET() {
     const tvocCurrent = toNum(latest.tvoc);
 
     const tempSpark = sparkRows.map((r) => toPoint(r.bucket, r.temperature)).filter((v): v is { time: string; value: number } => v !== null);
+    // Warmest fresh valid sensor. null = the per-sensor query failed (caller keeps the average).
+    const heatSpark = sensorTempRows == null ? null : warmestFreshSeries(
+      sensorTempRows.flatMap((r): SensorTempBucket[] => {
+        const time = isoOf(r.bucket);
+        const deviceId = String(r.device_id ?? "").trim();
+        if (!time || !deviceId) return [];
+        const readAt = isoOf(r.read_at);
+        return [{ time, deviceId, value: toNum(r.temperature), ...(readAt ? { readAt } : {}) }];
+      }),
+      Date.now(),
+      mergeThresholds(farm.today).staleMinutes.climate.amber,
+    );
     const humiditySpark = sparkRows.map((r) => toPoint(r.bucket, r.humidity)).filter((v): v is { time: string; value: number } => v !== null);
     const co2Spark = sparkRows.map((r) => toPoint(r.bucket, r.co2)).filter((v): v is { time: string; value: number } => v !== null);
     const tvocSpark = sparkRows.map((r) => toPoint(r.bucket, r.tvoc)).filter((v): v is { time: string; value: number } => v !== null);
@@ -310,7 +344,7 @@ export async function GET() {
 
     return NextResponse.json({
       env: {
-        temperature: { current: temp, status: ts, sparkline: tempSpark },
+        temperature: { current: temp, status: ts, sparkline: tempSpark, ...(heatSpark != null ? { heatSparkline: heatSpark } : {}) },
         humidity: { current: humidity, status: hs, sparkline: humiditySpark },
         co2: { current: co2, status: cs, sparkline: co2Spark },
         tvoc: {

@@ -168,6 +168,39 @@ export type WaterMeterFreshness = { name: string; lastMs: number | null | undefi
 /** One complete day of water use per meter (litres). null = that meter had too few hourly rows. */
 export type WaterDay = { date: string; meters: (number | null)[] };
 export type SeriesPoint = { time: string; value: number };
+/** One climate sensor's 30-min average. `time` is the bucket start; `readAt` is the latest reading in that bucket. */
+export type SensorTempBucket = { time: string; deviceId: string; value: number | null; readAt?: string };
+
+/**
+ * Warmest fresh climate sensor per bucket. A sensor counts only when its latest valid reading
+ * (−20…60 °C) is within `freshMinutes` of `now`. Stale, invalid, blank-id and missing sensors
+ * are left out — never carried forward. Returns bucket start → that max, oldest first.
+ */
+export function warmestFreshSeries(readings: SensorTempBucket[], now: number, freshMinutes: number): SeriesPoint[] {
+  const latest = new Map<string, number>();
+  const valid: { time: string; deviceId: string; value: number; at: number }[] = [];
+  for (const r of readings) {
+    const value = r.value;
+    const deviceId = typeof r.deviceId === "string" ? r.deviceId.trim() : "";
+    const timeMs = Date.parse(r.time);
+    if (!deviceId || typeof value !== "number" || !Number.isFinite(value) || value < -20 || value > 60 || !Number.isFinite(timeMs)) continue;
+    const at = Date.parse(r.readAt ?? r.time);
+    if (!Number.isFinite(at)) continue;
+    valid.push({ time: r.time, deviceId, value, at });
+    const prev = latest.get(deviceId);
+    if (prev == null || at > prev) latest.set(deviceId, at);
+  }
+  const cutoff = now - freshMinutes * 60_000;
+  const fresh = new Set([...latest].filter(([, at]) => at >= cutoff).map(([id]) => id));
+  const byBucket = new Map<string, { ms: number; value: number }>();
+  for (const r of valid) {
+    if (!fresh.has(r.deviceId)) continue;
+    const ms = Date.parse(r.time);
+    const prev = byBucket.get(r.time);
+    if (prev == null || r.value > prev.value) byBucket.set(r.time, { ms, value: r.value });
+  }
+  return [...byBucket.entries()].sort((a, b) => a[1].ms - b[1].ms).map(([time, v]) => ({ time, value: v.value }));
+}
 /** Home attention-list items (src/lib/attention.ts) folded into the card. */
 export type ExtraItem = { id: string; severity: "info" | "warning" | "danger"; title: string; detail: string };
 
@@ -177,7 +210,11 @@ export type TodayInput = {
   daily?: DailyRow[];
   lastLogDate?: string | null;
   /** Latest-hour climate averages + 24 h temperature and CO₂ series (30-min buckets). undefined = failed. */
-  climate?: { temperatureC: number | null; humidityPct: number | null; co2Series: SeriesPoint[]; tempSeries?: SeriesPoint[] };
+  climate?: {
+    temperatureC: number | null; humidityPct: number | null; co2Series: SeriesPoint[]; tempSeries?: SeriesPoint[];
+    /** Warmest fresh sensor per bucket. Present (possibly empty) when that check ran; the 32 °C backstop uses it instead of the house-average `tempSeries`. */
+    heatSeries?: SeriesPoint[];
+  };
   /** Daily litres per water meter, oldest first, complete days only. undefined = failed / not loaded. */
   waterDays?: WaterDay[];
   /** Names matching `WaterDay.meters`, e.g. ["Meter 1", "Meter 2"]. */
@@ -348,7 +385,11 @@ export function climateLine(input: TodayInput, t: TodayThresholds): TodayLine {
   const felt = valid ? feltTemp(temp, rh) : null;
   const co2 = c ? co2Sustained(c.co2Series, input.now, t) : null;
   // Dry-bulb backstop: sustained, never a single reading. Felt temperature stays the primary signal.
-  const hotDry = c?.tempSeries ? sustainedAtOrAbove(c.tempSeries.filter((p) => p.value >= -20 && p.value <= 60), input.now, t.dryBulbC.amber, t.dryBulbC.dwellMinutes) : null;
+  // When `heatSeries` is present it is the warmest fresh valid sensor (not the house average), so a hot
+  // zone is not averaged away. An empty series means that check ran and found nothing fresh — do not
+  // fall back to the average, and do not invent a reading. Cold and warming-fast stay on the average.
+  const drySeries = c?.heatSeries ?? c?.tempSeries;
+  const hotDry = drySeries ? sustainedAtOrAbove(drySeries.filter((p) => p.value >= -20 && p.value <= 60), input.now, t.dryBulbC.amber, t.dryBulbC.dwellMinutes) : null;
   if (felt == null && co2 == null && hotDry == null) return withAlerts({ ...base, rag: "unknown", text: "", action: "" }, alerts, "Cool the house now");
   const parts: string[] = [];
   let rag: Rag = "green";
@@ -363,7 +404,8 @@ export function climateLine(input: TodayInput, t: TodayThresholds): TodayLine {
   if (hotDry != null && rag === "green") {
     rag = "amber";
     action = "Increase airflow, keep water cool";
-    parts[0] = `${parts[0]}, ${r1(t.dryBulbC.amber)}°C+ for ${t.dryBulbC.dwellMinutes}+ min`;
+    const who = c?.heatSeries ? "warmest sensor " : "";
+    parts[0] = `${parts[0]}, ${who}${r1(t.dryBulbC.amber)}°C+ for ${t.dryBulbC.dwellMinutes}+ min`;
   }
   // Story: checking my phone before dawn after a cold night, I want the Today card to say the house is cold,
   // not "All good". Sustained, never one reading.
@@ -551,11 +593,12 @@ export function buildToday(input: TodayInput, overrides?: unknown): TodayResult 
 
 /** Story: the Live dashboard's temperature tiles must say the same as the Today card's Climate row, or I
  *  stop trusting both. Heat status from the Today card's own rules: felt ≥ red → danger, felt ≥ amber or
- *  air at/above the dry-bulb backstop for the dwell → warning; otherwise null (not hot). Display only:
+ *  air at/above the dry-bulb backstop for the dwell → warning; otherwise null (not hot). `heatSeries`,
+ *  when passed, is the warmest fresh sensor and is what the 32 °C backstop uses. Display only:
  *  the health gauge keeps its own score (docs/today-card.md). */
-export function heatTileStatus(felt: number | null, tempSeries: SeriesPoint[], now: number, t: TodayThresholds = DEFAULT_TODAY_THRESHOLDS): "danger" | "warning" | null {
+export function heatTileStatus(felt: number | null, tempSeries: SeriesPoint[], now: number, t: TodayThresholds = DEFAULT_TODAY_THRESHOLDS, heatSeries?: SeriesPoint[]): "danger" | "warning" | null {
   if (felt != null && felt >= t.feltTempC.red) return "danger";
   if (felt != null && felt >= t.feltTempC.amber) return "warning";
-  const dry = sustainedAtOrAbove(tempSeries.filter((p) => p.value >= -20 && p.value <= 60), now, t.dryBulbC.amber, t.dryBulbC.dwellMinutes);
+  const dry = sustainedAtOrAbove((heatSeries ?? tempSeries).filter((p) => p.value >= -20 && p.value <= 60), now, t.dryBulbC.amber, t.dryBulbC.dwellMinutes);
   return dry != null ? "warning" : null;
 }

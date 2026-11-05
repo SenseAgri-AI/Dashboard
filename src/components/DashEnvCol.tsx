@@ -11,7 +11,7 @@ import { SeriesMark, TIP_BOX, TIP_LABEL, TipRow } from "@/components/ChartToolti
 // working min/max on the y-axis. Fine + coarse dust share one plot; light level added.
 
 export interface EnvData {
-  temperature: { current: number | null; status: string; sparkline: SparklinePoint[] };
+  temperature: { current: number | null; status: string; sparkline: SparklinePoint[]; heatSparkline?: SparklinePoint[] };
   humidity:    { current: number | null; status: string; sparkline: SparklinePoint[] };
   co2:         { current: number | null; status: string; sparkline: SparklinePoint[] };
   tvoc:        { current: number | null; sparkline: SparklinePoint[]; mean: number; std: number };
@@ -175,7 +175,7 @@ export default function DashEnvCol({ env, narrow, house = null }: { env: EnvData
   // Same heat rules as the Today card (felt temperature + dry-bulb backstop), so the two never disagree.
   // Cold side keeps the summary's own status. The health gauge is unchanged.
   // "now" = the newest reading (only used while the temperature is current, i.e. within the last hour).
-  const heat = heatTileStatus(thiCurrent, tSpk, tSpk.length ? Date.parse(tSpk[tSpk.length - 1].time) : 0);
+  const heat = heatTileStatus(thiCurrent, tSpk, tSpk.length ? Date.parse(tSpk[tSpk.length - 1].time) : 0, DEFAULT_TODAY_THRESHOLDS, env?.temperature.heatSparkline);
   const tempNow = env?.temperature.current ?? null;
   const tempStatus = tempNow == null ? env?.temperature.status : heat ?? (tempNow < 14 ? env?.temperature.status : "normal");
   const thiStatus = thiCurrent == null ? undefined

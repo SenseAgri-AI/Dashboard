@@ -364,6 +364,53 @@ test('Live dashboard heat tile status follows the Today card climate rules', () 
   assert.equal(T.heatTileStatus(27.1, ser(32.4, 1), now), null);  // one reading is never sustained
 });
 
+test('32 °C backstop uses the warmest fresh valid sensor, not the house average', () => {
+  const bucket = (deviceId, minutesAgo, value, readMinutesAgo = minutesAgo) => ({ time: iso(minutesAgo), deviceId, value, readAt: iso(readMinutesAgo) });
+  const climate = (heatSeries, tempSeries, temperatureC = 28) => ({ temperatureC, humidityPct: 15, co2Series: [], tempSeries, heatSeries });
+  // Warm zone 33 °C, house average 28 °C: the average stays comfortable, the warmest sensor warns.
+  const heat = T.warmestFreshSeries([
+    bucket('cool', 30, 28), bucket('cool', 0, 28),
+    bucket('hot', 30, 33.2), bucket('hot', 0, 33.4),
+  ], NOW, 30);
+  assert.deepEqual(plain(heat.map((p) => p.value)), [33.2, 33.4]);
+  const dry = line(today({ climate: climate(heat, co2(28, 28)) }), 'climate');
+  assert.equal(dry.rag, 'amber');
+  assert.match(dry.text, /^28°C \(feels 2\d\.\d°C\), warmest sensor 32°C\+ for 30\+ min$/);
+  assert.equal(dry.action, 'Increase airflow, keep water cool');
+  assert.equal(line(today({ climate: { temperatureC: 28, humidityPct: 15, co2Series: [], tempSeries: co2(28, 28) } }), 'climate').rag, 'green');
+  assert.equal(T.heatTileStatus(26, co2(28, 28), NOW, T.DEFAULT_TODAY_THRESHOLDS, heat), 'warning');
+  assert.equal(T.heatTileStatus(26, co2(28, 28), NOW), null);
+
+  // Stale hottest (last valid reading 45 min ago) is dropped; the fresh cool sensor does not warn.
+  const stale = T.warmestFreshSeries([
+    bucket('hot', 30, 36, 45), bucket('hot', 0, 36, 45),
+    bucket('cool', 30, 27, 20), bucket('cool', 0, 27, 1),
+  ], NOW, 30);
+  assert.deepEqual(plain(stale.map((p) => p.value)), [27, 27]);
+  assert.equal(line(today({ climate: climate(stale, co2(36, 36), 27) }), 'climate').rag, 'green');
+
+  // Invalid hottest (outside −20…60 °C) is ignored, as is a blank id or a null.
+  const junk = T.warmestFreshSeries([
+    bucket('bad', 30, 85), bucket('bad', 0, 85),
+    bucket('cool', 30, 29), bucket('cool', 0, 29),
+    bucket('', 0, 40), { time: iso(0), deviceId: 'gone', value: null, readAt: iso(0) },
+  ], NOW, 30);
+  assert.deepEqual(plain(junk.map((p) => p.value)), [29, 29]);
+  assert.deepEqual(plain(T.warmestFreshSeries([{ time: iso(0), deviceId: 'only', value: 70, readAt: iso(0) }], NOW, 30)), []);
+
+  // One fresh sensor is the warmest sensor. No fresh sensor does not fall back to a hot average.
+  const one = T.warmestFreshSeries([bucket('only', 30, 32), bucket('only', 0, 32.5, 2)], NOW, 30);
+  const single = line(today({ climate: climate(one, co2(32, 32.5), 32.5) }), 'climate');
+  assert.equal(single.rag, 'amber');
+  assert.match(single.text, /warmest sensor 32°C\+ for 30\+ min/);
+  assert.equal(line(today({ climate: climate([], co2(34, 34), 33) }), 'climate').rag, 'green');
+
+  // Warming fast still follows the house average when the warmest sensor is not the series that rose.
+  const flat = T.warmestFreshSeries([bucket('end', 60, 29, 1), bucket('end', 30, 29, 1), bucket('end', 0, 29, 1)], NOW, 30);
+  const rising = line(today({ climate: climate(flat, co2(25.5, 27, 29), 29) }), 'climate');
+  assert.match(rising.text, /Warming fast: up 3\.5°C in the last hour/);
+});
+
 test('climate: cold house early warning (10 °C or below for 60+ min), never one reading', () => {
   const c = (tempSeries, temperatureC = 8, humidityPct = 80) => line(today({ climate: { temperatureC, humidityPct, co2Series: [], tempSeries } }), 'climate');
   const cold = c(co2(9.5, 8.6, 8));
