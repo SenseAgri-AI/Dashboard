@@ -33,6 +33,17 @@ export interface FarmConfig {
   waterLitresPerPulse: number;
   /** Farm timezone offset from UTC in hours (SAST = 2). */
   timezoneOffset: number;
+  /** Farm location for the outside weather forecast (Open-Meteo). Optional: the Ventilation page asks for it when missing. */
+  location?: { lat: number; lon: number };
+  /** Optional per-farm overrides for ventilation suggestions. See src/lib/ventilation.ts. */
+  ventilation?: import("./ventilation").VentThresholdOverrides;
+}
+
+/** A usable `location` from the farm config, or null. */
+export function validLocation(l: unknown): { lat: number; lon: number } | null {
+  const o = l as { lat?: unknown; lon?: unknown } | null;
+  const lat = Number(o?.lat), lon = Number(o?.lon);
+  return o && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
 }
 
 const TTL_MS = 60 * 60 * 1000;

@@ -42,6 +42,8 @@ Repository agents must also follow [`AGENTS.md`](../AGENTS.md).
 - **[flock-night-rest-score.md](flock-night-rest-score.md)** — the flock **sleep score** (0–100): the
   dark-period window, the −32 dBFS disruption line, the four-component formula, the score bands, the
   dashboard tile, the poor-sleep alert, and the validation.
+- **[ventilation.md](ventilation.md)** — the Ventilation page: outside forecast vs inside climate,
+  day/night suggestions, storm and cold-night rules. Thresholds are provisional.
 
 ## Conventions
 

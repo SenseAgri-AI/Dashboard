@@ -17,6 +17,11 @@ The `sensors` measurement mixes device types under one farm — filter by `devic
 the dashboard/analytics/telemetry routes. A raw `FROM sensors WHERE farm_id = …` sweeps in the meters
 and produces garbage.
 
+**A house can have more than one `AM308-1`** (different `device_id`s). `AVG(...)` over
+`device_type = 'AM308-1'` is the house average. `/api/ventilation` also returns `hotC`: `MAX(temperature)`
+in each 30-minute bucket, the warmest raw reading. Ventilation prompts still use the house average.
+The query does not read radar or feed meters.
+
 ## `light_level` — a 0–5 index, NOT lux
 
 The AM308 reports light as a **discrete level 0–5**, each mapping to a lux band:

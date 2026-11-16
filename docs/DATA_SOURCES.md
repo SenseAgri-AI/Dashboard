@@ -10,6 +10,7 @@ Use this map before adding a query. Status labels mean:
 | Data | Hot/recent source | Historical source | Producer/owner | Status |
 |---|---|---|---|---|
 | Climate telemetry | InfluxDB `sensors` / `AM308-1` | Athena `senseagri_silver.aligned_hourly` | Platform LNX ingestion and silver pipeline | Implemented |
+| Outside weather forecast | Open-Meteo hourly forecast for the farm config `location` (no API key; not stored) | Not stored | Dashboard `/api/ventilation` | Implemented for the ventilation page. The configured coordinates are sent to Open-Meteo. |
 | Water meters | InfluxDB `sensors` / cumulative `pulse_total` | Athena `senseagri_silver.meters_hourly` | Platform meter silver pipeline | Implemented |
 | Silo radar | InfluxDB `sensors` / `EM411-RDL` | Raw S3 exists; dashboard historical contract is incomplete | Platform LNX ingestion | Implemented hot path; historical work needs verification |
 | Egg production and mortality | Google DailyLog | Athena aligned silver data | Sheet ingestion/silver pipeline | Implemented |
