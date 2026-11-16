@@ -15,6 +15,13 @@ export function thi(tempC: number, rhPct: number): number {
 // 6553.5 °C (0xFFFF ÷ 10), which would otherwise blow up the index. Anything outside these is a bad
 // reading and is ignored. (Climate should already be scoped to device_type = 'AM308-1' upstream; this
 // is belt-and-suspenders.)
+/** Felt temperature for display: the THI, but never warmer than the air. Below ~14.4 °C the Marai
+ *  formula reads above dry-bulb (10 °C at 60 % RH → 10.5), which is wrong for a "feels" figure in the cold.
+ *  Heat zones are unaffected (they start far above 14.4 °C). */
+export function feltTemp(tempC: number, rhPct: number): number {
+  return Math.min(tempC, thi(tempC, rhPct));
+}
+
 export const TEMP_MIN = -20, TEMP_MAX = 60;   // °C, shed conditions
 export const RH_MIN = 0, RH_MAX = 100;        // %
 export function plausibleClimate(tempC: number, rhPct: number): boolean {
