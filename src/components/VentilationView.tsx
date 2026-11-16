@@ -8,7 +8,7 @@ import { buildVentilation, localHHMM, periods, type InsidePoint, type OutsideHou
 // docs/ventilation.md. Presentational only, so it can be previewed with mock data.
 
 export type VentData = {
-  location: { lat: number; lon: number } | null;
+  hasLocation: boolean;
   inside: InsidePoint[] | null;
   outside: OutsideHour[] | null;
   sun: SunDay[];
@@ -37,12 +37,12 @@ export default function VentilationView({ data, now, narrow = false }: { data: V
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 880 }}>
-      {!data.location && (
+      {!data.hasLocation && (
         <div style={{ ...card, background: "var(--warn-bg)", color: "var(--warn)", fontSize: 13 }}>
           <strong>Farm location not set.</strong> Add <code>location: {"{ lat, lon }"}</code> to the farm config to see the outside forecast. Inside readings are shown below.
         </div>
       )}
-      {data.location && data.forecastError && (
+      {data.hasLocation && data.forecastError && (
         <div style={{ ...card, background: "var(--warn-bg)", color: "var(--warn)", fontSize: 13 }}>The weather forecast didn&apos;t load. Try again later.</div>
       )}
 

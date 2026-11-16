@@ -17,20 +17,29 @@ export default function VentilationPage() {
     const on = () => setNarrow(mq.matches);
     on();
     mq.addEventListener("change", on);
+    const stop = new AbortController();
     let alive = true;
     const load = async () => {
+      if (stop.signal.aborted) return;
+      // Aborted when this request settles or the page unmounts, so the fallback timeout timer is cleared.
+      const request = new AbortController();
+      const onStop = () => request.abort();
+      stop.signal.addEventListener("abort", onStop, { once: true });
       try {
-        const res = await fetch("/api/ventilation", { signal: timeoutSignal(30_000) }); // a hung request shows the error, not "Loading…" forever
+        const res = await fetch("/api/ventilation", { signal: timeoutSignal(30_000, request.signal) }); // a hung request shows the error, not "Loading…" forever
         if (!res.ok) throw new Error(String(res.status));
         const d = await res.json();
         if (alive) { setData(d); setNow(Date.now()); setError(false); }
       } catch {
         if (alive) setError(true);
+      } finally {
+        request.abort();
+        stop.signal.removeEventListener("abort", onStop);
       }
     };
     load();
     const id = window.setInterval(load, 15 * 60_000);
-    return () => { alive = false; window.clearInterval(id); mq.removeEventListener("change", on); };
+    return () => { alive = false; stop.abort(); window.clearInterval(id); mq.removeEventListener("change", on); };
   }, []);
 
   return (

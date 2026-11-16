@@ -22,6 +22,11 @@ const num = (v: unknown) => (v == null ? null : Number.isFinite(Number(v)) ? Num
 
 
 const FORECAST_TIMEOUT_MS = 10_000;
+const PRIVATE = { headers: { "Cache-Control": "private, no-store" } };
+
+function json(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, ...PRIVATE });
+}
 
 async function forecast(loc: { lat: number; lon: number }) {
   const url = "https://api.open-meteo.com/v1/forecast"
@@ -39,8 +44,8 @@ export async function GET() {
   try {
     farm = await getFarmForRequest();
   } catch (err) {
-    if (err instanceof FarmAccessError) return NextResponse.json({ error: err.message }, { status: 403 });
-    return NextResponse.json({ error: "Failed to resolve farm" }, { status: 500 });
+    if (err instanceof FarmAccessError) return json({ error: err.message }, 403);
+    return json({ error: "Failed to resolve farm" }, 500);
   }
   const location = validLocation(farm.location);
   const [insideRes, outsideRes] = await Promise.allSettled([
@@ -56,9 +61,10 @@ export async function GET() {
   if (outsideRes.status === "rejected") console.error("Ventilation forecast error:", outsideRes.reason);
   if (insideRes.status === "rejected") console.error("Ventilation inside error:", insideRes.reason);
   const outside = outsideRes.status === "fulfilled" ? outsideRes.value : null;
-  return NextResponse.json({
+  return json({
     checkedAt: new Date().toISOString(),
-    location,
+    // Coordinates stay on the server for the Open-Meteo request. The page only needs to know if one is set.
+    hasLocation: location != null,
     // `null` = couldn't load (vs `[]` = no readings)
     inside: insideRes.status === "fulfilled"
       ? insideRes.value

@@ -2,12 +2,12 @@
 
 Status: ventilation page only. All thresholds are PROVISIONAL until a farmer or vet confirms them; each one can be overridden per farm (`ventilation` in the farm config). The page reads house climate sensors and the outside forecast. It does not read radar or feed meters.
 
-Route `/ventilation` (nav: Ventilation). Data: `/api/ventilation` = inside climate (AM308-1, 30-min averages, last 8 days, read-only) + outside forecast from Open-Meteo (free, no key; hourly temperature, RH, rain chance, wind; sunrise/sunset; 8 days back, 4 ahead; cached 30 min).
+Route `/ventilation` (nav: Ventilation). Data: `/api/ventilation` = inside climate (AM308-1, 30-min averages, last 8 days, read-only) + outside forecast from Open-Meteo (free, no key; hourly temperature, RH, rain chance, wind; sunrise/sunset; 8 days back, 4 ahead). The Open-Meteo response is reused for 30 min on the server. The page response itself is `Cache-Control: private, no-store`.
 Rules: `src/lib/ventilation.ts`, tested in `tests/ventilation.test.mjs`. UI: `src/components/VentilationView.tsx`.
 
 **Farm location is required for the forecast**: `"location": { "lat": …, "lon": … }` in `/senseagri/farms/<slug>/config`. Without it the page shows a "location not set" note and inside readings only.
 
-**Privacy:** the farm's coordinates (rounded as configured) are sent to Open-Meteo, a third-party weather API, with each forecast request (at most every 30 min per server). No other farm data leaves the dashboard.
+**Privacy:** the configured coordinates are sent to Open-Meteo as stored (there is no rounding step), with each forecast request, at most every 30 min per server. They stay on the server. The page receives `hasLocation` only, not the coordinates. No other farm data leaves the dashboard.
 
 ## What's on the page and why
 
