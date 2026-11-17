@@ -246,28 +246,18 @@ html, body {
   .sa-collapse-btn { display: none; }
 }
 
-/* Mobile drawer + bottom nav */
+/* Mobile drawer. The top-bar menu button opens it; there is no bottom bar. */
 .sa-drawer-backdrop { display: none; }
-.sa-mobile-nav { display: none; }
 
 @media (max-width: 900px) {
+  .sa-menu-btn { display: inline-flex; }
   .sa-sidebar {
     position: fixed; left: 0; top: 0; height: 100vh; transform: translateX(-100%);
-    transition: transform 220ms ease; box-shadow: 0 0 40px rgba(0,0,0,0.4);
+    transition: transform 220ms ease;
   }
-  .sa-sidebar.open { transform: translateX(0); }
+  .sa-sidebar.open { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,0.4); }
+  .sa-side-nav { overflow-y: auto; min-height: 0; }
   .sa-drawer-backdrop.open { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 55; }
-  .sa-content { padding-bottom: 58px; }
-  .sa-mobile-nav {
-    display: flex; position: fixed; bottom: 0; left: 0; right: 0; height: 58px; z-index: 58;
-    background: var(--bg-nav); border-top: 1px solid rgba(255,255,255,0.1);
-  }
-  .sa-mobile-link {
-    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-    color: rgba(255,255,255,0.6); font-size: 10px; font-weight: 700; text-decoration: none; letter-spacing: 0.02em;
-  }
-  .sa-mobile-link svg { width: 20px; height: 20px; }
-  .sa-mobile-link.active { color: var(--gold); }
 }
 
 /* ── RESPONSIVE ─────────────────────────────────── */
