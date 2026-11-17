@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { UserButton, OrganizationSwitcher, useUser, useOrganization } from "@clerk/nextjs";
+import { cycleDrawerFocusIndex } from "@/lib/mobileDrawerFocus";
 
 // Prevents a throwing child (e.g. OrganizationSwitcher when the Clerk instance
 // has Organizations disabled) from white-screening the whole app shell.
@@ -127,10 +128,29 @@ const clerkDark = {
   },
 } as const;
 
+const DRAWER_QUERY = "(max-width: 900px)";
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function focusableIn(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => {
+    const style = window.getComputedStyle(el);
+    return style.display !== "none" && style.visibility !== "hidden";
+  });
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [pathSeen, setPathSeen] = useState(pathname);
+  if (pathSeen !== pathname) {
+    setPathSeen(pathname);
+    setOpen(false);
+  }
   const [collapsed, setCollapsed] = useState(false);
+  const [isNarrow, setIsNarrow] = useState(false);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const { user } = useUser();
 
   // When the active organization changes, hard-reload so every page + API call
@@ -148,23 +168,82 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try { if (localStorage.getItem("sa-sidebar-collapsed") === "1") setCollapsed(true); } catch {}
   }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia(DRAWER_QUERY);
+    const apply = () => {
+      const narrow = mq.matches;
+      setIsNarrow(narrow);
+      if (!narrow) setOpen(false);
+    };
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
+  useEffect(() => {
+    if (!open || !isNarrow) return;
+    const sidebar = sidebarRef.current;
+    if (!sidebar) return;
+
+    const items = focusableIn(sidebar);
+    items[0]?.focus({ preventScroll: true });
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (event.defaultPrevented) return;
+        event.preventDefault();
+        setOpen(false);
+        return;
+      }
+      if (event.key !== "Tab" || event.defaultPrevented) return;
+      const current = focusableIn(sidebar);
+      const active = document.activeElement;
+      const activeIndex = active instanceof HTMLElement ? current.indexOf(active) : -1;
+      const activeInPage = active instanceof Node && !!contentRef.current?.contains(active);
+      const next = cycleDrawerFocusIndex(current.length, activeIndex, event.shiftKey, activeInPage);
+      if (next == null) return;
+      event.preventDefault();
+      current[next]?.focus({ preventScroll: true });
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    const trigger = menuBtnRef.current;
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      // Restore focus only while the drawer breakpoint still applies, so a resize
+      // back to the desktop sidebar does not move focus.
+      if (window.matchMedia(DRAWER_QUERY).matches) trigger?.focus({ preventScroll: true });
+    };
+  }, [open, isNarrow]);
+
   const setCollapse = (v: boolean) => {
     setCollapsed(v);
     try { localStorage.setItem("sa-sidebar-collapsed", v ? "1" : "0"); } catch {}
   };
   // Top-bar menu button: drawer on mobile, collapse/expand on desktop.
   const toggleNav = () => {
-    if (typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches) setOpen((v) => !v);
+    if (typeof window !== "undefined" && window.matchMedia(DRAWER_QUERY).matches) setOpen((v) => !v);
     else setCollapse(!collapsed);
   };
   const isSuper = user?.publicMetadata?.role === "superadmin";
   const navItems = isSuper ? [...NAV, ADMIN_ITEM] : NAV;
   const current = navItems.find((n) => isActive(pathname, n.href));
+  const menuLabel = isNarrow ? (open ? "Close menu" : "Open menu") : "Toggle sidebar";
+  const drawerOpen = isNarrow && open;
 
   return (
     <div className={`sa-shell ${collapsed ? "collapsed" : ""}`}>
-      {/* Sidebar (desktop) / drawer (mobile) */}
-      <aside className={`sa-sidebar ${open ? "open" : ""}`}>
+      {/* Sidebar (desktop) / drawer (mobile). Same list at every width, including Ventilation. */}
+      <aside
+        id="sa-sidebar"
+        ref={sidebarRef}
+        className={`sa-sidebar ${open ? "open" : ""}`}
+        inert={isNarrow && !open ? true : undefined}
+        role={drawerOpen ? "dialog" : undefined}
+        aria-modal={drawerOpen ? true : undefined}
+        aria-label={drawerOpen ? "Main menu" : undefined}
+      >
         <div className="sa-side-brand">
           <Image src="/logo-dark.jpg" alt="SenseAgri" width={36} height={36} priority style={{ borderRadius: 8, flexShrink: 0, display: "block" }} />
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -202,7 +281,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Mobile backdrop */}
+      {/* Mobile backdrop. Hidden on desktop even if `open` is stale. */}
       <div
         className={`sa-drawer-backdrop ${open ? "open" : ""}`}
         onClick={() => setOpen(false)}
@@ -210,9 +289,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       />
 
       {/* Content */}
-      <div className="sa-content">
+      <div className="sa-content" ref={contentRef} inert={drawerOpen ? true : undefined}>
         <header className="sa-topbar">
-          <button className="sa-menu-btn" onClick={toggleNav} aria-label="Toggle sidebar" title="Toggle sidebar">
+          <button
+            ref={menuBtnRef}
+            type="button"
+            className="sa-menu-btn"
+            onClick={toggleNav}
+            aria-label={menuLabel}
+            title={menuLabel}
+            aria-expanded={isNarrow ? open : undefined}
+            aria-controls={isNarrow ? "sa-sidebar" : undefined}
+          >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
             </svg>
@@ -228,16 +316,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {children}
       </div>
-
-      {/* Mobile bottom nav */}
-      <nav className="sa-mobile-nav">
-        {navItems.map((item) => (
-          <Link key={item.href} href={item.href} className={`sa-mobile-link ${isActive(pathname, item.href) ? "active" : ""}`}>
-            {item.icon}
-            {item.label}
-          </Link>
-        ))}
-      </nav>
     </div>
   );
 }
