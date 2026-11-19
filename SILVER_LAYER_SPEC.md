@@ -1,16 +1,21 @@
 # Analytics Data Layer — Spec (handover to data-engineering)
 
-Verified against the live AWS account **336814727818**, region **af-south-1**, on 2026-07-05/06.
+Design notes checked against the AWS account **336814727818**, region **af-south-1**, on 2026-07-05/06.
+The dashboard now reads silver. Where this file disagrees with
+[docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) or [src/lib/silverSource.ts](src/lib/silverSource.ts),
+follow those. Do not copy this spec into `docs/`. The producer is `senseagri-platform`
+(not a `terraform/silver/` tree in this repo).
 
-> **What we're building now: the SILVER layer** — all raw device telemetry aligned onto a
-> common **hourly** grid per house and **joined with the farm's Google-Sheet logs** (eggs, egg
-> sizes, deaths, average egg weight, interventions, events, feed, schedule state). This is the
-> single, easily-queryable dataset the app renders. **Gold (derived metrics — HDEP, FCR,
-> trend/variance bands) is deferred** — see the last section.
+> **What the app reads:** Athena database `senseagri_silver`. Environment and sheet columns
+> come from `aligned_hourly`. Water and feed come from `meters_hourly`.
+> `water_litres` and `feed_kg` on `aligned_hourly` are **null by design**. Feed in
+> `meters_hourly` is pulses (`feed_pulses_auger1`, `feed_pulses_auger2`), not kilograms.
+> **Gold is still deferred** (`src/lib/timeseriesSource.ts`).
 >
-> **Scope of sources:** raw **device sensor telemetry** (AM308 environment + EM300 pulse meters)
-> + the Google-Sheet tabs. Camera/vision (`raw/events` `egg_count`) is kept for reference but
-> **out of scope for the first build**.
+> Camera egg counts are not selected by the silver reader. The dashboard reads them from
+> InfluxDB `egg_count` ([src/lib/eggCountSource.ts](src/lib/eggCountSource.ts)). Both cameras
+> point at the egg belts, one per A-frame, and the counts are additive. No camera faces the
+> manure belt. See [docs/PROJECT_STATE.md](docs/PROJECT_STATE.md).
 
 ---
 
@@ -19,8 +24,8 @@ Verified against the live AWS account **336814727818**, region **af-south-1**, o
 | Layer | Bucket | State today | Contents |
 |---|---|---|---|
 | **Raw** | `senseagri-dev-raw` | populated ✅ | Untouched ChirpStack uplink JSON + camera event JSON |
-| **Bronze** | `senseagri-dev-bronze` | ~empty (11 stray raw-format test files — ignore/clear) | **Decoded, typed, deduped**: one row per valid measurement uplink, plus typed copies of each Sheet tab |
-| **Silver** | `senseagri-dev-silver` | **to create** | **`aligned_hourly`** — one wide row per `farm_id, house_id, hour`, sensors resampled + sheets joined. **The app reads this.** |
+| **Bronze** | `senseagri-dev-bronze` | Not re-checked here. The July 2026 "~empty" note is obsolete as a current claim | **Decoded, typed, deduped**: one row per valid measurement uplink, plus typed copies of each Sheet tab |
+| **Silver** | `senseagri-dev-silver` | Read by the dashboard | **`aligned_hourly`** plus **`meters_hourly`**. See `src/lib/silverSource.ts`. The July 2026 "to create" note is obsolete |
 | **Gold** | `senseagri-dev-gold` | later | Derived business metrics (HDEP, FCR, trend + variance) — see final section |
 
 ```
@@ -30,7 +35,7 @@ raw JSON (S3)  +  Google-Sheet tabs
   device_readings + sheet_* tables
         │  map devEui→house · resample→hourly · join            (SILVER)
         ▼
-  aligned_hourly / farm / house            ◄── Athena/Glue ──►  the app
+  aligned_hourly + meters_hourly          ◄── Athena/Glue ──►  the app
         │  (later) HDEP, FCR, trend, variance                   (GOLD)
         ▼
   derived metric series
@@ -79,19 +84,18 @@ ChirpStack LoRaWAN uplinks:
 ### Accessing the Sheets (where + how)
 - **Where** — each farm's `spreadsheetId` is in its **per-farm SSM config
   `/senseagri/farms/<slug>/config`** (same JSON blob as the `devices` map). Read it from there;
-  do **not** hard-code an ID. (DATA_ACCESS.md still shows Anike's single hard-coded ID
-  `1KjAr1wjfptYbE0n3qCWY_7gTVnR-XMTRy8xzRgCDpkA` — pre-multitenant, use it only as a fallback.)
+  do **not** hard-code an ID. [DATA_ACCESS.md](DATA_ACCESS.md) §2 shows how an analyst reads
+  the id from SSM. The dashboard itself uses the read-write `spreadsheets` scope.
 - **Auth** — Google **service-account JSON in SSM `/senseagri/dev/google/service-account`**
   (region `af-south-1`). Read-only scope `https://www.googleapis.com/auth/spreadsheets.readonly`
-  is enough for the pipeline. DATA_ACCESS.md §2 has a working `gspread`/Python snippet — reuse it.
+  is enough for an analyst or a read-only pipeline. DATA_ACCESS.md §2 has a `gspread` snippet.
 - **⚠️ Sharing** — the service account only sees sheets **shared with its `client_email`**
   (the email inside the service-account JSON). If a farm's sheet 403s, it hasn't been shared —
   share it as at least Viewer. New-farm onboarding must include this step.
-- **Column layouts** — DATA_ACCESS.md documents only the old `DailyLog!A:J` and is **stale**. The
-  current, authoritative layouts (incl. the `house` column and the Events/Feed/Schedule/SizeWeights
-  tabs) are the header constants in the app's service files: `src/lib/scheduleService.ts`,
-  `eventService.ts`, `feedService.ts`, `sizeWeightsService.ts`, and the DailyLog parser in
-  `src/app/api/production/route.ts`. Read tab headers dynamically rather than by fixed index.
+- **Column layouts** — DailyLog columns A–Q are `entryToRow` in `src/lib/logService.ts`
+  (also summarised in DATA_ACCESS.md §2). Events, feed, schedule, and size-weight headers are
+  the constants in `src/lib/eventService.ts`, `feedService.ts`, `scheduleService.ts`, and
+  `sizeWeightsService.ts`. Read tab headers dynamically rather than by fixed index.
 
 ---
 
@@ -132,13 +136,15 @@ Parquet + Snappy, **UTC**. Rewrite the open month each run; closed months immuta
 |---|---|---|
 | keys | `farm_id, house_id, bucket_start` | hour left-edge (UTC) |
 | environment | `temperature, humidity, co2, tvoc, pm2_5, pm10, pressure, light_level, battery` | **mean** over the hour across the house's AM308s; `temp_min/temp_max` optional |
-| meters | `water_litres, feed_kg` | per-hour **consumption** = `max(0, Δ pulse_total) × unit-per-pulse` |
-| eggs (manual) | `eggs_total, eggs_small, eggs_medium, eggs_large, eggs_xl, eggs_jumbo, eggs_damaged, avg_egg_weight, mortality, deaths` | from `DailyLog` — **daily values broadcast onto that day's 24 hourly rows**. ⚠️ **`eggs_damaged` (breakages, DailyLog col H) is in the sheet + app but was NOT carried into the current build — add it.** |
+| meters | `water_litres, feed_kg` | **Null by design** on `aligned_hourly`. Consumption is `meters_hourly`: `water_l_wm1`, `water_l_wm2` (litres) and `feed_pulses_auger1`, `feed_pulses_auger2` (pulses, not kg). The dashboard sums the two water columns and does not use the table's own `water_l_total` (`fetchMetersDaily` in `src/lib/silverSource.ts`) |
+| eggs (manual) | `eggs_total, eggs_small, eggs_medium, eggs_large, eggs_xl, eggs_jumbo, eggs_damaged, avg_egg_weight, mortality, deaths` | from `DailyLog` — **daily values broadcast onto that day's 24 hourly rows**. The dashboard reader selects `eggs_damaged` (`SILVER_METRICS` in `src/lib/silverSource.ts`) |
 | interventions | `event_flag, event_type, event_note, feed_delivery_flag, feed_kg_delivered` | from `Events` / `FeedDeliveries`, stamped on the hour they occurred |
 | quality | `n` | sensor-reading count in the bucket |
 
-> **Schedule-state (`lights_on`, `photoperiod_h`, `fan_state`) is intentionally NOT a silver column
-> in v1** — see "Schedule-state" below. Everything above is cleanly derivable from the sheet + raw.
+> **Schedule-state.** The July design skipped `lights_on`, `photoperiod_h`, and `fan_state`.
+> The dashboard reader nevertheless lists `photoperiod_h` in `SILVER_METRICS`
+> (`src/lib/silverSource.ts`). This file does not say whether that column is populated.
+> See "Schedule-state" below.
 
 ### Alignment rules
 - **Filter by `device_type` first.** Env columns come **only from `AM308-1`** readings; meter columns
@@ -146,8 +152,10 @@ Parquet + Snappy, **UTC**. Rewrite the open month each run; closed months immuta
   climate. Never aggregate a metric across device types.
 - **Env (AM308):** resample to hour → mean; multiple AM308s in a house → mean.
 - **Meters (EM300):** `pulse_total` is cumulative → consumption = `max(0, Δ)` between consecutive
-  readings, summed per hour, × unit-per-pulse. Water vs feed = the device's **role** (below) — same
-  `device_type`, so `role` from the devEui map is the only thing that tells them apart.
+  readings, summed per hour, × unit-per-pulse. That result is written to **`meters_hourly`**, not
+  to `aligned_hourly.water_litres` / `feed_kg` (those stay null). Water vs feed = the device's
+  **role** — same `device_type`, so `role` is what tells them apart. Water is litres
+  (`water_l_wm1`, `water_l_wm2`, 10 L/pulse). Feed columns are pulses, not kg.
 - **Daily sheet data:** broadcast the day's values onto that day's 24 hourly rows (keeps one table;
   a parallel `aligned_daily` is optional).
 - **Events / feed:** stamp on the hour they occurred (these become the plot **annotations**).
@@ -167,12 +175,13 @@ occurrences** — the same thing a calendar app does turning a repeat-rule into 
 that expansion **once, in the app** (which owns the model); the ETL should never re-expand it, or two
 expanders drift.
 
-**v1 (now) — skip it:**
-- The pipeline skips schedule-state; silver ships with everything else (all cleanly derivable).
-  **Interventions are already aligned** (`event_flag`/`event_type`/`feed_delivery_flag`) — only the
-  continuous regime is deferred.
-- The app renders schedule/event overlays on charts directly from the `Schedule` tab — covers the
-  immediate charting need.
+**July 2026 design — do not re-expand schedules inside the ETL:**
+- That design left `lights_on` / `fan_state` out of the first build. This repo cannot confirm
+  whether the platform writes them. The dashboard reader can select `photoperiod_h`
+  (`SILVER_METRICS`). Do not treat a null as "lights were off".
+- The analytics page expands the `Schedule` tab into chart bands itself
+  (`expandSchedules` in `src/app/(app)/analytics/page.tsx`). It does not need those silver columns
+  for that overlay.
 
 **v2 (science phase) — the app emits an expanded timeline, silver just joins it:**
 - The app materializes a **schedule-occurrence timeline** — the expanded calendar —
@@ -187,21 +196,26 @@ expanders drift.
 Raw sensor JSON has **no farm/house** — only `devEui`. Supply a mapping (extend the per-farm SSM
 config `/senseagri/farms/<slug>/config` with a `devices` map, so **pipeline and app share one source of truth**):
 ```jsonc
-{ "24e124136f451854": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "water_meter" },
-  "24e124136f456303": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "water_meter" },  // 2nd water meter — confirmed Sep 2026 by hour-of-day profile
-  "24e124136f458449": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "feed_meter" },   // auger-rotation counter #1 — live, feed-time bursts
-  "24e124136f452271": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "feed_meter" },   // auger-rotation counter #2 — ⚠️ frozen at 864,891, stopped counting (hardware check needed)
-  // "24e124136f455672": likely PHANTOM — appeared 3 Sep 2026, single burst, no known install; the 4 physical sensors are accounted for. Verify at device console before mapping.
+{ "24e124136f451854": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "water_meter" }, // water_l_wm1 — docs/devices/water-meters.md
+  "24e124136f456303": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "water_meter" }, // water_l_wm2
+  "24e124136f458449": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "feed_meter" },
+  "24e124136f452271": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "feed_meter" },
   "24e124707e424191": { "farm_id": "farm_anike_001", "house_id": "house1", "role": "env" } }
 ```
+Water-meter ids and the 10 L pulse are confirmed in `docs/devices/water-meters.md`. The two feed
+ids were listed in the September 2026 notes; this file does not bind either id to
+`feed_pulses_auger1` versus `feed_pulses_auger2`, and it does not say whether either counter is
+moving now. `24e124136f455672` appeared in that same Influx window and is not a confirmed install.
+The platform device registry and the meter mapping still disagree for some EM300 flags
+(`docs/DATA_SOURCES.md`). Do not resolve that by guessing.
 `role` (function) complements `device_type` (hardware, from the path): `device_type` says AM308 vs
 EM300; `role` disambiguates the **multiple** same-type EM300s (2 water meters + augers) and maps every
 device to its farm + house. You need both.
 
-> **Two water meters, not one.** `water_litres` for a house must **sum both** `water_meter`
-> devices' per-bucket consumption (`24e124136f451854` + `24e124136f456303`), each as
-> `MAX(pulse_total)` per bucket diffed and × 10 L/pulse. The dashboard historically read only
-> `…451854`, which under-counts drinking by ~half — the silver aggregate should not repeat that.
+> **Two water meters, not one.** House water is the sum of `water_l_wm1` and `water_l_wm2` on
+> `meters_hourly` (`24e124136f451854` and `24e124136f456303`), each `max(0, Δ pulse_total) × 10 L`.
+> `aligned_hourly.water_litres` is null by design. The dashboard derives the total in
+> `fetchMetersDaily` and does not read only `…451854`.
 
 ---
 
@@ -212,7 +226,11 @@ Goal: the app queries silver with plain SQL, **no crawler**, using Glue **partit
 ### Glue Data Catalog
 - Database: **`senseagri_silver`**.
 - External table **`aligned_hourly`** over `s3://senseagri-dev-silver/aligned_hourly/`, Parquet,
-  with **partition projection** so partitions resolve from the S3 path without a crawler:
+  with **partition projection** so partitions resolve from the S3 path without a crawler.
+  The DDL below is the **July 2026 sketch**. It is not a dump of the live catalog: it omits
+  `eggs_damaged` (which the dashboard selects) and it has no `meters_hourly` table.
+  `sum(water_litres)` / `sum(feed_kg)` on `aligned_hourly` are null by design. Use the
+  `meters_hourly` example further down.
 ```sql
 CREATE EXTERNAL TABLE senseagri_silver.aligned_hourly (
   bucket_start   timestamp,
@@ -261,9 +279,11 @@ FROM senseagri_silver.aligned_hourly
 WHERE farm_id='farm_anike_001' AND house_id='house1' AND year=2026
 GROUP BY date(bucket_start) ORDER BY d;
 
--- water vs feed consumption per day
-SELECT date(bucket_start) d, sum(water_litres) water_l, sum(feed_kg) feed_kg
-FROM senseagri_silver.aligned_hourly
+-- water (litres) and feed (pulses) per day — meters_hourly, not aligned_hourly
+SELECT date(bucket_start) d,
+       sum(water_l_wm1) water_l_wm1, sum(water_l_wm2) water_l_wm2,
+       sum(feed_pulses_auger1) feed_pulses_auger1, sum(feed_pulses_auger2) feed_pulses_auger2
+FROM senseagri_silver.meters_hourly
 WHERE farm_id='farm_anike_001' AND house_id='house1' AND year=2026
 GROUP BY date(bucket_start) ORDER BY d;
 
@@ -283,8 +303,10 @@ ORDER BY bucket_start;
 
 ## Provisioning — engineer checklist (Terraform)
 
-Infra is Terraform-managed (there's a `senseagri-dev-tfstate-…` bucket), so declare all of this in
-Terraform under e.g. `terraform/silver/` and `terraform apply` — don't hand-create in the console.
+Infra is Terraform-managed in **senseagri-platform**, not under a `terraform/silver/` path in
+this repo. Do not hand-create buckets or tables in the console. The July 2026 checklist below
+is the original provisioning order; it is not a second schema. Live table names the dashboard
+queries are `aligned_hourly` and `meters_hourly` in `src/lib/silverSource.ts`.
 Nothing here needs data to exist first: with **partition projection** the table is queryable the
 moment the ETL writes its first parquet. Create in this order (later steps depend on earlier ones):
 
@@ -308,9 +330,9 @@ The ETL job (raw → bronze → silver) is separate from this — it just needs 
 bucket and reads raw + the Sheets. Provisioning above only stands up storage + the query surface.
 
 ## Reader contract (what the app calls)
-Behind a data-source abstraction (`src/lib/timeseriesSource.ts`): **recent → InfluxDB**
-(latest ~1 month it retains), **long-range → silver via Athena**. Historical partitions are
-immutable → cache hard.
+**Recent → InfluxDB. Long-range → silver via Athena** (`src/lib/silverSource.ts`,
+`/api/analytics/series`). `src/lib/timeseriesSource.ts` is not imported by the app. Gold stays
+deferred. Historical partitions are treated as immutable by the reader comment.
 ```ts
 type Grain = "hourly" | "daily";
 interface SeriesQuery { farmId: string; houseId?: string; metric: string; from: string; to: string; grain: Grain; }
@@ -327,7 +349,7 @@ columns, or straight from the `Events`/`Schedule` tabs). At single-house hourly 
 ## GOLD — deferred (derived metrics)
 Build later, when customers want standardized derived views. Candidates:
 - **HDEP** = eggs_total / live-hen-count (from `Houses` cycle + cumulative mortality), vs a breed-standard curve.
-- **FCR** = feed_kg / egg mass (or per dozen).
+- **FCR** — not `aligned_hourly.feed_kg` (that column is null). The provisional kilogram formula is [docs/calculations/feed-conversion-ratio.md](docs/calculations/feed-conversion-ratio.md). `meters_hourly` feed is pulses.
 - **Trend** (rolling mean) + **variance/σ bands** for a cleaner customer view.
 - Cross-farm rollups, multi-year horizons.
 
@@ -337,7 +359,7 @@ convention: `s3://senseagri-dev-gold/…`, own Glue DB `senseagri_gold`.
 
 ---
 
-## Open questions (for data-eng)
+## Open questions (recorded July 2026 — not re-checked as current farm state)
 1. **`devEui → house/role` map** — confirm contents + that it lives in the per-farm SSM config.
 2. **Unit-per-pulse** — payload has `pulse_conv`/`pulse_unit_conv` (sample = 1.0), but the app uses
    water = 10 L/pulse. Reconcile the true conversion per meter.
