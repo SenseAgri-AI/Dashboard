@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryInflux } from "@/lib/influxdb";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
+import { checkTelemetryParams } from "@/lib/telemetryParams";
+import { checkDeviceOwnership } from "@/lib/telemetryOwnership";
 
 const RANGE_MAP: Record<string, string> = {
   "24h": "24 hours",
@@ -68,15 +70,21 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const deviceId   = searchParams.get("device_id");
-  const deviceType = searchParams.get("device_type");
   const range      = searchParams.get("range") ?? "24h";
-  const metric     = searchParams.get("metric");
   const resolution = searchParams.get("resolution") ?? (range === "24h" ? "1h" : "3h");
-
-  if (!deviceId || !deviceType || !metric) {
-    return NextResponse.json({ error: "device_id, device_type, and metric required" }, { status: 400 });
-  }
+  const params = checkTelemetryParams(
+    {
+      deviceId: searchParams.get("device_id"),
+      deviceType: searchParams.get("device_type"),
+      metric: searchParams.get("metric"),
+    },
+    true,
+  );
+  if (!params.ok) return NextResponse.json({ error: params.error }, { status: params.status });
+  const { deviceId, deviceType } = params;
+  const metric = params.metric as string;
+  const owned = await checkDeviceOwnership(farm, deviceId);
+  if (!owned.ok) return NextResponse.json({ error: owned.error }, { status: owned.status });
 
   const interval   = RANGE_MAP[range] ?? "24 hours";
   const bucketSize = RESOLUTION_MAP[resolution] ?? "1 hour";

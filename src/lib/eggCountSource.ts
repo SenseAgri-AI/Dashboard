@@ -10,6 +10,7 @@
 import { S3Client, ListObjectsV2Command, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { queryInflux } from "./influxdb";
+import { isKeyUnderFarm } from "./clipKeys";
 
 const REGION = process.env.AWS_REGION ?? "af-south-1";
 export const CLIP_BUCKET = "senseagri-dev-media-inference";
@@ -165,7 +166,7 @@ export async function resolveLatestEggClips(farmId: string, cameraId: string, lo
 
 /** True if `key` is a clip that belongs to this farm (used to gate the transcode proxy). */
 export function isFarmClipKey(farmId: string, key: string): boolean {
-  return ID_RE.test(farmId) && key.startsWith(CLIP_ROOT) && key.includes(`farm_id=${farmId}/`) && key.endsWith(".mp4");
+  return ID_RE.test(farmId) && isKeyUnderFarm(CLIP_ROOT, farmId, key, ".mp4");
 }
 
 /** Raw bytes of a clip object (caller must have validated the key belongs to the farm). */

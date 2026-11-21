@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
 import { presignClip, CLIP_PREFIX } from "@/lib/acousticSource";
+import { isKeyUnderFarm } from "@/lib/clipKeys";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest) {
   }
 
   const key = new URL(req.url).searchParams.get("key") ?? "";
-  if (!key.startsWith(CLIP_PREFIX) || !key.includes(`farm_id=${farm.farmId}/`)) {
+  if (!isKeyUnderFarm(CLIP_PREFIX, farm.farmId, key)) {
     return NextResponse.json({ error: "Invalid or out-of-scope clip key" }, { status: 400 });
   }
 
