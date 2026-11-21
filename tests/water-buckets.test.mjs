@@ -127,6 +127,17 @@ test('a waterMeters list with no usable id falls back to waterDeviceId', () => {
   }, isSafeDeviceId)), json([]));
 });
 
+test('a non-array waterMeters is treated as absent and falls back to waterDeviceId', () => {
+  assert.equal(json(resolveWaterMeters({
+    waterMeters: 'not-a-list',
+    waterDeviceId: 'abc123',
+  })), json([{ deviceId: 'abc123', name: 'Meter 1' }]));
+  assert.equal(json(resolveWaterMeters({
+    waterMeters: { deviceId: 'should-not-be-read' },
+    waterDeviceId: 'abc123',
+  }, isSafeDeviceId)), json([{ deviceId: 'abc123', name: 'Meter 1' }]));
+});
+
 test('litresPerBucketLabel follows the bucket that was queried', () => {
   assert.equal(litresPerBucketLabel('15 minutes'), 'L per 15 min');
   assert.equal(litresPerBucketLabel('15m'), 'L per 15 min');

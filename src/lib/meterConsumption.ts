@@ -46,8 +46,8 @@ export type WaterMeterRef = { deviceId?: string | null; name?: string | null };
 
 /**
  * Meters for the high-res water chart. Usable ids in `waterMeters` win.
- * A list that is absent, empty, or has no id accepted by `keep` (after trim)
- * falls back to `waterDeviceId` when that id is accepted too.
+ * A list that is absent, not an array, empty, or has no id accepted by `keep`
+ * (after trim) falls back to `waterDeviceId` when that id is accepted too.
  * `keep` defaults to "any non-empty id"; the route passes the SQL allowlist.
  */
 export function resolveWaterMeters(

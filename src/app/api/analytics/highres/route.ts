@@ -95,7 +95,8 @@ export async function GET(req: NextRequest) {
     // filled with zero and not differenced against another meter's counter.
     let waterMeterMeta: { key: string; name: string; deviceId: string }[] | undefined;
     if (wantWater) {
-      const skipped = (farm.waterMeters ?? [])
+      const configured = Array.isArray(farm.waterMeters) ? farm.waterMeters : [];
+      const skipped = configured
         .map((meter) => String(meter?.deviceId ?? "").trim())
         .filter((id) => !isSafeDeviceId(id));
       if (skipped.length) {
