@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { queryInflux } from "@/lib/influxdb";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
+import { cumulativeMeterPoints } from "@/lib/meterConsumption";
 import {
   tempStatus,
   humidityStatus,
@@ -54,28 +55,6 @@ function startOfSastDayUtc(): number {
   const nowSast = new Date(Date.now() + SAST_OFFSET_MS);
   const dayKey = nowSast.toISOString().slice(0, 10);
   return new Date(`${dayKey}T00:00:00+02:00`).getTime();
-}
-
-function cumulativeMeterPoints(rows: MeterRow[], unitPerPulse = 1): { time: string; value: number; cumulative: number }[] {
-  let prev: number | null = null;
-  let runningTotal = 0;
-  return rows.flatMap((row) => {
-    const cumulative = toNum(row.cumulative);
-    const value =
-      cumulative !== null && prev !== null
-        ? Math.max(0, cumulative - prev) * unitPerPulse
-        : null;
-    prev = cumulative;
-    if (value === null) return [];
-    runningTotal += value;
-    return [
-      {
-        time: row.bucket instanceof Date ? row.bucket.toISOString() : new Date(row.bucket).toISOString(),
-        value,
-        cumulative: runningTotal,
-      },
-    ];
-  });
 }
 
 function rebaseCumulative(points: { time: string; value: number; cumulative: number }[]) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getFarmForRequest, FarmAccessError } from "@/lib/farms";
 import { queryInflux } from "@/lib/influxdb";
 import { thi, plausibleClimate } from "@/lib/thi";
+import { bucketWaterConsumption, isSafeDeviceId, resolveWaterMeters } from "@/lib/meterConsumption";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -87,27 +88,49 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Drinking rate: the water meter is a cumulative pulse counter, so per-bucket litres = the rise
-    // in pulse_total × litres/pulse (mirrors the dashboard summary's meter handling).
-    if (wantWater && farm.waterDeviceId) {
-      try {
-        const rows = await queryInflux<Record<string, unknown>>(`
-          SELECT ${bin} as time, max(pulse_total) as cumulative
-          FROM sensors
-          WHERE farm_id = '${farm.farmId}' AND device_id = '${farm.waterDeviceId}' AND time > now() - interval '${rangeIv}'
-          GROUP BY ${bin}
-          ORDER BY time ASC
-        `);
-        const perPulse = farm.waterLitresPerPulse ?? 1;
-        let prev: number | null = null;
-        for (const r of rows) {
-          const cum = Number(r.cumulative);
-          if (!Number.isFinite(cum)) continue;
-          if (prev != null) point(toIso(r.time)).water = round(Math.max(0, cum - prev) * perPulse);
-          prev = cum;
+    // Water: each meter's cumulative pulse counter is differenced on its own
+    // (max(0, Δ) × litres/pulse — the same step as the dashboard summary), then
+    // summed per bucket. A missing bucket on one meter is left out, not filled
+    // with zero and not differenced against another meter's counter.
+    let waterMeterMeta: { key: string; name: string; deviceId: string }[] | undefined;
+    if (wantWater) {
+      const meters = resolveWaterMeters(farm).filter((meter) => isSafeDeviceId(meter.deviceId));
+      const perPulse = farm.waterLitresPerPulse ?? 1;
+      if (meters.length) {
+        waterMeterMeta = meters.map((meter, index) => ({ key: `water_m${index}`, name: meter.name, deviceId: meter.deviceId }));
+        try {
+          const rows = await queryInflux<Record<string, unknown>>(`
+            SELECT ${bin} as time, device_id, max(pulse_total) as cumulative
+            FROM sensors
+            WHERE farm_id = '${farm.farmId}' AND device_id IN (${meters.map((meter) => `'${meter.deviceId}'`).join(", ")})
+              AND time > now() - interval '${rangeIv}'
+            GROUP BY device_id, ${bin}
+            ORDER BY time ASC
+          `);
+          const readings = new Map(meters.map((meter) => [meter.deviceId, [] as { time: string; cumulative: number | null }[]]));
+          for (const row of rows) {
+            const deviceId = String(row.device_id ?? "");
+            const series = readings.get(deviceId);
+            if (!series) continue;
+            const cumulative = Number(row.cumulative);
+            series.push({ time: toIso(row.time), cumulative: Number.isFinite(cumulative) ? cumulative : null });
+          }
+          const buckets = bucketWaterConsumption(meters.map((meter) => ({
+            deviceId: meter.deviceId,
+            name: meter.name,
+            litresPerPulse: perPulse,
+            readings: readings.get(meter.deviceId) ?? [],
+          })));
+          for (const bucket of buckets) {
+            const p = point(bucket.time);
+            p.water = round(bucket.total);
+            bucket.byMeter.forEach((meter, index) => {
+              p[`water_m${index}`] = meter.litres == null ? null : round(meter.litres);
+            });
+          }
+        } catch (e) {
+          console.error("High-res water query failed:", e); // other metrics still render
         }
-      } catch (e) {
-        console.error("High-res water query failed:", e); // other metrics still render
       }
     }
 
@@ -131,7 +154,12 @@ export async function GET(req: NextRequest) {
     }
 
     const series = [...byTime.values()].sort((a, b) => String(a.time).localeCompare(String(b.time)));
-    return NextResponse.json({ series, source: "influx", resolution: resIv });
+    return NextResponse.json({
+      series,
+      source: "influx",
+      resolution: resIv,
+      ...(waterMeterMeta ? { waterMeters: waterMeterMeta } : {}),
+    });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Influx query failed" }, { status: 500 });
   }

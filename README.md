@@ -64,7 +64,10 @@ as an admin of the org. Then **share their Google Sheet** with the service accou
   "farmId": "farm_greenvalley_001",   // InfluxDB farm_id tag — the ONLY "Influx detail" needed
   "spreadsheetId": "<google sheet id>",// their sheet (share it with the service account)
   "sheetRange": "DailyLog!A:R",        // default; change only if the tab differs
-  "waterDeviceId": "<pulse meter id>", // water meter (individually referenced)
+  "waterDeviceId": "<pulse meter id>", // used when waterMeters is absent or empty
+  "waterMeters": [                     // optional; each in-use meter, differenced on its own then summed
+    { "deviceId": "<pulse meter id>", "name": "Meter 1" }
+  ],
   "feedDeviceId": "<pulse meter id>",  // feed meter (individually referenced)
   "houseHens": { "house1": 5000 },     // hens per house — drives HDEP / mortality
   "priceTiers": [                      // egg prices by effective date, NEWEST FIRST
@@ -86,8 +89,9 @@ hens per house, and egg prices.
   ingest pipeline, separate from this dashboard, which only reads.)
 - **Google credentials** — one shared service account reads/writes every farm's sheet (once shared).
 - **Every device ID** — environment sensors (`AM308-1`) are auto-discovered by `farm_id` +
-  `device_type`. Only the water + feed **meters** are referenced individually (they need pulse→
-  consumption math). Current assumption: one water + one feed meter per farm.
+  `device_type`. Water and feed **meters** are referenced individually (they need pulse→
+  consumption math). List every in-use water meter in `waterMeters`; if that list is absent or
+  empty, the dashboard uses the single `waterDeviceId`. Feed stays one meter (`feedDeviceId`).
 - **A per-org AWS role** — see multi-tenancy above.
 
 > Production note: the `/admin` SSM write needs the app's AWS IAM user to have `ssm:PutParameter`

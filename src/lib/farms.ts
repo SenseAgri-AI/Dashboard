@@ -26,6 +26,13 @@ export interface FarmConfig {
   /** Sheet range for the production daily log, e.g. "DailyLog!A:R". */
   sheetRange: string;
   waterDeviceId: string;
+  /**
+   * In-use water meters. When this is absent or empty, readers fall back to
+   * `waterDeviceId`. Each meter's counter is differenced on its own, then summed.
+   * `name` is the farmer-facing label (for example "A-frame 1"). The live list
+   * is in SSM farm config, not in this repository.
+   */
+  waterMeters?: { deviceId: string; name: string }[];
   feedDeviceId: string;
   /** Hens per house, e.g. { house1: 4479 }. */
   houseHens: Record<string, number>;
