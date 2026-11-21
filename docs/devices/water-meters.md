@@ -34,7 +34,7 @@ Do not forward-fill missing rows and then call them measured zero without explai
 
 ## Dashboard high-resolution chart
 
-The analytics high-res water series (`/api/analytics/highres`, metric `water`) reads InfluxDB `pulse_total` for every meter in the farm config `waterMeters`. When that list is absent or empty, it reads `waterDeviceId` only.
+The analytics high-res water series (`/api/analytics/highres`, metric `water`) reads InfluxDB `pulse_total` for every usable meter in the farm config `waterMeters`. When that list is absent, empty, or has no usable device id, it reads `waterDeviceId` only. The dashboard summary (`/api/dashboard/summary`) still reads `waterDeviceId` alone, so its today and last-3-hour figures will not match this chart until that route uses the same list.
 
 Each meter's counter is differenced on its own. Litres in a bucket are `max(0, counter − previous counter) × waterLitresPerPulse`. Those litres are summed across meters. Counters are never subtracted across meters. A drop or reset contributes 0 litres and that reading becomes the next baseline. A bucket with no row for one meter is left out of that meter's series (it is not filled in as zero); the other meters still add their own litres. The chart axis is litres in the selected bucket, for example "L per 15 min". An optional "By meter" view draws each meter as its own line.
 

@@ -44,28 +44,28 @@ export function cumulativeMeterPoints(rows: CumulativeRow[], unitPerPulse = 1): 
 
 export type WaterMeterRef = { deviceId?: string | null; name?: string | null };
 
-/** Meters to read. A non-empty `waterMeters` list wins; otherwise the single `waterDeviceId`. */
-export function resolveWaterMeters(farm: {
-  waterMeters?: WaterMeterRef[] | null;
-  waterDeviceId?: string | null;
-}): { deviceId: string; name: string }[] {
+/**
+ * Meters for the high-res water chart. Usable ids in `waterMeters` win.
+ * A list that is absent, empty, or has no id accepted by `keep` (after trim)
+ * falls back to `waterDeviceId` when that id is accepted too.
+ * `keep` defaults to "any non-empty id"; the route passes the SQL allowlist.
+ */
+export function resolveWaterMeters(
+  farm: { waterMeters?: WaterMeterRef[] | null; waterDeviceId?: string | null },
+  keep: (deviceId: string) => boolean = () => true,
+): { deviceId: string; name: string }[] {
   const configured = Array.isArray(farm.waterMeters) ? farm.waterMeters : [];
-  const source = configured.length
-    ? configured.map((meter, index) => ({
-        deviceId: String(meter?.deviceId ?? "").trim(),
-        name: String(meter?.name ?? "").trim() || `Meter ${index + 1}`,
-      }))
-    : (String(farm.waterDeviceId ?? "").trim()
-      ? [{ deviceId: String(farm.waterDeviceId).trim(), name: "Meter 1" }]
-      : []);
   const seen = new Set<string>();
   const meters: { deviceId: string; name: string }[] = [];
-  for (const meter of source) {
-    if (!meter.deviceId || seen.has(meter.deviceId)) continue;
-    seen.add(meter.deviceId);
-    meters.push(meter);
-  }
-  return meters;
+  configured.forEach((meter, index) => {
+    const deviceId = String(meter?.deviceId ?? "").trim();
+    if (!deviceId || !keep(deviceId) || seen.has(deviceId)) return;
+    seen.add(deviceId);
+    meters.push({ deviceId, name: String(meter?.name ?? "").trim() || `Meter ${index + 1}` });
+  });
+  if (meters.length) return meters;
+  const fallback = String(farm.waterDeviceId ?? "").trim();
+  return fallback && keep(fallback) ? [{ deviceId: fallback, name: "Meter 1" }] : [];
 }
 
 /** Device ids safe to interpolate into a read-only Influx SQL string. */

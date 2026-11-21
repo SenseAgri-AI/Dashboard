@@ -88,13 +88,20 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Water: each meter's cumulative pulse counter is differenced on its own
-    // (max(0, Δ) × litres/pulse — the same step as the dashboard summary), then
-    // summed per bucket. A missing bucket on one meter is left out, not filled
-    // with zero and not differenced against another meter's counter.
+    // Water (this route only — the dashboard summary still reads waterDeviceId):
+    // each meter's cumulative pulse counter is differenced on its own
+    // (max(0, Δ) × litres/pulse — the same step the summary uses for one meter),
+    // then summed per bucket. A missing bucket on one meter is left out, not
+    // filled with zero and not differenced against another meter's counter.
     let waterMeterMeta: { key: string; name: string; deviceId: string }[] | undefined;
     if (wantWater) {
-      const meters = resolveWaterMeters(farm).filter((meter) => isSafeDeviceId(meter.deviceId));
+      const skipped = (farm.waterMeters ?? [])
+        .map((meter) => String(meter?.deviceId ?? "").trim())
+        .filter((id) => !isSafeDeviceId(id));
+      if (skipped.length) {
+        console.error("High-res water: skipped unusable waterMeters device id(s):", skipped.map((id) => id || "(blank)").join(", "));
+      }
+      const meters = resolveWaterMeters(farm, isSafeDeviceId);
       const perPulse = farm.waterLitresPerPulse ?? 1;
       if (meters.length) {
         waterMeterMeta = meters.map((meter, index) => ({ key: `water_m${index}`, name: meter.name, deviceId: meter.deviceId }));

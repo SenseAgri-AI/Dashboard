@@ -17,7 +17,7 @@ function load(file) {
 }
 
 const {
-  bucketWaterConsumption, cumulativeMeterPoints, litresPerBucketLabel, positivePulseLitres, resolveWaterMeters,
+  bucketWaterConsumption, cumulativeMeterPoints, isSafeDeviceId, litresPerBucketLabel, positivePulseLitres, resolveWaterMeters,
 } = load('src/lib/meterConsumption.ts');
 
 const T1 = '2026-11-02T08:00:00.000Z';
@@ -106,6 +106,25 @@ test('resolveWaterMeters falls back to waterDeviceId when waterMeters is absent 
     { deviceId: 'aaa', name: 'North' },
     { deviceId: 'bbb', name: 'Meter 3' },
   ]));
+});
+
+test('a waterMeters list with no usable id falls back to waterDeviceId', () => {
+  assert.equal(json(resolveWaterMeters({
+    waterMeters: [{ deviceId: '  ' }, { deviceId: '' }],
+    waterDeviceId: 'abc123',
+  })), json([{ deviceId: 'abc123', name: 'Meter 1' }]));
+  assert.equal(json(resolveWaterMeters({
+    waterMeters: [{ deviceId: 'bad id' }, { deviceId: 'nope!' }],
+    waterDeviceId: 'abc123',
+  }, isSafeDeviceId)), json([{ deviceId: 'abc123', name: 'Meter 1' }]));
+  assert.equal(json(resolveWaterMeters({
+    waterMeters: [{ deviceId: 'good123', name: 'North' }, { deviceId: 'bad id' }],
+    waterDeviceId: 'fallback99',
+  }, isSafeDeviceId)), json([{ deviceId: 'good123', name: 'North' }]));
+  assert.equal(json(resolveWaterMeters({
+    waterMeters: [{ deviceId: 'bad id' }],
+    waterDeviceId: 'also bad',
+  }, isSafeDeviceId)), json([]));
 });
 
 test('litresPerBucketLabel follows the bucket that was queried', () => {

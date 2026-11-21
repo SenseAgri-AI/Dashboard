@@ -27,8 +27,9 @@ export interface FarmConfig {
   sheetRange: string;
   waterDeviceId: string;
   /**
-   * In-use water meters. When this is absent or empty, readers fall back to
-   * `waterDeviceId`. Each meter's counter is differenced on its own, then summed.
+   * Optional meters for the high-res water chart only. The dashboard summary
+   * still reads `waterDeviceId` alone. When this list is absent, empty, or has
+   * no usable device id, the high-res chart falls back to `waterDeviceId`.
    * `name` is the farmer-facing label (for example "A-frame 1"). The live list
    * is in SSM farm config, not in this repository.
    */
