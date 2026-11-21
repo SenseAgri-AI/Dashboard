@@ -26,6 +26,14 @@ export interface FarmConfig {
   /** Sheet range for the production daily log, e.g. "DailyLog!A:R". */
   sheetRange: string;
   waterDeviceId: string;
+  /**
+   * Optional meters for the high-res water chart only. The dashboard summary
+   * still reads `waterDeviceId` alone. When this list is absent, empty, or has
+   * no usable device id, the high-res chart falls back to `waterDeviceId`.
+   * `name` is the farmer-facing label (for example "A-frame 1"). The live list
+   * is in SSM farm config, not in this repository.
+   */
+  waterMeters?: { deviceId: string; name: string }[];
   feedDeviceId: string;
   /** Hens per house, e.g. { house1: 4479 }. */
   houseHens: Record<string, number>;

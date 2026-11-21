@@ -32,6 +32,14 @@ Keep these cases distinct:
 
 Do not forward-fill missing rows and then call them measured zero without explaining the transformation.
 
+## Dashboard high-resolution chart
+
+The analytics high-res water series (`/api/analytics/highres`, metric `water`) reads InfluxDB `pulse_total` for every usable meter in the farm config `waterMeters`. When that list is absent, empty, or has no usable device id, it reads `waterDeviceId` only. The dashboard summary (`/api/dashboard/summary`) still reads `waterDeviceId` alone, so its today and last-3-hour figures will not match this chart until that route uses the same list.
+
+Each meter's counter is differenced on its own. Litres in a bucket are `max(0, counter − previous counter) × waterLitresPerPulse`. Those litres are summed across meters. Counters are never subtracted across meters. A drop or reset contributes 0 litres and that reading becomes the next baseline. A bucket with no row for one meter is left out of that meter's series (it is not filled in as zero); the other meters still add their own litres. The chart axis is litres in the selected bucket, for example "L per 15 min". An optional "By meter" view draws each meter as its own line.
+
+The live meter list is the farm's SSM config (`waterMeters`), not a value stored in this repository. Both meters use the farm's `waterLitresPerPulse` (10 L per pulse for the meters in the table above).
+
 ## Known installation timing
 
 The devices were installed around 13 April 2026. Data before installation is not physical meter evidence. Confirm the exact commissioning timestamp before formal analysis.

@@ -8,6 +8,7 @@ import { chartWindow } from "@/lib/chartWindow";
 import { standardHdepForWeek } from "@/lib/henStandard";
 import { THI_COMFORT, THI_SEVERE, THI_EXTREME } from "@/lib/thi";
 import { withFlockAge } from "@/lib/flockAge";
+import { litresPerBucketLabel } from "@/lib/meterConsumption";
 import { RECHARTS_TIP, TIP_BOX, TIP_LABEL } from "@/components/ChartTooltip";
 
 // Heat-stress reference bands for the felt-temperature (THI) axis — comfort (< 27.8 °C) stays clear;
@@ -43,7 +44,14 @@ type Frame = Record<string, number | string | null | number[]>;
 type Anno = { t: number; label: string; color: string; dash: boolean };
 type Band = { x1: number; x2: number; color: string; name: string };
 // An axis can carry one metric, or several (e.g. the egg-size group → 5 lines).
-type AxisSpec = { unit: string; band: boolean; axisColor: string; series: { key: string; label: string; color: string }[] };
+type AxisSpec = {
+  unit: string;
+  /** Replaces the tick suffix when the unit is a phrase, e.g. "L per 15 min". */
+  axisLabel?: string;
+  band: boolean;
+  axisColor: string;
+  series: { key: string; label: string; color: string; connectNulls?: boolean }[];
+};
 type ChartMouse = { activeLabel?: number | string } | null | undefined;
 type SchedVersion = {
   scheduleId: string; effectiveDate: string; name: string; house: string; type: "do" | "onoff" | "cycle";
@@ -121,7 +129,7 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
   { key: "breakage_rate", label: "Breakage rate", unit: "%", env: false },
   { key: "hdep", label: "Hen-day %", unit: "%", env: false },
   { key: "night_rest", label: "Night-rest score", unit: "", env: false },
-  { key: "water", label: "Drinking rate", unit: "L", env: false },
+  { key: "water", label: "Water", unit: "", env: false },
   // Feed & water from the silver meters table (daily). Groups plot both members together.
   { key: "water_day", label: "Water / day", unit: "L", env: false },
   { key: "water_meters", label: "Water by meter", unit: "L", env: false },
@@ -131,9 +139,9 @@ const CATALOG: { key: string; label: string; unit: string; env: boolean }[] = [
 ];
 const META: Record<string, { key: string; label: string; unit: string }> = Object.fromEntries(CATALOG.map((c) => [c.key, c]));
 const ENV_OPTIONS = CATALOG.filter((c) => c.env);
-// High-res chart draws from InfluxDB: env sensors + acoustic sound level + drinking rate (water meter).
+// High-res chart draws from InfluxDB: env sensors + acoustic sound level + water (per bucket).
 const HR_OPTIONS = CATALOG.filter((c) => c.env || c.key === "noise" || c.key === "water" || c.key === "thi");
-// Daily history: everything except the high-res-only drinking rate (its daily form is "water_daily").
+// Daily history: everything except the high-res-only water series (its daily form is "water_day").
 const SILVER_OPTIONS = CATALOG.filter((c) => c.key !== "water");
 // Only sensor metrics vary within a day → only they get a min–max band. Sheet-derived daily
 // values (eggs, sizes, breakages, weight, mortality) are broadcast across the 24 hours, so their
@@ -246,7 +254,14 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
 
   return (
     // touchAction: pan-y → a vertical swipe still scrolls the page, a horizontal drag zooms.
-    <div style={{ position: "relative", height: 372, touchAction: "pan-y" }}>
+    <div style={{ touchAction: "pan-y" }}>
+      {(left.axisLabel || right?.axisLabel) && (
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "0 8px 2px", fontSize: 10, fontWeight: 700, lineHeight: 1.2 }}>
+          <span style={{ color: left.axisColor }}>{left.axisLabel}</span>
+          <span style={{ color: right?.axisColor }}>{right?.axisLabel}</span>
+        </div>
+      )}
+    <div style={{ position: "relative", height: 372 }}>
       {zoom && (
         <button onClick={() => setZoom(null)}
           style={{ position: "absolute", top: 0, right: 8, zIndex: 2, fontSize: 10, fontWeight: 700, padding: "3px 8px", border: "1px solid var(--divider)", background: "#fff", cursor: "pointer" }}>Reset zoom</button>
@@ -262,8 +277,8 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
           ))}
           <XAxis dataKey="t" type="number" scale="time" domain={domain} allowDataOverflow
             tickFormatter={(ms) => withFlockAge(tickFormat(Number(ms)), house, Number(ms), true)} tick={{ fontSize: 10, fill: AXIS, fontFamily: "Inter" }} axisLine={{ stroke: "#d1dada" }} tickLine={false} minTickGap={44} />
-          <YAxis yAxisId="left" tick={{ fontSize: 11, fill: left.axisColor, fontFamily: "Inter" }} axisLine={false} tickLine={false} unit={left.unit} width={52} />
-          {right && <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: right.axisColor, fontFamily: "Inter" }} axisLine={false} tickLine={false} unit={right.unit} width={52} />}
+          <MetricYAxis yAxisId="left" spec={left} />
+          {right && <MetricYAxis yAxisId="right" spec={right} orientation="right" />}
           <Tooltip labelFormatter={(ms) => withFlockAge(labelFormat(Number(ms)), house, Number(ms))}
             formatter={(value, name) => { if (name === "Above standard" || name === "Below standard") return null; if (Array.isArray(value)) return `${value[0]} – ${value[1]}`; return value as number; }}
             {...RECHARTS_TIP} />
@@ -276,15 +291,37 @@ function MetricChart({ data, domainMs, left, right, standardAxis, annos, bands, 
           </>)}
           {left.band && left.series[0] && <Area yAxisId="left" type="monotone" dataKey={`${left.series[0].key}_band`} name={`${left.series[0].label} range`} stroke="none" fill={left.series[0].color} fillOpacity={0.2} legendType="none" isAnimationActive={false} connectNulls={false} />}
           {right?.band && right.series[0] && <Area yAxisId="right" type="monotone" dataKey={`${right.series[0].key}_band`} name={`${right.series[0].label} range`} stroke="none" fill={right.series[0].color} fillOpacity={0.2} legendType="none" isAnimationActive={false} connectNulls={false} />}
-          {left.series.map((s) => <Line key={s.key} yAxisId="left" type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2} dot={false} connectNulls />)}
-          {right && right.series.map((s) => <Line key={s.key} yAxisId="right" type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2} dot={false} connectNulls />)}
+          {left.series.map((s) => <Line key={s.key} yAxisId="left" type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2} dot={false} connectNulls={s.connectNulls !== false} />)}
+          {right && right.series.map((s) => <Line key={s.key} yAxisId="right" type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2} dot={false} connectNulls={s.connectNulls !== false} />)}
           {standardAxis && <Line yAxisId={standardAxis} type="monotone" dataKey="standard" name="Breed standard" stroke={STD} strokeWidth={1.5} strokeDasharray="5 4" dot={false} connectNulls />}
           {stacked.map((a, i) => <ReferenceLine key={`a${i}`} yAxisId="left" x={a.t} stroke={a.color} strokeDasharray={a.dash ? "3 3" : undefined} strokeWidth={1} label={<MarkLabel text={a.label} color={a.color} row={a.row} />} />)}
           {sel && sel[0] !== sel[1] && <ReferenceArea yAxisId="left" x1={Math.min(sel[0], sel[1])} x2={Math.max(sel[0], sel[1])} strokeOpacity={0} fill={PRIMARY} fillOpacity={0.08} />}
         </ComposedChart>
       </ResponsiveContainer>
     </div>
+    </div>
   );
+}
+
+function MetricYAxis({ yAxisId, spec, orientation = "left" }: { yAxisId: "left" | "right"; spec: AxisSpec; orientation?: "left" | "right" }) {
+  return (
+    <YAxis yAxisId={yAxisId} orientation={orientation}
+      tick={{ fontSize: 11, fill: spec.axisColor, fontFamily: "Inter" }} axisLine={false} tickLine={false}
+      unit={spec.axisLabel ? undefined : spec.unit} width={52} />
+  );
+}
+
+const METER_EXTRA = ["#166534", "#7A5C00", "#B91C1C", "#92400E"];
+
+function readWaterMeters(value: unknown): { key: string; name: string }[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((meter) => {
+    if (!meter || typeof meter !== "object") return [];
+    const key = String((meter as { key?: unknown }).key ?? "");
+    const name = String((meter as { name?: unknown }).name ?? "").trim();
+    if (!/^water_m\d+$/.test(key) || !name) return [];
+    return [{ key, name }];
+  });
 }
 
 // ── High-res: recent InfluxDB, down to 15-min, with the actual daily schedule windows ──
@@ -295,8 +332,11 @@ function HighResExplorer() {
   const [rangeKey, setRangeKey] = useState("7d");
   const [resKey, setResKey] = useState("1h");
   const [showRange, setShowRange] = useState(false);
+  const [showByMeter, setShowByMeter] = useState(false);
   const [showWindows, setShowWindows] = useState(false);
   const [showEvents, setShowEvents] = useState(false);
+  const [meterSeries, setMeterSeries] = useState<{ key: string; name: string }[]>([]);
+  const [bucketLabel, setBucketLabel] = useState(() => litresPerBucketLabel("1 hour"));
   const [hidden, setHidden] = useState<Set<string>>(new Set()); // schedules hidden from the windows overlay
   const [raw, setRaw] = useState<Frame[]>([]);
   const [range, setRange] = useState<{ fromMs: number; toMs: number }>({ fromMs: 0, toMs: 0 });
@@ -324,8 +364,11 @@ function HighResExplorer() {
     const metrics = [...new Set([...expandKeys(left), ...expandKeys(right)])];
     const q = new URLSearchParams({ metrics: metrics.join(","), range: rangeKey, resolution: resKey });
     const res = await fetch(`/api/analytics/highres?${q}`);
-    if (!res.ok) { setErr((await res.json().catch(() => ({}))).error ?? "Failed to load"); setRaw([]); setLoading(false); return; }
-    setRaw((await res.json()).series ?? []);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { setErr(body.error ?? "Failed to load"); setRaw([]); setMeterSeries([]); setLoading(false); return; }
+    setRaw(body.series ?? []);
+    setMeterSeries(readWaterMeters(body.waterMeters));
+    setBucketLabel(litresPerBucketLabel(typeof body.resolution === "string" ? body.resolution : resKey));
     setLoading(false);
   }, [left, right, rangeKey, resKey]);
   useEffect(() => { load(); }, [load]);
@@ -354,8 +397,23 @@ function HighResExplorer() {
 
   const toggleHidden = (name: string) => setHidden((prev) => { const n = new Set(prev); if (n.has(name)) n.delete(name); else n.add(name); return n; });
 
-  const leftSpec = buildSpec(left, TEAL, showRange)!;
-  const rightSpec = buildSpec(right, GOLD, showRange);
+  const specFor = (key: string, color: string): AxisSpec | null => {
+    if (key !== "water") return buildSpec(key, color, showRange);
+    const split = showByMeter && meterSeries.length > 1;
+    const second = SECOND_SHADE[color] ?? WM2;
+    return {
+      unit: "", axisLabel: bucketLabel, band: false, axisColor: color,
+      series: split
+        ? meterSeries.map((meter, index) => ({
+            key: meter.key, label: meter.name,
+            color: index === 0 ? color : index === 1 ? second : METER_EXTRA[(index - 2) % METER_EXTRA.length],
+            connectNulls: false,
+          }))
+        : [{ key: "water", label: bucketLabel, color }],
+    };
+  };
+  const leftSpec = specFor(left, TEAL)!;
+  const rightSpec = specFor(right, GOLD);
   const zoneBands: ZoneBands | null = left === "thi" ? { axis: "left", zones: THI_ZONES } : right === "thi" ? { axis: "right", zones: THI_ZONES } : null;
   const hasData = data.some((d) => leftSpec.series.some((s) => d[s.key] != null) || (rightSpec != null && rightSpec.series.some((s) => d[s.key] != null)));
 
@@ -370,6 +428,9 @@ function HighResExplorer() {
         <div style={GROUP_END}>
           <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
             <Toggle checked={showRange} onChange={setShowRange} label="Min–max" title="Show each metric's min–max range per bucket" />
+            {(left === "water" || right === "water") && meterSeries.length > 1 && (
+              <Toggle checked={showByMeter} onChange={setShowByMeter} label="By meter" title="Show each water meter on its own line" />
+            )}
             <Toggle checked={showWindows} onChange={setShowWindows} label="Schedules" title="Shade the actual daily on/off windows (lights, fans) + run-times" />
             <Toggle checked={showEvents} onChange={setShowEvents} label="Events" title="Mark schedule changes, logged events and feed deliveries" />
           </div>
@@ -404,6 +465,7 @@ function HighResExplorer() {
       </div>
       <div className="sa-chart-note" style={NOTE_PAD}>
         Recent, from InfluxDB (≤1 month) at {HR_RES.find((r) => r.key === resKey)?.label} resolution. Drag across the plot to zoom.
+        {(left === "water" || right === "water") && <> Water is {bucketLabel}, summed across the farm&apos;s meters.{showByMeter && meterSeries.length > 1 ? " By meter draws each one separately." : ""}</>}
         {showWindows && <> Shaded blocks are the day&apos;s schedule windows + run-times.</>}
         {showEvents && <> Markers: <span style={{ color: PRIMARY, fontWeight: 700 }}>schedule change</span> · <span style={{ color: DANGER, fontWeight: 700 }}>event</span> · <span style={{ color: STD, fontWeight: 700 }}>feed</span>.</>}
       </div>

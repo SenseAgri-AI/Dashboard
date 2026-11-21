@@ -29,6 +29,7 @@ Use this map before adding a query. Status labels mean:
 
 - Dashboard silver reader: `src/lib/silverSource.ts`
 - Dashboard Influx client: `src/lib/influxdb.ts`
+- High-res water counter differencing (each meter, then summed): `src/lib/meterConsumption.ts`. The dashboard summary still differences `waterDeviceId` only.
 - Current silo API: `src/app/api/silo-levels/route.ts`
 - Platform meter transform: `../senseagri-platform/pipeline/meters_to_silver.py`
 - Platform device registry: `../senseagri-platform/registry/devices.json`
