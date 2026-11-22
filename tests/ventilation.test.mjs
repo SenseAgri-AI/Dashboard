@@ -502,3 +502,32 @@ test('inside day and night over 30 days: avg, min, max, and a short period is sk
   assert.equal(byDate['2026-10-03'].night, null);
   assert.ok(V.insideDayNightTrend([], [], now, 2).every((r) => r.day == null && r.night == null));
 });
+
+test('stale banner timestamp keeps a reading 9–30 days old that the 8-day suggestion window drops', () => {
+  const now = Date.parse('2026-11-21T10:00:00Z');
+  const daysAgo = (n) => now - n * 24 * H;
+  const pt = (t, tempC) => ({ t, tempC, rhPct: 60, co2: 800 });
+  // Newest plausible reading is 20 days old; a newer glitch and an older point must not win.
+  const full = [pt(daysAgo(25), 18), pt(daysAgo(20), 19), pt(daysAgo(1), 80)];
+  assert.equal(V.latestInsideAt(full), daysAgo(20));
+  assert.ok(daysAgo(20) <= daysAgo(9) && daysAgo(20) >= daysAgo(30));
+  const recentOnly = full.filter((x) => x.t > now - 8 * 24 * H);
+  assert.equal(V.latestInsideAt(recentOnly), null);
+  assert.equal(V.latestInsideAt([]), null);
+  // a reading inside the last 8 days still wins
+  assert.equal(V.latestInsideAt([...full, pt(now - 2 * H, 22)]), now - 2 * H);
+});
+
+test('hourly outside for the page drops history only the 30-day sun span needed', () => {
+  const now = Date.parse('2026-11-21T10:00:00Z');
+  const hour = (ms, tempC) => ({ t: ms, tempC, rhPct: 50, rainPct: 0, windKmh: 10 });
+  const kept = V.outsideForPage([
+    hour(now - V.OUTSIDE_KEEP_BACK_MS - 1, 1),
+    hour(now - V.OUTSIDE_KEEP_BACK_MS, 2),
+    hour(now - 9 * 24 * H, 3),
+    hour(now, 4),
+    hour(now + V.OUTSIDE_KEEP_AHEAD_MS, 5),
+    hour(now + V.OUTSIDE_KEEP_AHEAD_MS + 1, 6),
+  ], now);
+  assert.deepEqual(kept.map((h) => h.tempC), [2, 3, 4, 5]);
+});

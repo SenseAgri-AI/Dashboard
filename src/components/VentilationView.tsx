@@ -1,7 +1,7 @@
 "use client";
 
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { buildVentilation, insideDayNightTrend, localHHMM, periods, type InsidePoint, type OutsideHour, type SunDay, type VentThresholds } from "@/lib/ventilation";
+import { buildVentilation, insideDayNightTrend, latestInsideAt, localHHMM, periods, type InsidePoint, type OutsideHour, type SunDay, type VentThresholds } from "@/lib/ventilation";
 
 // Ventilation page body: suggestions first, then inside now, the last 30 days day vs night,
 // the next 3 days and the forecast chart. Rules and the user story behind each block:
@@ -31,9 +31,12 @@ const LEVEL = {
 const fmt = (v: number | null | undefined, unit = "°C") => (v == null ? "–" : `${Math.round(v)}${unit}`);
 
 export default function VentilationView({ data, now, narrow = false }: { data: VentData; now: number; narrow?: boolean }) {
-  // Suggestions still read the last 8 days, the window they were tuned on. The month chart uses the full 30.
-  const recentInside = (data.inside ?? []).filter((x) => x.t > now - 8 * 24 * H);
+  // Suggestions still read the last 8 days, the window they were tuned on. The month chart and the
+  // stale banner use the full 30-day series, so a reading older than 8 days is not reported as "none".
+  const insideAll = data.inside ?? [];
+  const recentInside = insideAll.filter((x) => x.t > now - 8 * 24 * H);
   const v = buildVentilation({ now, outside: data.outside, sun: data.sun, inside: recentInside, offsetHours: data.offsetHours, thresholds: data.thresholds });
+  const lastInsideAt = latestInsideAt(insideAll);
   const t = data.thresholds;
   const card: React.CSSProperties = { background: "#fff", border: "1px solid var(--divider)", borderRadius: 10, padding: narrow ? 12 : 16 };
   const h2: React.CSSProperties = { fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: MUTED, margin: "0 0 8px" };
@@ -82,7 +85,7 @@ export default function VentilationView({ data, now, narrow = false }: { data: V
             <Stat label="Chill estimate" value={v.insideNow.chillEstC != null ? `≈${fmt(v.insideNow.chillEstC)}` : "–"} sub={`feels (≤ actual) − ${t.chillOffsetC} °C, rough`} />
             <Stat label="CO₂" value={v.insideNow.co2 != null ? `${v.insideNow.co2.toLocaleString("en-ZA")}` : "–"} sub="ppm" />
           </div>
-        ) : <InsideStale lastAt={v.insideLastAt} now={now} offset={data.offsetHours} />}
+        ) : <InsideStale lastAt={lastInsideAt} now={now} offset={data.offsetHours} />}
       </section>
 
       <MonthChart data={data} now={now} narrow={narrow} card={card} h2={h2} />

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getFarmForRequest, FarmAccessError, validLocation } from "@/lib/farms";
 import { queryInflux } from "@/lib/influxdb";
-import { mergeVentThresholds, parseOpenMeteo } from "@/lib/ventilation";
+import { mergeVentThresholds, outsideForPage, parseOpenMeteo } from "@/lib/ventilation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -72,7 +72,8 @@ export async function GET() {
         .map((r) => ({ t: toMs(r.bucket), tempC: num(r.temperature), rhPct: num(r.humidity), co2: num(r.co2), hotC: num(r.temperature_max) }))
         .filter((r) => r.t != null)
       : null,
-    outside: outside?.outside ?? null,
+    // Hourly outside is only what suggestions and the forecast chart read. Sun stays the full 30 days.
+    outside: outside?.outside ? outsideForPage(outside.outside, Date.now()) : null,
     sun: outside?.sun ?? [],
     forecastError: location != null && outside == null,
     thresholds: mergeVentThresholds(farm.ventilation),

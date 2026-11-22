@@ -2,7 +2,7 @@
 
 Status: ventilation page only. All thresholds are PROVISIONAL until a farmer or vet confirms them; each one can be overridden per farm (`ventilation` in the farm config). The page reads house climate sensors and the outside forecast. It does not read radar or feed meters.
 
-Route `/ventilation` (nav: Ventilation). Data: `/api/ventilation` = inside climate (AM308-1, 30-min averages, last 30 days, read-only) + outside forecast from Open-Meteo (free, no key; hourly temperature, RH, rain chance, wind; sunrise/sunset; 30 days back, 4 ahead). The Open-Meteo response is reused for 30 min on the server. The page response itself is `Cache-Control: private, no-store`. Suggestions still use the recent week; the extra history is for the 30-day inside chart and for sunrise/sunset.
+Route `/ventilation` (nav: Ventilation). Data: `/api/ventilation` = inside climate (AM308-1, 30-min averages, last 30 days, read-only) + outside forecast from Open-Meteo (free, no key; sunrise/sunset 30 days back and 4 ahead). Hourly outside sent to the page is the recent window the suggestions and forecast chart use (10 days back, 5 ahead), not the full 30. The Open-Meteo response is reused for 30 min on the server. The page response itself is `Cache-Control: private, no-store`. Suggestions still use the recent week of inside readings; the extra inside history is for the 30-day chart and for how old the last reading is.
 Rules: `src/lib/ventilation.ts`, tested in `tests/ventilation.test.mjs`. UI: `src/components/VentilationView.tsx`.
 
 **Farm location is required for the forecast**: `"location": { "lat": …, "lon": … }` in `/senseagri/farms/<slug>/config`. Without it the page shows a "location not set" note and inside readings only.

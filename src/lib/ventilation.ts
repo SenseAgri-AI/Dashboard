@@ -171,6 +171,11 @@ export type VentView = {
 };
 
 const H = 3_600_000;
+/** Hourly outside kept for the page. Suggestions walk 9 days back and 4 ahead, and a period can
+ *  start before that window, so this is a day wider on each side. The forecast chart sits inside it.
+ *  Sunrise/sunset are not trimmed: the 30-day chart needs them. */
+export const OUTSIDE_KEEP_BACK_MS = 10 * 24 * H;
+export const OUTSIDE_KEEP_AHEAD_MS = 5 * 24 * H;
 const r0 = (v: number) => Math.round(v);
 const r1 = (v: number) => Math.round(v * 10) / 10;
 const median = (xs: number[]) => {
@@ -601,6 +606,23 @@ export function insideDayNightTrend(inside: InsidePoint[], sun: SunDay[], now: n
     out.push({ date, day: periodStats(pts, sunrise, sunset), night: periodStats(pts, sunset, nextSunrise) });
   }
   return out;
+}
+
+/** Newest plausible inside temperature (°C). Ignores the 8-day suggestion trim, so a reading
+ *  9–30 days old still dates the stale banner. */
+export function latestInsideAt(inside: InsidePoint[]): number | null {
+  let last: number | null = null;
+  for (const x of inside) {
+    if (x.tempC == null || !(x.tempC > -20 && x.tempC < 60) || !Number.isFinite(x.t)) continue;
+    if (last == null || x.t > last) last = x.t;
+  }
+  return last;
+}
+
+/** Drop hourly outside the page does not read. Sun times are left to the caller. */
+export function outsideForPage(hours: OutsideHour[], now: number): OutsideHour[] {
+  const from = now - OUTSIDE_KEEP_BACK_MS, to = now + OUTSIDE_KEEP_AHEAD_MS;
+  return hours.filter((h) => h.t >= from && h.t <= to);
 }
 
 /** Parse an Open-Meteo `/v1/forecast` response requested with `timeformat=unixtime`. */
