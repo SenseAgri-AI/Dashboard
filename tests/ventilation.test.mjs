@@ -461,3 +461,44 @@ test('"Cooler outside now" stays quiet when the hot-day prompt already says fans
   const o2 = outside((h, d) => (d === 8 ? (h >= 8 && h <= 9 ? 33 : 25) : 22));
   assert.ok(ids(view(o2, inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 31 : 24, rhPct: 40, co2: 800 })))).includes('cooler-outside'));
 });
+
+test('inside day and night over 30 days: avg, min, max, and a short period is skipped', () => {
+  // SAST (UTC+2). 12:00 on 1 Nov. Days without sun times use 06:00–18:00. 1 Nov uses sunrise 05:00, sunset 19:00.
+  const now = Date.parse('2026-11-01T10:00:00Z');
+  const mid = (date) => Date.parse(`${date}T00:00:00Z`) - 2 * H;
+  const at = (date, hour) => mid(date) + hour * H;
+  const pt = (t, tempC) => ({ t, tempC, rhPct: 60, co2: 900 });
+  const sunNov = [{ sunrise: at('2026-11-01', 5), sunset: at('2026-11-01', 19) }];
+  const pts = [
+    // 31 Oct day, 06:00–18:00 fallback. 05:30 is still the previous night, not this day.
+    pt(at('2026-10-31', 5.5), 1),
+    pt(at('2026-10-31', 6), 10), pt(at('2026-10-31', 8), 20), pt(at('2026-10-31', 10), 30), pt(at('2026-10-31', 12), 40),
+    // 18:00 belongs to the night, not the day. Night runs until 1 Nov sunrise (05:00), not 06:00.
+    pt(at('2026-10-31', 18), 8), pt(at('2026-10-31', 21), 12), pt(at('2026-11-01', 0), 10), pt(at('2026-11-01', 3), 14), pt(at('2026-11-01', 4.5), 3),
+    // 05:30 is after sunrise, so it is today's day, not last night. A reading after now is ignored.
+    pt(at('2026-11-01', 5.5), 4), pt(at('2026-11-01', 8), 18), pt(at('2026-11-01', 10), 22), pt(at('2026-11-01', 12), 24),
+    pt(at('2026-11-01', 12.5), 50),
+    // 30 Oct day spans 1.5 h — skipped. Its night has 6 h and stays.
+    pt(at('2026-10-30', 6), 5), pt(at('2026-10-30', 7.5), 9),
+    pt(at('2026-10-30', 18), 9), pt(at('2026-10-30', 20), 10), pt(at('2026-10-30', 22), 11), pt(at('2026-11-01', 0) - 24 * H, 12),
+    // 29 Oct: exactly 2 h of day is kept. 1 h 59 min is not.
+    pt(at('2026-10-29', 6), 15), pt(at('2026-10-29', 8), 17),
+    pt(at('2026-10-28', 6), 1), pt(at('2026-10-28', 6) + 2 * H - 60_000, 2),
+  ];
+  const rows = V.insideDayNightTrend(pts, sunNov, now, 2);
+  assert.equal(rows.length, 30);
+  assert.equal(rows[0].date, '2026-10-03');
+  assert.equal(rows.at(-1).date, '2026-11-01');
+  const byDate = Object.fromEntries(rows.map((r) => [r.date, r]));
+  assert.deepEqual(plain(byDate['2026-10-31'].day), { avg: 25, min: 10, max: 40 });
+  assert.deepEqual(plain(byDate['2026-10-31'].night), { avg: 9.4, min: 3, max: 14 });
+  assert.deepEqual(plain(byDate['2026-11-01'].day), { avg: 17, min: 4, max: 24 });
+  assert.equal(byDate['2026-11-01'].night, null); // sunset is still ahead
+  assert.equal(byDate['2026-10-30'].day, null); // 1.5 h
+  assert.deepEqual(plain(byDate['2026-10-30'].night), { avg: 8.6, min: 1, max: 12 }); // includes 05:30 the next morning
+  assert.deepEqual(plain(byDate['2026-10-29'].day), { avg: 16, min: 15, max: 17 }); // span of exactly 2 h
+  assert.equal(byDate['2026-10-28'].day, null); // 1 h 59 min
+  assert.equal(byDate['2026-10-03'].day, null);
+  assert.equal(byDate['2026-10-03'].night, null);
+  assert.ok(V.insideDayNightTrend([], [], now, 2).every((r) => r.day == null && r.night == null));
+});

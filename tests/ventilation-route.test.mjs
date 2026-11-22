@@ -30,6 +30,8 @@ test('ventilation route: inside points carry the warmest reading as hotC and do 
   const res = await api.GET();
   assert.match(sql, /MAX\(temperature\) AS temperature_max/);
   assert.match(sql, /device_type = 'AM308-1'/);
+  assert.match(sql, /INTERVAL '30 days'/);
+  assert.match(sql, /INTERVAL '30 minutes'/);
   assert.doesNotMatch(sql, /EM300|EM411|radar|feed|pulse|silo/i);
   assert.equal(res.body.hasLocation, false);
   assert.equal(res.headers['Cache-Control'], 'private, no-store');
@@ -49,6 +51,7 @@ test('ventilation route: forecast fetch has a timeout; a failed forecast still r
   const res = await api.GET();
   assert.ok(init.signal instanceof AbortSignal);
   assert.match(url, /latitude=0&longitude=0/);
+  assert.match(url, /past_days=30/);
   assert.equal(res.body.forecastError, true);
   assert.equal(res.body.hasLocation, true);
   assert.equal(res.body.inside.length, 1);

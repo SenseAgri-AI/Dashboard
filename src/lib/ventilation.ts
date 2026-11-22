@@ -126,7 +126,7 @@ export type VentInput = {
   now: number;
   outside: OutsideHour[] | null;   // null = no forecast (no location or the API failed)
   sun: SunDay[];                   // ascending
-  inside: InsidePoint[];           // ascending, ~30-min buckets, last ~8 days
+  inside: InsidePoint[];           // ascending, ~30-min buckets, last ~30 days (rules use the recent window)
   offsetHours: number;             // farm local offset (SAST = 2)
   thresholds?: VentThresholds;
 };
@@ -138,6 +138,10 @@ export type Prompt = { id: string; level: "act" | "plan"; text: string; why: str
  *  `when`: the period's farm-local date vs now. `insideWhen`: the date of the `inside` range. */
 export type PeriodRow = { period: Period; outside: Range; inside: Range; insideUsual: Range; partial: boolean; upcoming?: boolean;
   when?: "today" | "tomorrow"; insideWhen?: "today" | "yesterday" };
+/** Inside temperature over one sunrise–sunset day or the following sunset–sunrise night. */
+export type DayNightStats = { avg: number; min: number; max: number };
+/** One farm-local day in the 30-day chart. A period is null when it has under 2 h of inside readings. */
+export type DayNightTrendPoint = { date: string; day: DayNightStats | null; night: DayNightStats | null };
 /** Hens drink far more on hot afternoons; a blocked line matters most then. */
 const DRINKERS = "Birds drink more in the heat: check drinkers are flowing.";
 
@@ -552,6 +556,51 @@ export function buildVentilation(input: VentInput): VentView {
   const order: Record<Prompt["level"], number> = { act: 0, plan: 1 };
   prompts.sort((a, b) => order[a.level] - order[b.level]);
   return { insideNow, outsideNow, insideLastAt: last?.t ?? null, today, tonight, outlook, prompts, hasForecast: hours.length > 0 };
+}
+
+const MIN_PERIOD_MS = 2 * H;
+
+/** Average, min and max of inside temperature over one half-open period. Null when the readings span under 2 h. */
+function periodStats(pts: InsidePoint[], start: number, end: number): DayNightStats | null {
+  const rows = pts.filter((x) => x.t >= start && x.t < end && x.tempC != null);
+  if (rows.length < 2 || rows[rows.length - 1].t - rows[0].t < MIN_PERIOD_MS) return null;
+  let min = Infinity, max = -Infinity, sum = 0;
+  for (const x of rows) {
+    const v = x.tempC as number;
+    if (v < min) min = v;
+    if (v > max) max = v;
+    sum += v;
+  }
+  return { avg: r1(sum / rows.length), min: r1(min), max: r1(max) };
+}
+
+/**
+ * Last `dayCount` farm-local days (ending today), oldest first.
+ * Day = sunrise–sunset, night = sunset–next sunrise. Missing sun times use 06:00–18:00 local,
+ * the same fallback as `periods`. A period with under 2 h of inside readings is null.
+ */
+export function insideDayNightTrend(inside: InsidePoint[], sun: SunDay[], now: number, offsetHours: number, dayCount = 30): DayNightTrendPoint[] {
+  const pts = inside
+    .filter((x) => x.tempC != null && x.tempC > -20 && x.tempC < 60 && x.t <= now && Number.isFinite(x.t))
+    .sort((a, b) => a.t - b.t);
+  const byDate = new Map<string, SunDay>();
+  for (const d of sun) {
+    if (Number.isFinite(d.sunrise) && Number.isFinite(d.sunset) && d.sunset > d.sunrise) byDate.set(localDate(d.sunrise, offsetHours), d);
+  }
+  const todayMid = Date.parse(`${localDate(now, offsetHours)}T00:00:00Z`) - offsetHours * H;
+  const out: DayNightTrendPoint[] = [];
+  for (let i = dayCount - 1; i >= 0; i--) {
+    const mid = todayMid - i * 24 * H;
+    const date = localDate(mid, offsetHours);
+    const known = byDate.get(date);
+    const sunrise = known ? known.sunrise : mid + 6 * H;
+    const sunset = known ? known.sunset : mid + 18 * H;
+    const nextMid = mid + 24 * H;
+    const next = byDate.get(localDate(nextMid, offsetHours));
+    const nextSunrise = next ? next.sunrise : nextMid + 6 * H;
+    out.push({ date, day: periodStats(pts, sunrise, sunset), night: periodStats(pts, sunset, nextSunrise) });
+  }
+  return out;
 }
 
 /** Parse an Open-Meteo `/v1/forecast` response requested with `timeformat=unixtime`. */
