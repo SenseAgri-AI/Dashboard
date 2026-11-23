@@ -52,6 +52,9 @@ test('ventilation route: forecast fetch has a timeout; a failed forecast still r
   assert.ok(init.signal instanceof AbortSignal);
   assert.match(url, /latitude=0&longitude=0/);
   assert.match(url, /past_days=30/);
+  assert.match(url, /weather_code/);
+  assert.match(url, /precipitation,/);
+  assert.match(url, /cloud_cover/);
   assert.equal(res.body.forecastError, true);
   assert.equal(res.body.hasLocation, true);
   assert.equal(res.body.inside.length, 1);

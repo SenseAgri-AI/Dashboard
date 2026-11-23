@@ -118,7 +118,18 @@ export function mergeVentThresholds(o?: unknown): VentThresholds {
   return out;
 }
 
-export type OutsideHour = { t: number; tempC: number; rhPct: number | null; rainPct: number | null; windKmh: number | null; gustKmh?: number | null };
+export type OutsideHour = {
+  t: number; tempC: number; rhPct: number | null; rainPct: number | null; windKmh: number | null; gustKmh?: number | null;
+  /** WMO code from Open-Meteo `weather_code`, when the forecast includes it. */
+  weatherCode?: number | null;
+  /** Hourly precipitation, millimetres. */
+  precipMm?: number | null;
+  /** Cloud cover, percent. */
+  cloudPct?: number | null;
+};
+/** Icon id for a forecast condition. Drawn as inline SVG; not an image URL. */
+export type WeatherIconName = "sun" | "moon" | "partly" | "partly-night" | "cloud" | "fog" | "rain" | "heavy-rain" | "thunder" | "snow";
+export type WeatherCondition = { icon: WeatherIconName; label: string };
 /** `hotC`: the warmest single reading in the bucket (the house has more than one sensor; `tempC` is their average). */
 export type InsidePoint = { t: number; tempC: number | null; rhPct: number | null; co2: number | null; hotC?: number | null };
 export type SunDay = { sunrise: number; sunset: number };
@@ -155,12 +166,20 @@ export type DayOutlook = { label: string; dayMax: number | null; nightMin: numbe
   /** Likely inside low for the night after this day, shown only when cold (≤ coldNightC); else null. */
   insideMinLikely: number | null;
   /** Highest daylight rain chance (%), or null without rain data. */
-  rainPct: number | null };
+  rainPct: number | null;
+  /** Daylight condition. Most severe WMO code, or rain/cloud when the code is missing. */
+  wx: WeatherCondition | null;
+  /** Daylight precipitation total, millimetres. */
+  precipMm: number | null;
+  /** Highest daylight wind, km/h. */
+  windKmh: number | null; };
 
 export type VentView = {
   /** `warmC`: the warmest sensor's reading, only when it is at least `warmEndMinC` above the average. */
   insideNow: { tempC: number; rhPct: number | null; feltC: number | null; chillEstC: number | null; co2: number | null; at: number; warmC: number | null } | null;
   outsideNow: number | null;
+  /** Condition for the outside hour used as "now", or null when that temperature is missing. */
+  outsideNowWx: WeatherCondition | null;
   /** Time of the newest inside temperature, even when too old for "now" (so a stale sensor can say how old). */
   insideLastAt: number | null;
   today: PeriodRow | null;     // current or next daylight period
@@ -405,6 +424,8 @@ export function buildVentilation(input: VentInput): VentView {
     const inMax = measured ? r0(Math.max(...soFar)) : insideMax(dv.length ? Math.max(...dv) : null, p);
     const hotSoFar = inside.filter((x) => x.t >= p.start && x.t <= now && x.hotC != null && Number.isFinite(x.hotC)).map((x) => x.hotC as number);
     const warmEndMax = warmEnd == null || inMax == null ? null : measured ? (hotSoFar.length ? r0(Math.max(...hotSoFar)) : null) : r0(inMax + warmEnd);
+    const rainVals = dayHours.filter((h) => h.rainPct != null).map((h) => h.rainPct as number);
+    const dayWx = summarizeDayWeather(dayHours);
     outlook.push({ label: dDate === today0 ? "Today" : dDate === tomorrow0 ? "Tomorrow" : p.label, dayMax, nightMin,
       hot: dayMax != null && dayMax >= t.hotDayC,
       // Cold by the outside forecast or by the house's likely low (same rule as the cold-night prompt).
@@ -412,7 +433,8 @@ export function buildVentilation(input: VentInput): VentView {
       insideMinLikely: nightMin != null && nightOff != null && r0(nightMin + nightOff) <= t.coldNightC ? r0(nightMin + nightOff) : null,
       insideMax: inMax, insideHot: (inMax ?? -Infinity) >= t.insideHotC, insideMeasured: measured,
       warmEndMax: warmEndMax != null && warmEndMax > (inMax ?? Infinity) ? warmEndMax : null,
-      rainPct: (() => { const r = hours.filter((h) => h.t >= p.start && h.t < p.end && h.rainPct != null).map((h) => h.rainPct as number); return r.length ? r0(Math.max(...r)) : null; })() });
+      rainPct: rainVals.length ? r0(Math.max(...rainVals)) : null,
+      wx: dayWx.condition, precipMm: dayWx.precipMm, windKmh: dayWx.windKmh });
   }
 
   // ── Prompts ─────────────────────────────────────────────────────────────────
@@ -560,7 +582,13 @@ export function buildVentilation(input: VentInput): VentView {
 
   const order: Record<Prompt["level"], number> = { act: 0, plan: 1 };
   prompts.sort((a, b) => order[a.level] - order[b.level]);
-  return { insideNow, outsideNow, insideLastAt: last?.t ?? null, today, tonight, outlook, prompts, hasForecast: hours.length > 0 };
+  const covering = all.find((p) => p.start <= now && now < p.end);
+  const hourLocal = ((now / H + offsetHours) % 24 + 24) % 24;
+  const nightNow = covering ? covering.kind === "night" : hourLocal < 6 || hourLocal >= 18;
+  const outsideNowWx = outsideNow != null && nowHour
+    ? describeWeather({ code: nowHour.weatherCode, night: nightNow, rainPct: nowHour.rainPct, precipMm: nowHour.precipMm, cloudPct: nowHour.cloudPct })
+    : null;
+  return { insideNow, outsideNow, outsideNowWx, insideLastAt: last?.t ?? null, today, tonight, outlook, prompts, hasForecast: hours.length > 0 };
 }
 
 const MIN_PERIOD_MS = 2 * H;
@@ -625,6 +653,91 @@ export function outsideForPage(hours: OutsideHour[], now: number): OutsideHour[]
   return hours.filter((h) => h.t >= from && h.t <= to);
 }
 
+// Display bands only. Suggestion thresholds (stormRainPct and the rest) are unchanged.
+const WMO: Record<number, { icon: WeatherIconName; nightIcon?: WeatherIconName; label: string; rank: number }> = {
+  0: { icon: "sun", nightIcon: "moon", label: "Clear", rank: 0 },
+  1: { icon: "sun", nightIcon: "moon", label: "Mainly clear", rank: 1 },
+  2: { icon: "partly", nightIcon: "partly-night", label: "Partly cloudy", rank: 2 },
+  3: { icon: "cloud", label: "Overcast", rank: 3 },
+  45: { icon: "fog", label: "Fog", rank: 4 },
+  48: { icon: "fog", label: "Fog", rank: 4 },
+  51: { icon: "rain", label: "Light rain", rank: 5 },
+  53: { icon: "rain", label: "Light rain", rank: 5 },
+  56: { icon: "rain", label: "Light rain", rank: 5 },
+  61: { icon: "rain", label: "Light rain", rank: 5 },
+  80: { icon: "rain", label: "Light rain", rank: 5 },
+  71: { icon: "snow", label: "Light snow", rank: 5 },
+  77: { icon: "snow", label: "Light snow", rank: 5 },
+  85: { icon: "snow", label: "Light snow", rank: 5 },
+  55: { icon: "heavy-rain", label: "Rain", rank: 6 },
+  63: { icon: "heavy-rain", label: "Rain", rank: 6 },
+  73: { icon: "snow", label: "Snow", rank: 6 },
+  81: { icon: "heavy-rain", label: "Rain", rank: 6 },
+  57: { icon: "heavy-rain", label: "Freezing rain", rank: 7 },
+  66: { icon: "heavy-rain", label: "Freezing rain", rank: 7 },
+  65: { icon: "heavy-rain", label: "Heavy rain", rank: 8 },
+  67: { icon: "heavy-rain", label: "Heavy rain", rank: 8 },
+  75: { icon: "snow", label: "Heavy snow", rank: 8 },
+  82: { icon: "heavy-rain", label: "Heavy rain", rank: 8 },
+  86: { icon: "snow", label: "Heavy snow", rank: 8 },
+  95: { icon: "thunder", label: "Thunderstorm", rank: 9 },
+  96: { icon: "thunder", label: "Thunderstorm", rank: 9 },
+  99: { icon: "thunder", label: "Thunderstorm", rank: 9 },
+};
+
+/** WMO `weather_code` → icon and short label. Null when the code is not one we draw. `night` swaps clear sky for a moon. */
+export function weatherFromCode(code: number, night = false): WeatherCondition | null {
+  const row = WMO[code];
+  if (!row) return null;
+  return { icon: night && row.nightIcon ? row.nightIcon : row.icon, label: row.label };
+}
+
+/** Display-only stand-in when `weather_code` is missing. Not an alert threshold. */
+export function weatherFromProxies(o: { night?: boolean; rainPct?: number | null; precipMm?: number | null; cloudPct?: number | null }): WeatherCondition {
+  const night = !!o.night;
+  const rain = o.rainPct ?? 0;
+  const mm = o.precipMm ?? 0;
+  const cloud = o.cloudPct ?? 0;
+  if (mm >= 10 || rain >= 80) return { icon: "heavy-rain", label: "Heavy rain" };
+  if (mm >= 2 || rain >= 50) return { icon: "heavy-rain", label: "Rain" };
+  if (mm > 0 || rain >= 30) return { icon: "rain", label: "Light rain" };
+  if (cloud >= 80) return { icon: "cloud", label: "Overcast" };
+  if (cloud >= 40) return { icon: night ? "partly-night" : "partly", label: "Partly cloudy" };
+  return { icon: night ? "moon" : "sun", label: "Clear" };
+}
+
+/** Prefer a known WMO code. Otherwise rain, rainfall and cloud cover. */
+export function describeWeather(o: { code?: number | null; night?: boolean; rainPct?: number | null; precipMm?: number | null; cloudPct?: number | null }): WeatherCondition {
+  if (o.code != null && Number.isFinite(o.code)) {
+    const hit = weatherFromCode(o.code, !!o.night);
+    if (hit) return hit;
+  }
+  return weatherFromProxies(o);
+}
+
+/** Daylight summary: the most severe code, total rain (mm) and the strongest wind (km/h). */
+export function summarizeDayWeather(hours: OutsideHour[]): { condition: WeatherCondition | null; precipMm: number | null; windKmh: number | null } {
+  if (!hours.length) return { condition: null, precipMm: null, windKmh: null };
+  const codes = hours.map((h) => h.weatherCode).filter((c): c is number => c != null && Number.isFinite(c) && WMO[c] != null);
+  const precips = hours.map((h) => h.precipMm).filter((v): v is number => v != null && Number.isFinite(v));
+  const winds = hours.map((h) => h.windKmh).filter((v): v is number => v != null && Number.isFinite(v));
+  const clouds = hours.map((h) => h.cloudPct).filter((v): v is number => v != null && Number.isFinite(v));
+  const rains = hours.map((h) => h.rainPct).filter((v): v is number => v != null && Number.isFinite(v));
+  const best = codes.reduce<number | null>((top, c) => (top == null || WMO[c].rank > WMO[top].rank ? c : top), null);
+  const condition = best != null
+    ? weatherFromCode(best, false)
+    : weatherFromProxies({
+      rainPct: rains.length ? Math.max(...rains) : null,
+      precipMm: precips.length ? precips.reduce((a, b) => a + b, 0) : null,
+      cloudPct: clouds.length ? clouds.reduce((a, b) => a + b, 0) / clouds.length : null,
+    });
+  return {
+    condition,
+    precipMm: precips.length ? r1(precips.reduce((a, b) => a + b, 0)) : null,
+    windKmh: winds.length ? r0(Math.max(...winds)) : null,
+  };
+}
+
 /** Parse an Open-Meteo `/v1/forecast` response requested with `timeformat=unixtime`. */
 export function parseOpenMeteo(j: unknown): { outside: OutsideHour[]; sun: SunDay[] } | null {
   const o = j as { hourly?: Record<string, unknown[]>; daily?: Record<string, unknown[]> } | null;
@@ -635,7 +748,11 @@ export function parseOpenMeteo(j: unknown): { outside: OutsideHour[]; sun: SunDa
   h.time.forEach((tt, i) => {
     const ts = num(tt), temp = num(h.temperature_2m[i]);
     if (ts == null || temp == null) return;
-    outside.push({ t: ts * 1000, tempC: temp, rhPct: num(h.relative_humidity_2m?.[i]), rainPct: num(h.precipitation_probability?.[i]), windKmh: num(h.wind_speed_10m?.[i]), gustKmh: num(h.wind_gusts_10m?.[i]) });
+    outside.push({
+      t: ts * 1000, tempC: temp, rhPct: num(h.relative_humidity_2m?.[i]), rainPct: num(h.precipitation_probability?.[i]),
+      windKmh: num(h.wind_speed_10m?.[i]), gustKmh: num(h.wind_gusts_10m?.[i]),
+      weatherCode: num(h.weather_code?.[i]), precipMm: num(h.precipitation?.[i]), cloudPct: num(h.cloud_cover?.[i]),
+    });
   });
   const d = o?.daily;
   const sun: SunDay[] = [];

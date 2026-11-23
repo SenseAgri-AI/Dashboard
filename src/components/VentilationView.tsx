@@ -1,7 +1,8 @@
 "use client";
 
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { buildVentilation, insideDayNightTrend, latestInsideAt, localHHMM, periods, type InsidePoint, type OutsideHour, type SunDay, type VentThresholds } from "@/lib/ventilation";
+import { buildVentilation, insideDayNightTrend, latestInsideAt, localHHMM, periods, type DayOutlook, type InsidePoint, type OutsideHour, type SunDay, type VentThresholds } from "@/lib/ventilation";
+import WeatherIcon, { Droplet, WindMark } from "@/components/WeatherIcon";
 
 // Ventilation page body: suggestions first, then inside now, the last 30 days day vs night,
 // the next 3 days and the forecast chart. Rules and the user story behind each block:
@@ -94,22 +95,17 @@ export default function VentilationView({ data, now, narrow = false }: { data: V
       {v.hasForecast && (
         <section style={card} aria-label="Next 3 days">
           <h2 style={h2}>Next 3 days</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-            {v.outlook.map((d) => (
-              <div key={d.label} style={{ borderRadius: 8, background: "rgba(0,0,0,0.03)", padding: "8px 10px" }}>
-                <div style={{ fontSize: 11, fontWeight: 800, color: "var(--t2)" }}>{d.label}</div>
-                <div style={{ fontSize: 13, marginTop: 4, fontWeight: 700 }}>
-                  <span style={{ color: OUT_C }}>☀ {fmt(d.dayMax)}</span>
-                  {d.insideMax != null && <span style={{ color: d.insideHot ? "#B91C1C" : IN_C, fontWeight: d.insideHot ? 800 : 600 }}> {d.insideMeasured ? `in ${fmt(d.insideMax)}` : `in ~${fmt(d.insideMax)}`}</span>}
-                </div>
-                {d.warmEndMax != null && d.warmEndMax >= t.insideHotC && <div style={{ fontSize: 11, color: "#B91C1C", fontWeight: 700 }}>warm end {d.insideMeasured ? fmt(d.warmEndMax) : `~${fmt(d.warmEndMax)}`}</div>}
-                <div style={{ fontSize: 13, color: d.cold ? "#1D4ED8" : INK, fontWeight: d.cold ? 800 : 600 }}>
-                  ☾ {fmt(d.nightMin)}
-                  {d.insideMinLikely != null && <span> in ~{fmt(d.insideMinLikely)}</span>}
-                </div>
-                {d.rainPct != null && d.rainPct >= t.stormRainPct && <div style={{ fontSize: 12, marginTop: 2, color: "#1D4ED8", fontWeight: 700 }}>☂ {d.rainPct}%</div>}
+          {v.outsideNow != null && v.outsideNowWx && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <WeatherIcon name={v.outsideNowWx.icon} size={narrow ? 32 : 40} />
+              <div>
+                <div style={{ fontSize: narrow ? 22 : 26, fontWeight: 800, color: INK, fontFamily: "var(--font-d)", lineHeight: 1 }}>{Math.round(v.outsideNow)}°C</div>
+                <div style={{ fontSize: 12, color: "var(--t2)", fontWeight: 650, marginTop: 2 }}>{v.outsideNowWx.label}</div>
               </div>
-            ))}
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: narrow ? 6 : 8 }}>
+            {v.outlook.map((d, i) => <ForecastTile key={`${d.label}-${i}`} d={d} hotC={t.insideHotC} narrow={narrow} />)}
           </div>
         </section>
       )}
@@ -137,6 +133,26 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
       <div style={{ fontSize: 10.5, color: MUTED, fontWeight: 700 }}>{label}</div>
       <div style={{ fontSize: 24, fontWeight: 800, color: INK, fontFamily: "var(--font-d)", lineHeight: 1.15 }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: MUTED, whiteSpace: "pre-line" }}>{sub}</div>}
+    </div>
+  );
+}
+
+function ForecastTile({ d, hotC, narrow }: { d: DayOutlook; hotC: number; narrow: boolean }) {
+  const rain = [d.rainPct != null ? `${d.rainPct}%` : null, d.precipMm != null && d.precipMm > 0 ? `${d.precipMm} mm` : null].filter(Boolean).join(" · ");
+  return (
+    <div style={{ borderRadius: 8, background: "rgba(0,0,0,0.03)", padding: narrow ? "8px 4px" : "10px 8px", textAlign: "center" }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: "var(--t2)" }}>{d.label}</div>
+      {d.wx && <div style={{ marginTop: 4, display: "flex", justifyContent: "center" }}><WeatherIcon name={d.wx.icon} size={narrow ? 28 : 36} /></div>}
+      {d.wx && <div style={{ fontSize: 11, fontWeight: 650, color: INK, lineHeight: 1.25, minHeight: 28, marginTop: 2 }}>{d.wx.label}</div>}
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "baseline", gap: 6, marginTop: 2 }}>
+        <span style={{ fontSize: narrow ? 18 : 22, fontWeight: 800, color: d.hot ? "#B45309" : INK, fontFamily: "var(--font-d)", lineHeight: 1 }}>{d.dayMax == null ? "–" : `${Math.round(d.dayMax)}°`}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: d.cold ? "#1D4ED8" : MUTED }}>{d.nightMin == null ? "–" : `${Math.round(d.nightMin)}°`}</span>
+      </div>
+      {d.insideMax != null && <div style={{ fontSize: 10.5, fontWeight: d.insideHot ? 800 : 650, color: d.insideHot ? "#B91C1C" : IN_C }}>{d.insideMeasured ? `in ${Math.round(d.insideMax)}°` : `in ~${Math.round(d.insideMax)}°`}</div>}
+      {d.insideMinLikely != null && <div style={{ fontSize: 10.5, fontWeight: 800, color: "#1D4ED8" }}>in ~{Math.round(d.insideMinLikely)}°</div>}
+      {d.warmEndMax != null && d.warmEndMax >= hotC && <div style={{ fontSize: 10.5, fontWeight: 700, color: "#B91C1C" }}>warm end {d.insideMeasured ? "" : "~"}{Math.round(d.warmEndMax)}°</div>}
+      {rain && <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 3, marginTop: 4, fontSize: 11, fontWeight: 700, color: "#1D4ED8" }}><Droplet />{rain}</div>}
+      {d.windKmh != null && <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 3, marginTop: 2, fontSize: 11, fontWeight: 650, color: MUTED }}><WindMark />{d.windKmh} km/h</div>}
     </div>
   );
 }

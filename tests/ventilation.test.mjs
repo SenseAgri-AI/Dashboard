@@ -181,7 +181,7 @@ test('no forecast (no location): inside still shown, no outside prompts', () => 
 
 test('Open-Meteo parsing', () => {
   const p = V.parseOpenMeteo({ hourly: { time: [1, 2], temperature_2m: [10, null], relative_humidity_2m: [50, 60] }, daily: { sunrise: [100], sunset: [200] } });
-  assert.deepEqual(plain(p), { outside: [{ t: 1000, tempC: 10, rhPct: 50, rainPct: null, windKmh: null, gustKmh: null }], sun: [{ sunrise: 100000, sunset: 200000 }] });
+  assert.deepEqual(plain(p), { outside: [{ t: 1000, tempC: 10, rhPct: 50, rainPct: null, windKmh: null, gustKmh: null, weatherCode: null, precipMm: null, cloudPct: null }], sun: [{ sunrise: 100000, sunset: 200000 }] });
   assert.equal(V.parseOpenMeteo({ error: true }), null);
 });
 
@@ -516,6 +516,56 @@ test('stale banner timestamp keeps a reading 9–30 days old that the 8-day sugg
   assert.equal(V.latestInsideAt([]), null);
   // a reading inside the last 8 days still wins
   assert.equal(V.latestInsideAt([...full, pt(now - 2 * H, 22)]), now - 2 * H);
+});
+
+test('WMO weather code maps to an icon and a short condition', () => {
+  const wx = (code, night) => plain(V.weatherFromCode(code, night));
+  assert.deepEqual(wx(0, false), { icon: 'sun', label: 'Clear' });
+  assert.deepEqual(wx(0, true), { icon: 'moon', label: 'Clear' });
+  assert.deepEqual(wx(1, true), { icon: 'moon', label: 'Mainly clear' });
+  assert.deepEqual(wx(2, false), { icon: 'partly', label: 'Partly cloudy' });
+  assert.deepEqual(wx(2, true), { icon: 'partly-night', label: 'Partly cloudy' });
+  assert.deepEqual(wx(3), { icon: 'cloud', label: 'Overcast' });
+  assert.deepEqual(wx(45), { icon: 'fog', label: 'Fog' });
+  assert.deepEqual(wx(48), { icon: 'fog', label: 'Fog' });
+  assert.deepEqual(wx(51), { icon: 'rain', label: 'Light rain' });
+  assert.deepEqual(wx(61), { icon: 'rain', label: 'Light rain' });
+  assert.deepEqual(wx(80), { icon: 'rain', label: 'Light rain' });
+  assert.deepEqual(wx(63), { icon: 'heavy-rain', label: 'Rain' });
+  assert.deepEqual(wx(65), { icon: 'heavy-rain', label: 'Heavy rain' });
+  assert.deepEqual(wx(82), { icon: 'heavy-rain', label: 'Heavy rain' });
+  assert.deepEqual(wx(95), { icon: 'thunder', label: 'Thunderstorm' });
+  assert.deepEqual(wx(99), { icon: 'thunder', label: 'Thunderstorm' });
+  assert.deepEqual(wx(71), { icon: 'snow', label: 'Light snow' });
+  assert.deepEqual(wx(75), { icon: 'snow', label: 'Heavy snow' });
+  assert.equal(V.weatherFromCode(123), null);
+  // a known code wins over rain/cloud proxies
+  assert.deepEqual(plain(V.describeWeather({ code: 0, rainPct: 90, precipMm: 20, cloudPct: 100 })), { icon: 'sun', label: 'Clear' });
+  assert.deepEqual(plain(V.describeWeather({ code: 123, rainPct: 90 })), { icon: 'heavy-rain', label: 'Heavy rain' });
+});
+
+test('without a weather code, condition follows rain, rainfall and cloud', () => {
+  assert.deepEqual(plain(V.weatherFromProxies({ rainPct: 90, precipMm: 12 })), { icon: 'heavy-rain', label: 'Heavy rain' });
+  assert.deepEqual(plain(V.weatherFromProxies({ rainPct: 55, precipMm: 3 })), { icon: 'heavy-rain', label: 'Rain' });
+  assert.deepEqual(plain(V.weatherFromProxies({ rainPct: 35 })), { icon: 'rain', label: 'Light rain' });
+  assert.deepEqual(plain(V.weatherFromProxies({ cloudPct: 90 })), { icon: 'cloud', label: 'Overcast' });
+  assert.deepEqual(plain(V.weatherFromProxies({ cloudPct: 50 })), { icon: 'partly', label: 'Partly cloudy' });
+  assert.deepEqual(plain(V.weatherFromProxies({ cloudPct: 50, night: true })), { icon: 'partly-night', label: 'Partly cloudy' });
+  assert.deepEqual(plain(V.weatherFromProxies({ night: true })), { icon: 'moon', label: 'Clear' });
+  assert.deepEqual(plain(V.weatherFromProxies({})), { icon: 'sun', label: 'Clear' });
+  // daylight summary keeps the most severe code, sums rain and takes the strongest wind
+  const hours = [
+    { t: 0, tempC: 20, rhPct: null, rainPct: 20, windKmh: 10, weatherCode: 0, precipMm: 0, cloudPct: 10 },
+    { t: 1, tempC: 22, rhPct: null, rainPct: 80, windKmh: 28, weatherCode: 61, precipMm: 1.2, cloudPct: 70 },
+    { t: 2, tempC: 18, rhPct: null, rainPct: 90, windKmh: 14, weatherCode: 95, precipMm: 4.4, cloudPct: 100 },
+  ];
+  const day = V.summarizeDayWeather(hours);
+  assert.deepEqual(plain(day.condition), { icon: 'thunder', label: 'Thunderstorm' });
+  assert.equal(day.precipMm, 5.6);
+  assert.equal(day.windKmh, 28);
+  const derived = V.summarizeDayWeather(hours.map((h) => ({ ...h, weatherCode: null })));
+  assert.equal(derived.condition.icon, 'heavy-rain');
+  assert.equal(V.summarizeDayWeather([]).condition, null);
 });
 
 test('hourly outside for the page drops history only the 30-day sun span needed', () => {
