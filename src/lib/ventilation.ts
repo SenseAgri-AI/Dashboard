@@ -663,7 +663,7 @@ const WMO: Record<number, { icon: WeatherIconName; nightIcon?: WeatherIconName; 
   48: { icon: "fog", label: "Fog", rank: 4 },
   51: { icon: "rain", label: "Light rain", rank: 5 },
   53: { icon: "rain", label: "Light rain", rank: 5 },
-  56: { icon: "rain", label: "Light rain", rank: 5 },
+  56: { icon: "rain", label: "Light freezing rain", rank: 5 },
   61: { icon: "rain", label: "Light rain", rank: 5 },
   80: { icon: "rain", label: "Light rain", rank: 5 },
   71: { icon: "snow", label: "Light snow", rank: 5 },
@@ -676,12 +676,13 @@ const WMO: Record<number, { icon: WeatherIconName; nightIcon?: WeatherIconName; 
   57: { icon: "heavy-rain", label: "Freezing rain", rank: 7 },
   66: { icon: "heavy-rain", label: "Freezing rain", rank: 7 },
   65: { icon: "heavy-rain", label: "Heavy rain", rank: 8 },
-  67: { icon: "heavy-rain", label: "Heavy rain", rank: 8 },
+  67: { icon: "heavy-rain", label: "Heavy freezing rain", rank: 8 },
   75: { icon: "snow", label: "Heavy snow", rank: 8 },
   82: { icon: "heavy-rain", label: "Heavy rain", rank: 8 },
   86: { icon: "snow", label: "Heavy snow", rank: 8 },
   95: { icon: "thunder", label: "Thunderstorm", rank: 9 },
   96: { icon: "thunder", label: "Thunderstorm", rank: 9 },
+  97: { icon: "thunder", label: "Thunderstorm", rank: 9 },
   99: { icon: "thunder", label: "Thunderstorm", rank: 9 },
 };
 

@@ -96,11 +96,14 @@ export default function VentilationView({ data, now, narrow = false }: { data: V
         <section style={card} aria-label="Next 3 days">
           <h2 style={h2}>Next 3 days</h2>
           {v.outsideNow != null && v.outsideNowWx && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-              <WeatherIcon name={v.outsideNowWx.icon} size={narrow ? 32 : 40} />
-              <div>
-                <div style={{ fontSize: narrow ? 22 : 26, fontWeight: 800, color: INK, fontFamily: "var(--font-d)", lineHeight: 1 }}>{Math.round(v.outsideNow)}°C</div>
-                <div style={{ fontSize: 12, color: "var(--t2)", fontWeight: 650, marginTop: 2 }}>{v.outsideNowWx.label}</div>
+            <div style={{ marginBottom: 10 }} aria-label={`Outside now, ${Math.round(v.outsideNow)}°, ${v.outsideNowWx.label}`}>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: MUTED, marginBottom: 4 }}>Outside now</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <WeatherIcon name={v.outsideNowWx.icon} size={narrow ? 32 : 40} />
+                <div>
+                  <div style={{ fontSize: narrow ? 22 : 26, fontWeight: 800, color: INK, fontFamily: "var(--font-d)", lineHeight: 1 }}>{Math.round(v.outsideNow)}°C</div>
+                  <div style={{ fontSize: 12, color: "var(--t2)", fontWeight: 650, marginTop: 2 }}>{v.outsideNowWx.label}</div>
+                </div>
               </div>
             </div>
           )}
@@ -138,15 +141,18 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
 }
 
 function ForecastTile({ d, hotC, narrow }: { d: DayOutlook; hotC: number; narrow: boolean }) {
-  const rain = [d.rainPct != null ? `${d.rainPct}%` : null, d.precipMm != null && d.precipMm > 0 ? `${d.precipMm} mm` : null].filter(Boolean).join(" · ");
+  const chance = d.rainPct != null && d.rainPct > 0 ? `${d.rainPct}%` : null;
+  const rain = [chance, d.precipMm != null && d.precipMm > 0 ? `${d.precipMm} mm` : null].filter(Boolean).join(" · ");
+  const high = d.dayMax == null ? "–" : `${Math.round(d.dayMax)}°`;
+  const low = d.nightMin == null ? "–" : `${Math.round(d.nightMin)}°`;
   return (
-    <div style={{ borderRadius: 8, background: "rgba(0,0,0,0.03)", padding: narrow ? "8px 4px" : "10px 8px", textAlign: "center" }}>
+    <div style={{ borderRadius: 8, background: "rgba(0,0,0,0.03)", padding: narrow ? "8px 4px" : "10px 8px", textAlign: "center" }} aria-label={`${d.label}${d.wx ? `, ${d.wx.label}` : ""}. High ${high}, low ${low}.`}>
       <div style={{ fontSize: 11, fontWeight: 800, color: "var(--t2)" }}>{d.label}</div>
       {d.wx && <div style={{ marginTop: 4, display: "flex", justifyContent: "center" }}><WeatherIcon name={d.wx.icon} size={narrow ? 28 : 36} /></div>}
       {d.wx && <div style={{ fontSize: 11, fontWeight: 650, color: INK, lineHeight: 1.25, minHeight: 28, marginTop: 2 }}>{d.wx.label}</div>}
       <div style={{ display: "flex", justifyContent: "center", alignItems: "baseline", gap: 6, marginTop: 2 }}>
-        <span style={{ fontSize: narrow ? 18 : 22, fontWeight: 800, color: d.hot ? "#B45309" : INK, fontFamily: "var(--font-d)", lineHeight: 1 }}>{d.dayMax == null ? "–" : `${Math.round(d.dayMax)}°`}</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: d.cold ? "#1D4ED8" : MUTED }}>{d.nightMin == null ? "–" : `${Math.round(d.nightMin)}°`}</span>
+        <span style={{ fontSize: narrow ? 18 : 22, fontWeight: 800, color: d.hot ? "#B45309" : INK, fontFamily: "var(--font-d)", lineHeight: 1 }}>{high}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: d.cold ? "#1D4ED8" : MUTED }}>{low}</span>
       </div>
       {d.insideMax != null && <div style={{ fontSize: 10.5, fontWeight: d.insideHot ? 800 : 650, color: d.insideHot ? "#B91C1C" : IN_C }}>{d.insideMeasured ? `in ${Math.round(d.insideMax)}°` : `in ~${Math.round(d.insideMax)}°`}</div>}
       {d.insideMinLikely != null && <div style={{ fontSize: 10.5, fontWeight: 800, color: "#1D4ED8" }}>in ~{Math.round(d.insideMinLikely)}°</div>}

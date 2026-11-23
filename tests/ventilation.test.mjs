@@ -534,7 +534,13 @@ test('WMO weather code maps to an icon and a short condition', () => {
   assert.deepEqual(wx(63), { icon: 'heavy-rain', label: 'Rain' });
   assert.deepEqual(wx(65), { icon: 'heavy-rain', label: 'Heavy rain' });
   assert.deepEqual(wx(82), { icon: 'heavy-rain', label: 'Heavy rain' });
+  assert.deepEqual(wx(56), { icon: 'rain', label: 'Light freezing rain' });
+  assert.deepEqual(wx(57), { icon: 'heavy-rain', label: 'Freezing rain' });
+  assert.deepEqual(wx(66), { icon: 'heavy-rain', label: 'Freezing rain' });
+  assert.deepEqual(wx(67), { icon: 'heavy-rain', label: 'Heavy freezing rain' });
   assert.deepEqual(wx(95), { icon: 'thunder', label: 'Thunderstorm' });
+  assert.deepEqual(wx(96), { icon: 'thunder', label: 'Thunderstorm' });
+  assert.deepEqual(wx(97), { icon: 'thunder', label: 'Thunderstorm' });
   assert.deepEqual(wx(99), { icon: 'thunder', label: 'Thunderstorm' });
   assert.deepEqual(wx(71), { icon: 'snow', label: 'Light snow' });
   assert.deepEqual(wx(75), { icon: 'snow', label: 'Heavy snow' });
