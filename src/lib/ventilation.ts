@@ -190,11 +190,11 @@ export type VentView = {
 };
 
 const H = 3_600_000;
-/** Hourly outside kept for the page. Suggestions walk 9 days back and 4 ahead, and a period can
- *  start before that window, so this is a day wider on each side. The forecast chart sits inside it.
+/** Hourly outside kept for the page. Suggestions walk 9 days back and 4 ahead. The 3-day
+ *  forecast also needs the night after the third day, so the ahead window is a week.
  *  Sunrise/sunset are not trimmed: the 30-day chart needs them. */
 export const OUTSIDE_KEEP_BACK_MS = 10 * 24 * H;
-export const OUTSIDE_KEEP_AHEAD_MS = 5 * 24 * H;
+export const OUTSIDE_KEEP_AHEAD_MS = 7 * 24 * H;
 const r0 = (v: number) => Math.round(v);
 const r1 = (v: number) => Math.round(v * 10) / 10;
 const median = (xs: number[]) => {
@@ -227,6 +227,30 @@ export function periods(sun: SunDay[], from: number, to: number, offsetHours: nu
     out.push({ kind: "night", start: d.sunset, end: next, label: `${weekday(d.sunset, offsetHours)} night` });
   }
   return out.filter((p) => p.end > from && p.start < to);
+}
+
+/** Three daylight periods for the forecast tiles. Today stays while at least 2 h of daylight
+ *  remain; after that the next three calendar days are used. Missing sunrise/sunset days are
+ *  filled at 06:00–18:00 local so a short sun list cannot collapse the row to one tile. */
+export function forecastDayPeriods(sun: SunDay[], now: number, offsetHours: number, count = 3): Period[] {
+  const horizon = now + (count + 4) * 24 * H;
+  let days = periods(sun, now - 36 * H, horizon, offsetHours).filter((p) => p.kind === "day" && p.end > now);
+  if (days[0] && days[0].start <= now && days[0].end - now < 2 * H) days = days.slice(1);
+  const have = new Set(days.map((d) => localDate(d.start, offsetHours)));
+  const todayMid = Date.parse(`${localDate(now, offsetHours)}T00:00:00Z`) - offsetHours * H;
+  const filled = days.slice(0, count);
+  for (let i = 0; filled.length < count && i < count + 4; i++) {
+    const mid = todayMid + i * 24 * H;
+    const date = localDate(mid, offsetHours);
+    if (have.has(date)) continue;
+    const start = mid + 6 * H;
+    const end = mid + 18 * H;
+    if (end <= now || (start <= now && end - now < 2 * H)) continue;
+    filled.push({ kind: "day", start, end, label: weekday(start, offsetHours) });
+    have.add(date);
+  }
+  filled.sort((a, b) => a.start - b.start);
+  return filled.slice(0, count);
 }
 
 function rangeOf(vals: number[]): Range {
@@ -405,11 +429,12 @@ export function buildVentilation(input: VentInput): VentView {
   const windNote = (p: Period) => { const g = gainFor(p); return g != null && houseGain != null && Math.abs(g - houseGain) >= 0.5 ? (g > houseGain ? "; calmer than usual forecast, so likely a bit more" : "; windier than usual forecast, so likely a bit less") : ""; };
   const insideMax = (dayMax: number | null, p: Period) => { const g = gainFor(p); return g != null && dayMax != null && dayMax >= t.gainMinOutsideC ? r0(dayMax + g) : null; };
   const outlook: DayOutlook[] = [];
-  for (let i = Math.max(dayIdx, 0); dayIdx >= 0 && i < all.length && outlook.length < 3; i++) {
-    const p = all[i];
-    if (p.kind !== "day") continue;
-    const n = all[i + 1];
-    const dv = outsideIn(hours, p), nv = n ? outsideIn(hours, n) : [];
+  const forecastDays = forecastDayPeriods(input.sun, now, offsetHours);
+  for (let i = 0; i < forecastDays.length; i++) {
+    const p = forecastDays[i];
+    const nightEnd = forecastDays[i + 1]?.start ?? p.start + 24 * H;
+    const nightPeriod: Period = { kind: "night", start: p.end, end: nightEnd, label: "" };
+    const dv = outsideIn(hours, p), nv = outsideIn(hours, nightPeriod);
     const dayMax = dv.length ? r0(Math.max(...dv)) : null;
     const nightMin = nv.length ? r0(Math.min(...nv)) : null;
     // Label by farm-local date: in the evening the next daylight is tomorrow's.

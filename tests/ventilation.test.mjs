@@ -574,6 +574,44 @@ test('without a weather code, condition follows rain, rainfall and cloud', () =>
   assert.equal(V.summarizeDayWeather([]).condition, null);
 });
 
+test('outlook renders 3 forecast days from 5 days of hourly data', () => {
+  // 20:45 SAST on Wed 25 Nov, after sunset. Sun only covers today and tomorrow; hours run 5 days ahead.
+  const now = Date.parse('2026-11-25T18:45:00Z');
+  const offset = 2;
+  const mid = (date) => Date.parse(`${date}T00:00:00Z`) - offset * H;
+  const sun = [0, 1].map((i) => ({
+    sunrise: mid('2026-11-25') + i * 24 * H + 5.3 * H,
+    sunset: mid('2026-11-25') + i * 24 * H + 18.67 * H,
+  }));
+  const hours = [];
+  for (let d = 0; d < 5; d++) {
+    for (let h = 0; h < 24; h++) {
+      hours.push({
+        t: mid('2026-11-25') + d * 24 * H + h * H,
+        tempC: 12 + (h >= 12 && h <= 16 ? 10 : 0),
+        rhPct: 50, rainPct: d === 1 ? 63 : 0, windKmh: 19,
+        weatherCode: d === 1 ? 61 : 0, precipMm: d === 1 ? 0.26 : 0, cloudPct: 20,
+      });
+    }
+  }
+  const evening = V.buildVentilation({ now, outside: V.outsideForPage(hours, now), sun, inside: [], offsetHours: offset });
+  assert.equal(evening.outlook.length, 3);
+  assert.deepEqual(plain(evening.outlook.map((d) => d.label)), ['Tomorrow', 'Fri', 'Sat']);
+  assert.ok(evening.outlook.every((d) => d.dayMax != null && d.nightMin != null));
+  // five real sun days and the same hours: still exactly three, starting tomorrow
+  const sun5 = [0, 1, 2, 3, 4].map((i) => ({
+    sunrise: mid('2026-11-25') + i * 24 * H + 5.3 * H,
+    sunset: mid('2026-11-25') + i * 24 * H + 18.67 * H,
+  }));
+  const full = V.buildVentilation({ now, outside: hours, sun: sun5, inside: [], offsetHours: offset });
+  assert.deepEqual(plain(full.outlook.map((d) => d.label)), ['Tomorrow', 'Fri', 'Sat']);
+  // midday still leads with today
+  const noon = Date.parse('2026-11-25T10:00:00Z');
+  const day = V.buildVentilation({ now: noon, outside: hours, sun: sun5, inside: [], offsetHours: offset });
+  assert.deepEqual(plain(day.outlook.map((d) => d.label)), ['Today', 'Tomorrow', 'Fri']);
+  assert.equal(day.outlook.length, 3);
+});
+
 test('hourly outside for the page drops history only the 30-day sun span needed', () => {
   const now = Date.parse('2026-11-21T10:00:00Z');
   const hour = (ms, tempC) => ({ t: ms, tempC, rhPct: 50, rainPct: 0, windKmh: 10 });

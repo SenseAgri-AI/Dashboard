@@ -33,7 +33,7 @@ async function forecast(loc: { lat: number; lon: number }) {
   const url = "https://api.open-meteo.com/v1/forecast"
     + `?latitude=${loc.lat}&longitude=${loc.lon}`
     + "&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,precipitation,cloud_cover,weather_code,wind_speed_10m,wind_gusts_10m"
-    + "&daily=sunrise,sunset&past_days=30&forecast_days=4&timezone=GMT&timeformat=unixtime";
+    + "&daily=sunrise,sunset&past_days=30&forecast_days=7&timezone=GMT&timeformat=unixtime";
   // Story: if the weather service hangs, I still want the inside readings, not a page that spins forever.
   const res = await fetch(url, { next: { revalidate: 1800 }, signal: AbortSignal.timeout(FORECAST_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
