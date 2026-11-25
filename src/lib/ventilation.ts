@@ -167,12 +167,17 @@ export type DayOutlook = { label: string; dayMax: number | null; nightMin: numbe
   insideMinLikely: number | null;
   /** Highest daylight rain chance (%), or null without rain data. */
   rainPct: number | null;
-  /** Daylight condition. Most severe WMO code, or rain/cloud when the code is missing. */
+  /** Daylight condition (sunrise–sunset). Most severe WMO code, or rain/cloud when the code is missing. */
   wx: WeatherCondition | null;
   /** Daylight precipitation total, millimetres. */
   precipMm: number | null;
   /** Highest daylight wind, km/h. */
-  windKmh: number | null; };
+  windKmh: number | null;
+  /** Condition from sunset to the next sunrise. Clear and partly cloudy use the moon. */
+  nightWx: WeatherCondition | null;
+  nightRainPct: number | null;
+  nightPrecipMm: number | null;
+  nightWindKmh: number | null; };
 
 export type VentView = {
   /** `warmC`: the warmest sensor's reading, only when it is at least `warmEndMinC` above the average. */
@@ -449,8 +454,9 @@ export function buildVentilation(input: VentInput): VentView {
     const inMax = measured ? r0(Math.max(...soFar)) : insideMax(dv.length ? Math.max(...dv) : null, p);
     const hotSoFar = inside.filter((x) => x.t >= p.start && x.t <= now && x.hotC != null && Number.isFinite(x.hotC)).map((x) => x.hotC as number);
     const warmEndMax = warmEnd == null || inMax == null ? null : measured ? (hotSoFar.length ? r0(Math.max(...hotSoFar)) : null) : r0(inMax + warmEnd);
-    const rainVals = dayHours.filter((h) => h.rainPct != null).map((h) => h.rainPct as number);
-    const dayWx = summarizeDayWeather(dayHours);
+    const dayWx = summarizeDayWeather(dayHours, false);
+    const nightHours = hours.filter((h) => h.t >= nightPeriod.start && h.t < nightPeriod.end);
+    const nightSum = summarizeDayWeather(nightHours, true);
     outlook.push({ label: dDate === today0 ? "Today" : dDate === tomorrow0 ? "Tomorrow" : p.label, dayMax, nightMin,
       hot: dayMax != null && dayMax >= t.hotDayC,
       // Cold by the outside forecast or by the house's likely low (same rule as the cold-night prompt).
@@ -458,8 +464,8 @@ export function buildVentilation(input: VentInput): VentView {
       insideMinLikely: nightMin != null && nightOff != null && r0(nightMin + nightOff) <= t.coldNightC ? r0(nightMin + nightOff) : null,
       insideMax: inMax, insideHot: (inMax ?? -Infinity) >= t.insideHotC, insideMeasured: measured,
       warmEndMax: warmEndMax != null && warmEndMax > (inMax ?? Infinity) ? warmEndMax : null,
-      rainPct: rainVals.length ? r0(Math.max(...rainVals)) : null,
-      wx: dayWx.condition, precipMm: dayWx.precipMm, windKmh: dayWx.windKmh });
+      rainPct: dayWx.rainPct, wx: dayWx.condition, precipMm: dayWx.precipMm, windKmh: dayWx.windKmh,
+      nightWx: nightSum.condition, nightRainPct: nightSum.rainPct, nightPrecipMm: nightSum.precipMm, nightWindKmh: nightSum.windKmh });
   }
 
   // ── Prompts ─────────────────────────────────────────────────────────────────
@@ -741,26 +747,26 @@ export function describeWeather(o: { code?: number | null; night?: boolean; rain
   return weatherFromProxies(o);
 }
 
-/** Daylight summary: the most severe code, total rain (mm) and the strongest wind (km/h). */
-export function summarizeDayWeather(hours: OutsideHour[]): { condition: WeatherCondition | null; precipMm: number | null; windKmh: number | null } {
-  if (!hours.length) return { condition: null, precipMm: null, windKmh: null };
+/** Most severe code, total rain (mm), highest rain chance and strongest wind (km/h).
+ *  `night` uses the moon for clear and partly cloudy. */
+export function summarizeDayWeather(hours: OutsideHour[], night = false): { condition: WeatherCondition | null; precipMm: number | null; windKmh: number | null; rainPct: number | null } {
+  if (!hours.length) return { condition: null, precipMm: null, windKmh: null, rainPct: null };
   const codes = hours.map((h) => h.weatherCode).filter((c): c is number => c != null && Number.isFinite(c) && WMO[c] != null);
   const precips = hours.map((h) => h.precipMm).filter((v): v is number => v != null && Number.isFinite(v));
   const winds = hours.map((h) => h.windKmh).filter((v): v is number => v != null && Number.isFinite(v));
   const clouds = hours.map((h) => h.cloudPct).filter((v): v is number => v != null && Number.isFinite(v));
   const rains = hours.map((h) => h.rainPct).filter((v): v is number => v != null && Number.isFinite(v));
   const best = codes.reduce<number | null>((top, c) => (top == null || WMO[c].rank > WMO[top].rank ? c : top), null);
+  const rainPct = rains.length ? Math.max(...rains) : null;
+  const precipMm = precips.length ? precips.reduce((a, b) => a + b, 0) : null;
   const condition = best != null
-    ? weatherFromCode(best, false)
-    : weatherFromProxies({
-      rainPct: rains.length ? Math.max(...rains) : null,
-      precipMm: precips.length ? precips.reduce((a, b) => a + b, 0) : null,
-      cloudPct: clouds.length ? clouds.reduce((a, b) => a + b, 0) / clouds.length : null,
-    });
+    ? weatherFromCode(best, night)
+    : weatherFromProxies({ rainPct, precipMm, cloudPct: clouds.length ? clouds.reduce((a, b) => a + b, 0) / clouds.length : null, night });
   return {
     condition,
-    precipMm: precips.length ? r1(precips.reduce((a, b) => a + b, 0)) : null,
+    precipMm: precipMm != null ? r1(precipMm) : null,
     windKmh: winds.length ? r0(Math.max(...winds)) : null,
+    rainPct: rainPct != null ? r0(rainPct) : null,
   };
 }
 

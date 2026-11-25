@@ -92,16 +92,16 @@ export default function VentilationView({ data, now, narrow = false }: { data: V
       <MonthChart data={data} now={now} narrow={narrow} card={card} h2={h2} />
 
       {v.hasForecast && (
-        <section style={card} aria-label="Outside forecast">
-          <h2 style={h2}>Outside forecast</h2>
+        <section style={{ ...card, padding: narrow ? 8 : 10 }} aria-label="Outside forecast">
+          <h2 style={{ ...h2, margin: "0 0 6px" }}>Outside forecast</h2>
           {v.outsideNow != null && v.outsideNowWx && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }} aria-label={`Outside now, ${Math.round(v.outsideNow)}°, ${v.outsideNowWx.label}`}>
-              <WeatherIcon name={v.outsideNowWx.icon} size={narrow ? 26 : 30} />
-              <span style={{ fontSize: narrow ? 18 : 20, fontWeight: 800, color: INK, fontFamily: "var(--font-d)", lineHeight: 1 }}>{Math.round(v.outsideNow)}°C</span>
-              <span style={{ fontSize: 13, color: "var(--t2)", fontWeight: 650 }}>{v.outsideNowWx.label}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }} aria-label={`Outside now, ${Math.round(v.outsideNow)}°, ${v.outsideNowWx.label}`}>
+              <WeatherIcon name={v.outsideNowWx.icon} size={22} />
+              <span style={{ fontSize: 16, fontWeight: 800, color: INK, fontFamily: "var(--font-d)", lineHeight: 1 }}>{Math.round(v.outsideNow)}°C</span>
+              <span style={{ fontSize: 12, color: "var(--t2)", fontWeight: 650 }}>{v.outsideNowWx.label}</span>
             </div>
           )}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: narrow ? 6 : 8, alignItems: "stretch" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: narrow ? 4 : 6, alignItems: "stretch" }}>
             {v.outlook.map((d, i) => <ForecastTile key={`${d.label}-${i}`} d={d} narrow={narrow} />)}
           </div>
         </section>
@@ -134,22 +134,36 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
+function ForecastHalf({ title, wx, temp, emphasize, rainPct, precipMm, windKmh, narrow }: { title: string; wx: DayOutlook["wx"]; temp: string; emphasize: boolean; rainPct: number | null; precipMm: number | null; windKmh: number | null; narrow: boolean }) {
+  const chance = rainPct != null && rainPct > 0 ? `${rainPct}%` : null;
+  const rain = [chance, precipMm != null && precipMm > 0 ? `${precipMm} mm` : null].filter(Boolean).join(" · ");
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, width: "100%" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}>
+        <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.04em", textTransform: "uppercase", color: MUTED }}>{title}</span>
+        {wx && <WeatherIcon name={wx.icon} size={narrow ? 16 : 18} />}
+        <span style={{ fontSize: emphasize ? (narrow ? 15 : 17) : (narrow ? 13 : 14), fontWeight: emphasize ? 800 : 700, color: emphasize ? INK : MUTED, fontFamily: "var(--font-d)", lineHeight: 1 }}>{temp}</span>
+      </div>
+      {wx && <div style={{ fontSize: 10, fontWeight: 650, color: INK, lineHeight: 1.15 }}>{wx.label}</div>}
+      {(rain || windKmh != null) && (
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 10, fontWeight: 650, lineHeight: 1.15 }}>
+          {rain && <span style={{ display: "inline-flex", alignItems: "center", gap: 2, color: "#1D4ED8" }}><Droplet size={9} />{rain}</span>}
+          {windKmh != null && <span style={{ display: "inline-flex", alignItems: "center", gap: 2, color: MUTED }}><WindMark size={9} />{windKmh} km/h</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ForecastTile({ d, narrow }: { d: DayOutlook; narrow: boolean }) {
-  const chance = d.rainPct != null && d.rainPct > 0 ? `${d.rainPct}%` : null;
-  const rain = [chance, d.precipMm != null && d.precipMm > 0 ? `${d.precipMm} mm` : null].filter(Boolean).join(" · ");
   const high = d.dayMax == null ? "–" : `${Math.round(d.dayMax)}°`;
   const low = d.nightMin == null ? "–" : `${Math.round(d.nightMin)}°`;
   return (
-    <div style={{ height: "100%", boxSizing: "border-box", borderRadius: 8, background: "rgba(0,0,0,0.03)", padding: narrow ? "6px 4px" : "8px 6px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }} aria-label={`${d.label}${d.wx ? `, ${d.wx.label}` : ""}. High ${high}, low ${low}.`}>
-      <div style={{ fontSize: 11, fontWeight: 800, color: "var(--t2)" }}>{d.label}</div>
-      {d.wx && <div style={{ marginTop: 2, display: "flex", justifyContent: "center" }}><WeatherIcon name={d.wx.icon} size={narrow ? 26 : 34} /></div>}
-      {d.wx && <div style={{ fontSize: 11, fontWeight: 650, color: INK, lineHeight: 1.2, minHeight: 26, marginTop: 2 }}>{d.wx.label}</div>}
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "baseline", gap: 6, marginTop: 2 }}>
-        <span style={{ fontSize: narrow ? 18 : 22, fontWeight: 800, color: d.hot ? "#B45309" : INK, fontFamily: "var(--font-d)", lineHeight: 1 }}>{high}</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: d.cold ? "#1D4ED8" : MUTED }}>{low}</span>
-      </div>
-      {rain && <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 3, marginTop: 4, fontSize: 11, fontWeight: 700, color: "#1D4ED8" }}><Droplet />{rain}</div>}
-      {d.windKmh != null && <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 3, marginTop: 2, fontSize: 11, fontWeight: 650, color: MUTED }}><WindMark />{d.windKmh} km/h</div>}
+    <div style={{ height: "100%", boxSizing: "border-box", borderRadius: 8, background: "rgba(0,0,0,0.03)", padding: narrow ? "4px 2px" : "5px 4px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }} aria-label={`${d.label}. Day${d.wx ? `, ${d.wx.label}` : ""}, high ${high}. Night${d.nightWx ? `, ${d.nightWx.label}` : ""}, low ${low}.`}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: "var(--t2)", lineHeight: 1.1 }}>{d.label}</div>
+      <ForecastHalf title="Day" wx={d.wx} temp={high} emphasize rainPct={d.rainPct} precipMm={d.precipMm} windKmh={d.windKmh} narrow={narrow} />
+      <div style={{ width: "70%", height: 1, background: "var(--divider)" }} />
+      <ForecastHalf title="Night" wx={d.nightWx} temp={low} emphasize={false} rainPct={d.nightRainPct} precipMm={d.nightPrecipMm} windKmh={d.nightWindKmh} narrow={narrow} />
     </div>
   );
 }

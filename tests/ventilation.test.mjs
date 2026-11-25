@@ -612,6 +612,47 @@ test('outlook renders 3 forecast days from 5 days of hourly data', () => {
   assert.equal(day.outlook.length, 3);
 });
 
+test('forecast tile splits sunrise–sunset from the following night', () => {
+  // 10:00 SAST. Sunrise 05:00, sunset 19:00. Day code 61 must not leak into the night; night code 2 is the moon.
+  const now = Date.parse('2026-11-25T08:00:00Z');
+  const offset = 2;
+  const mid = (date) => Date.parse(`${date}T00:00:00Z`) - offset * H;
+  const sun = [0, 1, 2, 3, 4].map((i) => ({
+    sunrise: mid('2026-11-25') + i * 24 * H + 5 * H,
+    sunset: mid('2026-11-25') + i * 24 * H + 19 * H,
+  }));
+  const hours = [];
+  for (let d = 0; d < 5; d++) {
+    for (let h = 0; h < 24; h++) {
+      const t = mid('2026-11-25') + d * 24 * H + h * H;
+      const daylight = h >= 5 && h < 19;
+      const tonight = d === 0 ? !daylight : d === 1 && h < 5;
+      hours.push({
+        t, tempC: daylight ? 26 : 14, rhPct: 50,
+        rainPct: d === 0 && daylight ? 63 : tonight ? 40 : 0,
+        windKmh: daylight ? 19 : 8,
+        weatherCode: d === 0 && daylight ? 61 : tonight ? 2 : daylight ? 0 : 0,
+        precipMm: d === 0 && daylight ? 1 : tonight ? 0.5 : 0,
+        cloudPct: 10,
+      });
+    }
+  }
+  const v = V.buildVentilation({ now, outside: hours, sun, inside: [], offsetHours: offset });
+  const today = v.outlook[0];
+  assert.equal(today.label, 'Today');
+  assert.equal(today.dayMax, 26);
+  assert.equal(today.nightMin, 14);
+  assert.deepEqual(plain(today.wx), { icon: 'rain', label: 'Light rain' });
+  assert.equal(today.rainPct, 63);
+  assert.equal(today.windKmh, 19);
+  assert.equal(today.precipMm, 14); // 05:00–18:00, one hour each
+  assert.deepEqual(plain(today.nightWx), { icon: 'partly-night', label: 'Partly cloudy' });
+  assert.equal(today.nightRainPct, 40);
+  assert.equal(today.nightWindKmh, 8);
+  assert.equal(today.nightPrecipMm, 5); // 19:00–04:00
+  assert.notEqual(today.nightWx.icon, 'rain');
+});
+
 test('hourly outside for the page drops history only the 30-day sun span needed', () => {
   const now = Date.parse('2026-11-21T10:00:00Z');
   const hour = (ms, tempC) => ({ t: ms, tempC, rhPct: 50, rainPct: 0, windKmh: 10 });
