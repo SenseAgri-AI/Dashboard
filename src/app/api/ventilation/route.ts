@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { getFarmForRequest, FarmAccessError, validLocation } from "@/lib/farms";
 import { queryInflux } from "@/lib/influxdb";
-import { mergeVentThresholds, parseOpenMeteo } from "@/lib/ventilation";
+import { mergeVentThresholds, outsideForPage, parseOpenMeteo } from "@/lib/ventilation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// Ventilation page data: inside climate (30-min averages, last 8 days, read-only) plus the outside
+// Ventilation page data: inside climate (30-min averages, last 30 days, read-only) plus the outside
 // forecast from Open-Meteo (free, no key) for the farm's configured location. Either part may be
-// missing; the page says which.
+// missing; the page says which. Sunrise/sunset cover the same 30 days so the month chart can split
+// day and night. Suggestions still use only the recent window.
 
 function toMs(t: unknown): number | null {
   if (t == null) return null;
@@ -31,8 +32,8 @@ function json(body: unknown, status = 200) {
 async function forecast(loc: { lat: number; lon: number }) {
   const url = "https://api.open-meteo.com/v1/forecast"
     + `?latitude=${loc.lat}&longitude=${loc.lon}`
-    + "&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,wind_speed_10m,wind_gusts_10m"
-    + "&daily=sunrise,sunset&past_days=8&forecast_days=4&timezone=GMT&timeformat=unixtime";
+    + "&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,precipitation,cloud_cover,weather_code,wind_speed_10m,wind_gusts_10m"
+    + "&daily=sunrise,sunset&past_days=30&forecast_days=7&timezone=GMT&timeformat=unixtime";
   // Story: if the weather service hangs, I still want the inside readings, not a page that spins forever.
   const res = await fetch(url, { next: { revalidate: 1800 }, signal: AbortSignal.timeout(FORECAST_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
@@ -53,7 +54,7 @@ export async function GET() {
       SELECT date_bin(INTERVAL '30 minutes', time, TIMESTAMP '1970-01-01 00:00:00') AS bucket,
         AVG(temperature) AS temperature, AVG(humidity) AS humidity, AVG(co2) AS co2, MAX(temperature) AS temperature_max
       FROM sensors
-      WHERE farm_id = '${String(farm.farmId).replace(/'/g, "''")}' AND device_type = 'AM308-1' AND time > now() - INTERVAL '8 days'
+      WHERE farm_id = '${String(farm.farmId).replace(/'/g, "''")}' AND device_type = 'AM308-1' AND time > now() - INTERVAL '30 days'
       GROUP BY bucket ORDER BY bucket ASC
     `),
     location ? forecast(location) : Promise.resolve(null),
@@ -71,7 +72,8 @@ export async function GET() {
         .map((r) => ({ t: toMs(r.bucket), tempC: num(r.temperature), rhPct: num(r.humidity), co2: num(r.co2), hotC: num(r.temperature_max) }))
         .filter((r) => r.t != null)
       : null,
-    outside: outside?.outside ?? null,
+    // Hourly outside is only what suggestions and the forecast chart read. Sun stays the full 30 days.
+    outside: outside?.outside ? outsideForPage(outside.outside, Date.now()) : null,
     sun: outside?.sun ?? [],
     forecastError: location != null && outside == null,
     thresholds: mergeVentThresholds(farm.ventilation),

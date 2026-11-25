@@ -30,6 +30,8 @@ test('ventilation route: inside points carry the warmest reading as hotC and do 
   const res = await api.GET();
   assert.match(sql, /MAX\(temperature\) AS temperature_max/);
   assert.match(sql, /device_type = 'AM308-1'/);
+  assert.match(sql, /INTERVAL '30 days'/);
+  assert.match(sql, /INTERVAL '30 minutes'/);
   assert.doesNotMatch(sql, /EM300|EM411|radar|feed|pulse|silo/i);
   assert.equal(res.body.hasLocation, false);
   assert.equal(res.headers['Cache-Control'], 'private, no-store');
@@ -49,10 +51,37 @@ test('ventilation route: forecast fetch has a timeout; a failed forecast still r
   const res = await api.GET();
   assert.ok(init.signal instanceof AbortSignal);
   assert.match(url, /latitude=0&longitude=0/);
+  assert.match(url, /past_days=30/);
+  assert.match(url, /weather_code/);
+  assert.match(url, /precipitation,/);
+  assert.match(url, /cloud_cover/);
   assert.equal(res.body.forecastError, true);
   assert.equal(res.body.hasLocation, true);
   assert.equal(res.body.inside.length, 1);
   assert.equal(res.headers['Cache-Control'], 'private, no-store');
+  noCoords(res.body);
+});
+
+test('ventilation route: hourly outside is trimmed to the page window; sunrise and sunset are not', async () => {
+  const vent = load('src/lib/ventilation.ts', { './thi': { feltTemp: () => 0, plausibleClimate: () => false } });
+  const now = Date.now();
+  const day = 24 * 3_600_000;
+  const hours = [];
+  for (let d = -30; d <= 6; d++) hours.push({ t: now + d * day, tempC: 20 + d, rhPct: 50, rainPct: 0, windKmh: 10, gustKmh: null });
+  const sun = Array.from({ length: 34 }, (_, i) => ({ sunrise: now + (i - 30) * day, sunset: now + (i - 30) * day + 12 * 3_600_000 }));
+  const api = load('src/app/api/ventilation/route.ts', {
+    'next/server': { NextResponse: { json } },
+    '@/lib/farms': { FarmAccessError, validLocation: () => ({ lat: 0, lon: 0 }), getFarmForRequest: async () => ({ farmId: 'f1', timezoneOffset: 2 }) },
+    '@/lib/ventilation': { mergeVentThresholds: () => ({}), parseOpenMeteo: () => ({ outside: hours, sun }), outsideForPage: vent.outsideForPage },
+    '@/lib/influxdb': { queryInflux: async () => [] },
+  }, { fetch: async () => ({ ok: true, json: async () => ({}) }), AbortSignal });
+  const res = await api.GET();
+  const ts = res.body.outside.map((h) => h.t);
+  assert.ok(ts.length > 0 && ts.length < hours.length);
+  assert.ok(ts.every((t) => t >= now - vent.OUTSIDE_KEEP_BACK_MS && t <= now + vent.OUTSIDE_KEEP_AHEAD_MS));
+  assert.ok(ts.some((t) => t <= now - 24 * 3_600_000)); // suggestions need more than the chart's last 24 h
+  assert.equal(res.body.sun.length, sun.length);
+  assert.equal(res.body.forecastError, false);
   noCoords(res.body);
 });
 

@@ -181,7 +181,7 @@ test('no forecast (no location): inside still shown, no outside prompts', () => 
 
 test('Open-Meteo parsing', () => {
   const p = V.parseOpenMeteo({ hourly: { time: [1, 2], temperature_2m: [10, null], relative_humidity_2m: [50, 60] }, daily: { sunrise: [100], sunset: [200] } });
-  assert.deepEqual(plain(p), { outside: [{ t: 1000, tempC: 10, rhPct: 50, rainPct: null, windKmh: null, gustKmh: null }], sun: [{ sunrise: 100000, sunset: 200000 }] });
+  assert.deepEqual(plain(p), { outside: [{ t: 1000, tempC: 10, rhPct: 50, rainPct: null, windKmh: null, gustKmh: null, weatherCode: null, precipMm: null, cloudPct: null }], sun: [{ sunrise: 100000, sunset: 200000 }] });
   assert.equal(V.parseOpenMeteo({ error: true }), null);
 });
 
@@ -460,4 +460,209 @@ test('"Cooler outside now" stays quiet when the hot-day prompt already says fans
   // evening, heat over and no hot prompt today: the flush suggestion is back
   const o2 = outside((h, d) => (d === 8 ? (h >= 8 && h <= 9 ? 33 : 25) : 22));
   assert.ok(ids(view(o2, inside((h, d) => ({ tempC: d === 8 && h >= 11 ? 31 : 24, rhPct: 40, co2: 800 })))).includes('cooler-outside'));
+});
+
+test('inside day and night over 30 days: avg, min, max, and a short period is skipped', () => {
+  // SAST (UTC+2). 12:00 on 1 Nov. Days without sun times use 06:00–18:00. 1 Nov uses sunrise 05:00, sunset 19:00.
+  const now = Date.parse('2026-11-01T10:00:00Z');
+  const mid = (date) => Date.parse(`${date}T00:00:00Z`) - 2 * H;
+  const at = (date, hour) => mid(date) + hour * H;
+  const pt = (t, tempC) => ({ t, tempC, rhPct: 60, co2: 900 });
+  const sunNov = [{ sunrise: at('2026-11-01', 5), sunset: at('2026-11-01', 19) }];
+  const pts = [
+    // 31 Oct day, 06:00–18:00 fallback. 05:30 is still the previous night, not this day.
+    pt(at('2026-10-31', 5.5), 1),
+    pt(at('2026-10-31', 6), 10), pt(at('2026-10-31', 8), 20), pt(at('2026-10-31', 10), 30), pt(at('2026-10-31', 12), 40),
+    // 18:00 belongs to the night, not the day. Night runs until 1 Nov sunrise (05:00), not 06:00.
+    pt(at('2026-10-31', 18), 8), pt(at('2026-10-31', 21), 12), pt(at('2026-11-01', 0), 10), pt(at('2026-11-01', 3), 14), pt(at('2026-11-01', 4.5), 3),
+    // 05:30 is after sunrise, so it is today's day, not last night. A reading after now is ignored.
+    pt(at('2026-11-01', 5.5), 4), pt(at('2026-11-01', 8), 18), pt(at('2026-11-01', 10), 22), pt(at('2026-11-01', 12), 24),
+    pt(at('2026-11-01', 12.5), 50),
+    // 30 Oct day spans 1.5 h — skipped. Its night has 6 h and stays.
+    pt(at('2026-10-30', 6), 5), pt(at('2026-10-30', 7.5), 9),
+    pt(at('2026-10-30', 18), 9), pt(at('2026-10-30', 20), 10), pt(at('2026-10-30', 22), 11), pt(at('2026-11-01', 0) - 24 * H, 12),
+    // 29 Oct: exactly 2 h of day is kept. 1 h 59 min is not.
+    pt(at('2026-10-29', 6), 15), pt(at('2026-10-29', 8), 17),
+    pt(at('2026-10-28', 6), 1), pt(at('2026-10-28', 6) + 2 * H - 60_000, 2),
+  ];
+  const rows = V.insideDayNightTrend(pts, sunNov, now, 2);
+  assert.equal(rows.length, 30);
+  assert.equal(rows[0].date, '2026-10-03');
+  assert.equal(rows.at(-1).date, '2026-11-01');
+  const byDate = Object.fromEntries(rows.map((r) => [r.date, r]));
+  assert.deepEqual(plain(byDate['2026-10-31'].day), { avg: 25, min: 10, max: 40 });
+  assert.deepEqual(plain(byDate['2026-10-31'].night), { avg: 9.4, min: 3, max: 14 });
+  assert.deepEqual(plain(byDate['2026-11-01'].day), { avg: 17, min: 4, max: 24 });
+  assert.equal(byDate['2026-11-01'].night, null); // sunset is still ahead
+  assert.equal(byDate['2026-10-30'].day, null); // 1.5 h
+  assert.deepEqual(plain(byDate['2026-10-30'].night), { avg: 8.6, min: 1, max: 12 }); // includes 05:30 the next morning
+  assert.deepEqual(plain(byDate['2026-10-29'].day), { avg: 16, min: 15, max: 17 }); // span of exactly 2 h
+  assert.equal(byDate['2026-10-28'].day, null); // 1 h 59 min
+  assert.equal(byDate['2026-10-03'].day, null);
+  assert.equal(byDate['2026-10-03'].night, null);
+  assert.ok(V.insideDayNightTrend([], [], now, 2).every((r) => r.day == null && r.night == null));
+});
+
+test('stale banner timestamp keeps a reading 9–30 days old that the 8-day suggestion window drops', () => {
+  const now = Date.parse('2026-11-21T10:00:00Z');
+  const daysAgo = (n) => now - n * 24 * H;
+  const pt = (t, tempC) => ({ t, tempC, rhPct: 60, co2: 800 });
+  // Newest plausible reading is 20 days old; a newer glitch and an older point must not win.
+  const full = [pt(daysAgo(25), 18), pt(daysAgo(20), 19), pt(daysAgo(1), 80)];
+  assert.equal(V.latestInsideAt(full), daysAgo(20));
+  assert.ok(daysAgo(20) <= daysAgo(9) && daysAgo(20) >= daysAgo(30));
+  const recentOnly = full.filter((x) => x.t > now - 8 * 24 * H);
+  assert.equal(V.latestInsideAt(recentOnly), null);
+  assert.equal(V.latestInsideAt([]), null);
+  // a reading inside the last 8 days still wins
+  assert.equal(V.latestInsideAt([...full, pt(now - 2 * H, 22)]), now - 2 * H);
+});
+
+test('WMO weather code maps to an icon and a short condition', () => {
+  const wx = (code, night) => plain(V.weatherFromCode(code, night));
+  assert.deepEqual(wx(0, false), { icon: 'sun', label: 'Clear' });
+  assert.deepEqual(wx(0, true), { icon: 'moon', label: 'Clear' });
+  assert.deepEqual(wx(1, true), { icon: 'moon', label: 'Mainly clear' });
+  assert.deepEqual(wx(2, false), { icon: 'partly', label: 'Partly cloudy' });
+  assert.deepEqual(wx(2, true), { icon: 'partly-night', label: 'Partly cloudy' });
+  assert.deepEqual(wx(3), { icon: 'cloud', label: 'Overcast' });
+  assert.deepEqual(wx(45), { icon: 'fog', label: 'Fog' });
+  assert.deepEqual(wx(48), { icon: 'fog', label: 'Fog' });
+  assert.deepEqual(wx(51), { icon: 'rain', label: 'Light rain' });
+  assert.deepEqual(wx(61), { icon: 'rain', label: 'Light rain' });
+  assert.deepEqual(wx(80), { icon: 'rain', label: 'Light rain' });
+  assert.deepEqual(wx(63), { icon: 'heavy-rain', label: 'Rain' });
+  assert.deepEqual(wx(65), { icon: 'heavy-rain', label: 'Heavy rain' });
+  assert.deepEqual(wx(82), { icon: 'heavy-rain', label: 'Heavy rain' });
+  assert.deepEqual(wx(56), { icon: 'rain', label: 'Light freezing rain' });
+  assert.deepEqual(wx(57), { icon: 'heavy-rain', label: 'Freezing rain' });
+  assert.deepEqual(wx(66), { icon: 'heavy-rain', label: 'Freezing rain' });
+  assert.deepEqual(wx(67), { icon: 'heavy-rain', label: 'Heavy freezing rain' });
+  assert.deepEqual(wx(95), { icon: 'thunder', label: 'Thunderstorm' });
+  assert.deepEqual(wx(96), { icon: 'thunder', label: 'Thunderstorm' });
+  assert.deepEqual(wx(97), { icon: 'thunder', label: 'Thunderstorm' });
+  assert.deepEqual(wx(99), { icon: 'thunder', label: 'Thunderstorm' });
+  assert.deepEqual(wx(71), { icon: 'snow', label: 'Light snow' });
+  assert.deepEqual(wx(75), { icon: 'snow', label: 'Heavy snow' });
+  assert.equal(V.weatherFromCode(123), null);
+  // a known code wins over rain/cloud proxies
+  assert.deepEqual(plain(V.describeWeather({ code: 0, rainPct: 90, precipMm: 20, cloudPct: 100 })), { icon: 'sun', label: 'Clear' });
+  assert.deepEqual(plain(V.describeWeather({ code: 123, rainPct: 90 })), { icon: 'heavy-rain', label: 'Heavy rain' });
+});
+
+test('without a weather code, condition follows rain, rainfall and cloud', () => {
+  assert.deepEqual(plain(V.weatherFromProxies({ rainPct: 90, precipMm: 12 })), { icon: 'heavy-rain', label: 'Heavy rain' });
+  assert.deepEqual(plain(V.weatherFromProxies({ rainPct: 55, precipMm: 3 })), { icon: 'heavy-rain', label: 'Rain' });
+  assert.deepEqual(plain(V.weatherFromProxies({ rainPct: 35 })), { icon: 'rain', label: 'Light rain' });
+  assert.deepEqual(plain(V.weatherFromProxies({ cloudPct: 90 })), { icon: 'cloud', label: 'Overcast' });
+  assert.deepEqual(plain(V.weatherFromProxies({ cloudPct: 50 })), { icon: 'partly', label: 'Partly cloudy' });
+  assert.deepEqual(plain(V.weatherFromProxies({ cloudPct: 50, night: true })), { icon: 'partly-night', label: 'Partly cloudy' });
+  assert.deepEqual(plain(V.weatherFromProxies({ night: true })), { icon: 'moon', label: 'Clear' });
+  assert.deepEqual(plain(V.weatherFromProxies({})), { icon: 'sun', label: 'Clear' });
+  // daylight summary keeps the most severe code, sums rain and takes the strongest wind
+  const hours = [
+    { t: 0, tempC: 20, rhPct: null, rainPct: 20, windKmh: 10, weatherCode: 0, precipMm: 0, cloudPct: 10 },
+    { t: 1, tempC: 22, rhPct: null, rainPct: 80, windKmh: 28, weatherCode: 61, precipMm: 1.2, cloudPct: 70 },
+    { t: 2, tempC: 18, rhPct: null, rainPct: 90, windKmh: 14, weatherCode: 95, precipMm: 4.4, cloudPct: 100 },
+  ];
+  const day = V.summarizeDayWeather(hours);
+  assert.deepEqual(plain(day.condition), { icon: 'thunder', label: 'Thunderstorm' });
+  assert.equal(day.precipMm, 5.6);
+  assert.equal(day.windKmh, 28);
+  const derived = V.summarizeDayWeather(hours.map((h) => ({ ...h, weatherCode: null })));
+  assert.equal(derived.condition.icon, 'heavy-rain');
+  assert.equal(V.summarizeDayWeather([]).condition, null);
+});
+
+test('outlook renders 3 forecast days from 5 days of hourly data', () => {
+  // 20:45 SAST on Wed 25 Nov, after sunset. Sun only covers today and tomorrow; hours run 5 days ahead.
+  const now = Date.parse('2026-11-25T18:45:00Z');
+  const offset = 2;
+  const mid = (date) => Date.parse(`${date}T00:00:00Z`) - offset * H;
+  const sun = [0, 1].map((i) => ({
+    sunrise: mid('2026-11-25') + i * 24 * H + 5.3 * H,
+    sunset: mid('2026-11-25') + i * 24 * H + 18.67 * H,
+  }));
+  const hours = [];
+  for (let d = 0; d < 5; d++) {
+    for (let h = 0; h < 24; h++) {
+      hours.push({
+        t: mid('2026-11-25') + d * 24 * H + h * H,
+        tempC: 12 + (h >= 12 && h <= 16 ? 10 : 0),
+        rhPct: 50, rainPct: d === 1 ? 63 : 0, windKmh: 19,
+        weatherCode: d === 1 ? 61 : 0, precipMm: d === 1 ? 0.26 : 0, cloudPct: 20,
+      });
+    }
+  }
+  const evening = V.buildVentilation({ now, outside: V.outsideForPage(hours, now), sun, inside: [], offsetHours: offset });
+  assert.equal(evening.outlook.length, 3);
+  assert.deepEqual(plain(evening.outlook.map((d) => d.label)), ['Tomorrow', 'Fri', 'Sat']);
+  assert.ok(evening.outlook.every((d) => d.dayMax != null && d.nightMin != null));
+  // five real sun days and the same hours: still exactly three, starting tomorrow
+  const sun5 = [0, 1, 2, 3, 4].map((i) => ({
+    sunrise: mid('2026-11-25') + i * 24 * H + 5.3 * H,
+    sunset: mid('2026-11-25') + i * 24 * H + 18.67 * H,
+  }));
+  const full = V.buildVentilation({ now, outside: hours, sun: sun5, inside: [], offsetHours: offset });
+  assert.deepEqual(plain(full.outlook.map((d) => d.label)), ['Tomorrow', 'Fri', 'Sat']);
+  // midday still leads with today
+  const noon = Date.parse('2026-11-25T10:00:00Z');
+  const day = V.buildVentilation({ now: noon, outside: hours, sun: sun5, inside: [], offsetHours: offset });
+  assert.deepEqual(plain(day.outlook.map((d) => d.label)), ['Today', 'Tomorrow', 'Fri']);
+  assert.equal(day.outlook.length, 3);
+});
+
+test('forecast tile splits sunrise–sunset from the following night', () => {
+  // 10:00 SAST. Sunrise 05:00, sunset 19:00. Day code 61 must not leak into the night; night code 2 is the moon.
+  const now = Date.parse('2026-11-25T08:00:00Z');
+  const offset = 2;
+  const mid = (date) => Date.parse(`${date}T00:00:00Z`) - offset * H;
+  const sun = [0, 1, 2, 3, 4].map((i) => ({
+    sunrise: mid('2026-11-25') + i * 24 * H + 5 * H,
+    sunset: mid('2026-11-25') + i * 24 * H + 19 * H,
+  }));
+  const hours = [];
+  for (let d = 0; d < 5; d++) {
+    for (let h = 0; h < 24; h++) {
+      const t = mid('2026-11-25') + d * 24 * H + h * H;
+      const daylight = h >= 5 && h < 19;
+      const tonight = d === 0 ? !daylight : d === 1 && h < 5;
+      hours.push({
+        t, tempC: daylight ? 26 : 14, rhPct: 50,
+        rainPct: d === 0 && daylight ? 63 : tonight ? 40 : 0,
+        windKmh: daylight ? 19 : 8,
+        weatherCode: d === 0 && daylight ? 61 : tonight ? 2 : daylight ? 0 : 0,
+        precipMm: d === 0 && daylight ? 1 : tonight ? 0.5 : 0,
+        cloudPct: 10,
+      });
+    }
+  }
+  const v = V.buildVentilation({ now, outside: hours, sun, inside: [], offsetHours: offset });
+  const today = v.outlook[0];
+  assert.equal(today.label, 'Today');
+  assert.equal(today.dayMax, 26);
+  assert.equal(today.nightMin, 14);
+  assert.deepEqual(plain(today.wx), { icon: 'rain', label: 'Light rain' });
+  assert.equal(today.rainPct, 63);
+  assert.equal(today.windKmh, 19);
+  assert.equal(today.precipMm, 14); // 05:00–18:00, one hour each
+  assert.deepEqual(plain(today.nightWx), { icon: 'partly-night', label: 'Partly cloudy' });
+  assert.equal(today.nightRainPct, 40);
+  assert.equal(today.nightWindKmh, 8);
+  assert.equal(today.nightPrecipMm, 5); // 19:00–04:00
+  assert.notEqual(today.nightWx.icon, 'rain');
+});
+
+test('hourly outside for the page drops history only the 30-day sun span needed', () => {
+  const now = Date.parse('2026-11-21T10:00:00Z');
+  const hour = (ms, tempC) => ({ t: ms, tempC, rhPct: 50, rainPct: 0, windKmh: 10 });
+  const kept = V.outsideForPage([
+    hour(now - V.OUTSIDE_KEEP_BACK_MS - 1, 1),
+    hour(now - V.OUTSIDE_KEEP_BACK_MS, 2),
+    hour(now - 9 * 24 * H, 3),
+    hour(now, 4),
+    hour(now + V.OUTSIDE_KEEP_AHEAD_MS, 5),
+    hour(now + V.OUTSIDE_KEEP_AHEAD_MS + 1, 6),
+  ], now);
+  assert.deepEqual(kept.map((h) => h.tempC), [2, 3, 4, 5]);
 });

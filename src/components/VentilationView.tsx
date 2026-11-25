@@ -1,11 +1,12 @@
 "use client";
 
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { buildVentilation, localHHMM, periods, type InsidePoint, type OutsideHour, type PeriodRow, type SunDay, type VentThresholds } from "@/lib/ventilation";
+import { buildVentilation, insideDayNightTrend, latestInsideAt, localHHMM, periods, type DayOutlook, type InsidePoint, type OutsideHour, type SunDay, type VentThresholds } from "@/lib/ventilation";
+import WeatherIcon, { Droplet, WindMark } from "@/components/WeatherIcon";
 
-// Ventilation page body: suggestions first, then inside now, today/tonight outside vs inside, the
-// next 3 days and one chart. Rules and the user story behind each block: lib/ventilation.ts and
-// docs/ventilation.md. Presentational only, so it can be previewed with mock data.
+// Ventilation page body: suggestions first, then inside now, the last 30 days day vs night,
+// the next 3 days and the forecast chart. Rules and the user story behind each block:
+// lib/ventilation.ts and docs/ventilation.md. Presentational only, so it can be previewed with mock data.
 
 export type VentData = {
   hasLocation: boolean;
@@ -22,15 +23,21 @@ const INK = "var(--t1)";
 const MUTED = "var(--t3)";
 const OUT_C = "#D97706";
 const IN_C = "#0F766E";
+const DAY_C = "#D97706"; // warm amber — daytime inside
+const NIGHT_C = "#5B6B7C"; // cool blue-grey — night inside
 const LEVEL = {
   act: { dot: "#D97706", bg: "rgba(217,119,6,0.10)", text: "#92400E", word: "Soon" },
   plan: { dot: "#2A8E9A", bg: "rgba(42,142,154,0.08)", text: "#134E4A", word: "Plan" },
 };
 const fmt = (v: number | null | undefined, unit = "°C") => (v == null ? "–" : `${Math.round(v)}${unit}`);
-const range = (r: { min: number; max: number } | null) => (r ? `${Math.round(r.min)}–${Math.round(r.max)}°C` : "–");
 
 export default function VentilationView({ data, now, narrow = false }: { data: VentData; now: number; narrow?: boolean }) {
-  const v = buildVentilation({ now, outside: data.outside, sun: data.sun, inside: data.inside ?? [], offsetHours: data.offsetHours, thresholds: data.thresholds });
+  // Suggestions still read the last 8 days, the window they were tuned on. The month chart and the
+  // stale banner use the full 30-day series, so a reading older than 8 days is not reported as "none".
+  const insideAll = data.inside ?? [];
+  const recentInside = insideAll.filter((x) => x.t > now - 8 * 24 * H);
+  const v = buildVentilation({ now, outside: data.outside, sun: data.sun, inside: recentInside, offsetHours: data.offsetHours, thresholds: data.thresholds });
+  const lastInsideAt = latestInsideAt(insideAll);
   const t = data.thresholds;
   const card: React.CSSProperties = { background: "#fff", border: "1px solid var(--divider)", borderRadius: 10, padding: narrow ? 12 : 16 };
   const h2: React.CSSProperties = { fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", color: MUTED, margin: "0 0 8px" };
@@ -79,38 +86,24 @@ export default function VentilationView({ data, now, narrow = false }: { data: V
             <Stat label="Chill estimate" value={v.insideNow.chillEstC != null ? `≈${fmt(v.insideNow.chillEstC)}` : "–"} sub={`feels (≤ actual) − ${t.chillOffsetC} °C, rough`} />
             <Stat label="CO₂" value={v.insideNow.co2 != null ? `${v.insideNow.co2.toLocaleString("en-ZA")}` : "–"} sub="ppm" />
           </div>
-        ) : <InsideStale lastAt={v.insideLastAt} now={now} offset={data.offsetHours} />}
+        ) : <InsideStale lastAt={lastInsideAt} now={now} offset={data.offsetHours} />}
       </section>
 
-      {/* Today & tonight */}
-      <section style={card} aria-label="Today and tonight">
-        <h2 style={h2}>{v.today?.when === "tomorrow" ? "Tomorrow" : "Today & tonight"} · outside vs inside</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <PeriodBox title="Day" row={v.today} offset={data.offsetHours} insideLabel={!v.today?.upcoming ? "inside so far" : v.today.insideWhen === "yesterday" ? "inside yesterday (measured)" : "inside today (measured)"} usualLabel="usual day" lastAt={v.insideLastAt} now={now} />
-          <PeriodBox title="Night" row={v.tonight} offset={data.offsetHours} insideLabel="inside last night" usualLabel="usual night" lastAt={v.insideLastAt} now={now} />
-        </div>
-      </section>
+      <MonthChart data={data} now={now} narrow={narrow} card={card} h2={h2} />
 
-      {/* Next 3 days */}
       {v.hasForecast && (
-        <section style={card} aria-label="Next 3 days">
-          <h2 style={h2}>Next 3 days{v.outlook.some((d) => d.insideMax != null) ? "" : " · outside"}</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-            {v.outlook.map((d) => (
-              <div key={d.label} style={{ borderRadius: 8, background: "rgba(0,0,0,0.03)", padding: "8px 10px" }}>
-                <div style={{ fontSize: 11, fontWeight: 800, color: "var(--t2)" }}>{d.label}</div>
-                <div style={{ fontSize: 13, marginTop: 4, color: d.hot ? "#B45309" : INK, fontWeight: d.hot ? 800 : 600 }}>☀ {fmt(d.dayMax)}</div>
-                {d.insideMax != null && <div title={d.insideMeasured ? "Measured inside peak today" : "Likely inside peak"} style={{ fontSize: 12, marginBottom: 2, color: d.insideHot ? "#B91C1C" : "var(--t2)", fontWeight: d.insideHot ? 800 : 600 }}>{d.insideMeasured ? `inside ${fmt(d.insideMax)} (peak)` : `inside ~${fmt(d.insideMax)}`}</div>}
-                {d.warmEndMax != null && <div title={d.insideMeasured ? "Warmest sensor's peak today" : "Likely peak at the warmest sensor"} style={{ fontSize: 11, marginBottom: 2, color: d.warmEndMax >= t.insideHotC ? "#B91C1C" : "var(--t3)", fontWeight: 600 }}>{d.insideMeasured ? `warmest ${fmt(d.warmEndMax)}` : `warmest ~${fmt(d.warmEndMax)}`}</div>}
-                <div style={{ fontSize: 13, color: d.cold ? "#1D4ED8" : INK, fontWeight: d.cold ? 800 : 600 }}>☾ {fmt(d.nightMin)}</div>
-                {d.insideMinLikely != null && <div title="Likely inside low tonight, from how the house ran on recent nights" style={{ fontSize: 12, color: "#1D4ED8", fontWeight: 800 }}>inside ~{fmt(d.insideMinLikely)}</div>}
-                {d.rainPct != null && d.rainPct >= t.stormRainPct && <div title="Highest daytime rain chance" style={{ fontSize: 12, marginTop: 2, color: "#1D4ED8", fontWeight: 700 }}>☂ {d.rainPct}%</div>}
-              </div>
-            ))}
+        <section style={{ ...card, padding: narrow ? 8 : 10 }} aria-label="Outside forecast">
+          <h2 style={{ ...h2, margin: "0 0 6px" }}>Outside forecast</h2>
+          {v.outsideNow != null && v.outsideNowWx && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }} aria-label={`Outside now, ${Math.round(v.outsideNow)}°, ${v.outsideNowWx.label}`}>
+              <WeatherIcon name={v.outsideNowWx.icon} size={22} />
+              <span style={{ fontSize: 16, fontWeight: 800, color: INK, fontFamily: "var(--font-d)", lineHeight: 1 }}>{Math.round(v.outsideNow)}°C</span>
+              <span style={{ fontSize: 12, color: "var(--t2)", fontWeight: 650 }}>{v.outsideNowWx.label}</span>
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: narrow ? 4 : 6, alignItems: "stretch" }}>
+            {v.outlook.map((d, i) => <ForecastTile key={`${d.label}-${i}`} d={d} narrow={narrow} />)}
           </div>
-          {(v.outlook.some((d) => d.insideMax != null || d.insideMinLikely != null) || v.outlook.some((d) => (d.rainPct ?? 0) >= t.stormRainPct)) && <div style={{ fontSize: 11, color: "var(--t3)", marginTop: 6 }}>
-            ☀ high and ☾ low are outside.{v.outlook.some((d) => d.insideMax != null) && " “inside ~” is the likely house peak, from how it ran on recent warm days."}{v.outlook.some((d) => d.warmEndMax != null) && " “warmest” is the warmest house sensor, which usually runs hotter than the house average."}{v.outlook.some((d) => d.insideMinLikely != null) && " Blue “inside ~” under ☾ is the likely house low on a cold night."}{v.outlook.some((d) => (d.rainPct ?? 0) >= t.stormRainPct) && " ☂ = highest daytime rain chance."}
-          </div>}
         </section>
       )}
 
@@ -125,7 +118,7 @@ function InsideStale({ lastAt, now, offset }: { lastAt: number | null; now: numb
   const age = h == null ? null : h < 36 ? `${Math.max(2, Math.round(h))} h ago` : `${Math.round(h / 24)} days ago`;
   return (
     <div style={{ fontSize: 13, color: "var(--warn)", background: "var(--warn-bg)", borderRadius: 8, padding: "8px 10px" }}>
-      {lastAt == null ? "No inside readings in the last 8 days." : `No inside reading since ${h! >= 20 ? `${new Date(lastAt + offset * H).toLocaleDateString("en-ZA", { timeZone: "UTC", day: "numeric", month: "short" })} ` : ""}${localHHMM(lastAt, offset)} (${age}).`}
+      {lastAt == null ? "No inside readings in the last 30 days." : `No inside reading since ${h! >= 20 ? `${new Date(lastAt + offset * H).toLocaleDateString("en-ZA", { timeZone: "UTC", day: "numeric", month: "short" })} ` : ""}${localHHMM(lastAt, offset)} (${age}).`}
       {" "}Check the climate sensor and gateway power. The numbers below may be old.
     </div>
   );
@@ -141,32 +134,103 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
-function PeriodBox({ title, row, offset, insideLabel, usualLabel, lastAt, now }: { title: string; row: PeriodRow | null; offset: number; insideLabel: string; usualLabel: string; lastAt: number | null; now: number }) {
-  if (!row) return <div style={{ fontSize: 13, color: MUTED }}>{title}: –</div>;
-  const p = row.period;
+function ForecastHalf({ title, wx, temp, emphasize, rainPct, precipMm, windKmh, narrow }: { title: string; wx: DayOutlook["wx"]; temp: string; emphasize: boolean; rainPct: number | null; precipMm: number | null; windKmh: number | null; narrow: boolean }) {
+  const chance = rainPct != null && rainPct > 0 ? `${rainPct}%` : null;
+  const rain = [chance, precipMm != null && precipMm > 0 ? `${precipMm} mm` : null].filter(Boolean).join(" · ");
   return (
-    <div style={{ borderRadius: 8, background: p.kind === "night" ? "rgba(30,58,138,0.06)" : "rgba(217,119,6,0.06)", padding: "10px 12px" }}>
-      <div style={{ fontSize: 11, fontWeight: 800, color: "var(--t2)" }}>{p.kind === "day" ? "☀" : "☾"} {title} · {localHHMM(p.start, offset)}–{localHHMM(p.end, offset)}</div>
-      <div style={{ marginTop: 6, fontSize: 12, color: MUTED }}>Outside (forecast)</div>
-      <div style={{ fontSize: 18, fontWeight: 800, color: OUT_C }}>{range(row.outside)}</div>
-      <div style={{ marginTop: 6, fontSize: 12, color: MUTED }}>{insideLabel}</div>
-      {row.inside
-        ? <div style={{ fontSize: 18, fontWeight: 800, color: IN_C }}>{range(row.inside)}</div>
-        : <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--warn)" }}>{noInsideReason(row, lastAt, now, offset)}</div>}
-      {row.insideUsual && <div style={{ fontSize: 11, color: MUTED }}>{usualLabel} {range(row.insideUsual)}</div>}
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, width: "100%" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}>
+        <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.04em", textTransform: "uppercase", color: MUTED }}>{title}</span>
+        {wx && <WeatherIcon name={wx.icon} size={narrow ? 16 : 18} />}
+        <span style={{ fontSize: emphasize ? (narrow ? 15 : 17) : (narrow ? 13 : 14), fontWeight: emphasize ? 800 : 700, color: emphasize ? INK : MUTED, fontFamily: "var(--font-d)", lineHeight: 1 }}>{temp}</span>
+      </div>
+      {wx && <div style={{ fontSize: 10, fontWeight: 650, color: INK, lineHeight: 1.15 }}>{wx.label}</div>}
+      {(rain || windKmh != null) && (
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, flexWrap: "wrap", fontSize: 10, fontWeight: 650, lineHeight: 1.15 }}>
+          {rain && <span style={{ display: "inline-flex", alignItems: "center", gap: 2, color: "#1D4ED8" }}><Droplet size={9} />{rain}</span>}
+          {windKmh != null && <span style={{ display: "inline-flex", alignItems: "center", gap: 2, color: MUTED }}><WindMark size={9} />{windKmh} km/h</span>}
+        </div>
+      )}
     </div>
   );
 }
 
-// Story: a blank inside figure should say why, so I know whether the sensor is down or it's just early.
-function noInsideReason(row: PeriodRow, lastAt: number | null, now: number, offset: number): string {
-  if (lastAt == null) return "No inside readings this week";
-  if (now - lastAt > 90 * 60_000) {
-    const day = new Date(lastAt + offset * H).toLocaleDateString("en-GB", { timeZone: "UTC", day: "numeric", month: "short" });
-    return `No inside reading since ${day}, ${localHHMM(lastAt, offset)}`;
-  }
-  if (!row.upcoming && row.period.start > now - 30 * 60_000) return "Day just started";
-  return "No inside readings in this period";
+function ForecastTile({ d, narrow }: { d: DayOutlook; narrow: boolean }) {
+  const high = d.dayMax == null ? "–" : `${Math.round(d.dayMax)}°`;
+  const low = d.nightMin == null ? "–" : `${Math.round(d.nightMin)}°`;
+  return (
+    <div style={{ height: "100%", boxSizing: "border-box", borderRadius: 8, background: "rgba(0,0,0,0.03)", padding: narrow ? "4px 2px" : "5px 4px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }} aria-label={`${d.label}. Day${d.wx ? `, ${d.wx.label}` : ""}, high ${high}. Night${d.nightWx ? `, ${d.nightWx.label}` : ""}, low ${low}.`}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: "var(--t2)", lineHeight: 1.1 }}>{d.label}</div>
+      <ForecastHalf title="Day" wx={d.wx} temp={high} emphasize rainPct={d.rainPct} precipMm={d.precipMm} windKmh={d.windKmh} narrow={narrow} />
+      <div style={{ width: "70%", height: 1, background: "var(--divider)" }} />
+      <ForecastHalf title="Night" wx={d.nightWx} temp={low} emphasize={false} rainPct={d.nightRainPct} precipMm={d.nightPrecipMm} windKmh={d.nightWindKmh} narrow={narrow} />
+    </div>
+  );
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+type MonthRow = {
+  t: number;
+  dayAvg: number | null; dayMin: number | null; dayMax: number | null; dayBase: number | null; daySpan: number | null;
+  nightAvg: number | null; nightMin: number | null; nightMax: number | null; nightBase: number | null; nightSpan: number | null;
+};
+
+function MonthChart({ data, now, narrow, card, h2 }: { data: VentData; now: number; narrow: boolean; card: React.CSSProperties; h2: React.CSSProperties }) {
+  const trend = insideDayNightTrend(data.inside ?? [], data.sun, now, data.offsetHours);
+  const rows: MonthRow[] = trend.map((r) => {
+    const t = Date.parse(`${r.date}T00:00:00Z`) - data.offsetHours * H;
+    return {
+      t,
+      dayAvg: r.day?.avg ?? null, dayMin: r.day?.min ?? null, dayMax: r.day?.max ?? null,
+      dayBase: r.day?.min ?? null, daySpan: r.day ? Math.round((r.day.max - r.day.min) * 10) / 10 : null,
+      nightAvg: r.night?.avg ?? null, nightMin: r.night?.min ?? null, nightMax: r.night?.max ?? null,
+      nightBase: r.night?.min ?? null, nightSpan: r.night ? Math.round((r.night.max - r.night.min) * 10) / 10 : null,
+    };
+  });
+  const temps = rows.flatMap((r) => [r.dayMin, r.dayMax, r.nightMin, r.nightMax]).filter((v): v is number => v != null);
+  const yLo = Math.floor(Math.min(...temps) - 1);
+  const yHi = Math.ceil(Math.max(...temps) + 1);
+  const tick = (ms: number) => {
+    const d = new Date(ms + data.offsetHours * H);
+    return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+  };
+  return (
+    <section style={card} aria-label="Inside last 30 days, day versus night">
+      <h2 style={h2}>Inside · last 30 days, <span style={{ color: DAY_C }}>day</span> vs <span style={{ color: NIGHT_C }}>night</span></h2>
+      {temps.length === 0 ? <div style={{ fontSize: 13, color: MUTED }}>No inside readings for the last 30 days.</div> : (
+        <ResponsiveContainer width="100%" height={narrow ? 168 : 200}>
+          <ComposedChart data={rows} margin={{ top: 4, right: 6, bottom: 0, left: -18 }}>
+            <CartesianGrid stroke="#EEF2F2" vertical={false} />
+            <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={tick} interval={4} tick={{ fontSize: 9, fill: "#5A6A6C" }} />
+            <YAxis tick={{ fontSize: 9, fill: "#5A6A6C" }} unit="°" domain={[yLo, yHi]} allowDataOverflow allowDecimals={false} />
+            <Area dataKey="dayBase" stackId="day" stroke="none" fill={DAY_C} fillOpacity={0} legendType="none" activeDot={false} connectNulls={false} isAnimationActive={false} />
+            <Area dataKey="daySpan" stackId="day" stroke="none" fill={DAY_C} fillOpacity={0.18} legendType="none" activeDot={false} connectNulls={false} isAnimationActive={false} />
+            <Area dataKey="nightBase" stackId="night" stroke="none" fill={NIGHT_C} fillOpacity={0} legendType="none" activeDot={false} connectNulls={false} isAnimationActive={false} />
+            <Area dataKey="nightSpan" stackId="night" stroke="none" fill={NIGHT_C} fillOpacity={0.22} legendType="none" activeDot={false} connectNulls={false} isAnimationActive={false} />
+            <Line dataKey="dayAvg" name="Day" stroke={DAY_C} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={false} />
+            <Line dataKey="nightAvg" name="Night" stroke={NIGHT_C} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={false} />
+            <Tooltip content={(props) => <MonthTip active={props.active} row={(props.payload?.[0] as { payload?: MonthRow } | undefined)?.payload} offset={data.offsetHours} />} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      )}
+    </section>
+  );
+}
+
+function MonthTip({ active, row, offset }: { active?: boolean; row?: MonthRow; offset: number }) {
+  if (!active || !row) return null;
+  const d = new Date(row.t + offset * H);
+  const label = `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+  const line = (name: string, avg: number | null, min: number | null, max: number | null, color: string) =>
+    avg == null || min == null || max == null ? null : <div style={{ color }}>{name} {avg.toFixed(1)}°C ({min.toFixed(1)}–{max.toFixed(1)})</div>;
+  return (
+    <div style={{ background: "#fff", border: "1px solid var(--divider)", padding: "6px 8px", fontSize: 11 }}>
+      <div style={{ fontWeight: 700, color: INK }}>{label}</div>
+      {line("Day", row.dayAvg, row.dayMin, row.dayMax, DAY_C)}
+      {line("Night", row.nightAvg, row.nightMin, row.nightMax, NIGHT_C)}
+    </div>
+  );
 }
 
 function TempChart({ data, now, narrow }: { data: VentData; now: number; narrow: boolean }) {

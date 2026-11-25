@@ -118,7 +118,18 @@ export function mergeVentThresholds(o?: unknown): VentThresholds {
   return out;
 }
 
-export type OutsideHour = { t: number; tempC: number; rhPct: number | null; rainPct: number | null; windKmh: number | null; gustKmh?: number | null };
+export type OutsideHour = {
+  t: number; tempC: number; rhPct: number | null; rainPct: number | null; windKmh: number | null; gustKmh?: number | null;
+  /** WMO code from Open-Meteo `weather_code`, when the forecast includes it. */
+  weatherCode?: number | null;
+  /** Hourly precipitation, millimetres. */
+  precipMm?: number | null;
+  /** Cloud cover, percent. */
+  cloudPct?: number | null;
+};
+/** Icon id for a forecast condition. Drawn as inline SVG; not an image URL. */
+export type WeatherIconName = "sun" | "moon" | "partly" | "partly-night" | "cloud" | "fog" | "rain" | "heavy-rain" | "thunder" | "snow";
+export type WeatherCondition = { icon: WeatherIconName; label: string };
 /** `hotC`: the warmest single reading in the bucket (the house has more than one sensor; `tempC` is their average). */
 export type InsidePoint = { t: number; tempC: number | null; rhPct: number | null; co2: number | null; hotC?: number | null };
 export type SunDay = { sunrise: number; sunset: number };
@@ -126,7 +137,7 @@ export type VentInput = {
   now: number;
   outside: OutsideHour[] | null;   // null = no forecast (no location or the API failed)
   sun: SunDay[];                   // ascending
-  inside: InsidePoint[];           // ascending, ~30-min buckets, last ~8 days
+  inside: InsidePoint[];           // ascending, ~30-min buckets, last ~30 days (rules use the recent window)
   offsetHours: number;             // farm local offset (SAST = 2)
   thresholds?: VentThresholds;
 };
@@ -138,6 +149,10 @@ export type Prompt = { id: string; level: "act" | "plan"; text: string; why: str
  *  `when`: the period's farm-local date vs now. `insideWhen`: the date of the `inside` range. */
 export type PeriodRow = { period: Period; outside: Range; inside: Range; insideUsual: Range; partial: boolean; upcoming?: boolean;
   when?: "today" | "tomorrow"; insideWhen?: "today" | "yesterday" };
+/** Inside temperature over one sunrise–sunset day or the following sunset–sunrise night. */
+export type DayNightStats = { avg: number; min: number; max: number };
+/** One farm-local day in the 30-day chart. A period is null when it has under 2 h of inside readings. */
+export type DayNightTrendPoint = { date: string; day: DayNightStats | null; night: DayNightStats | null };
 /** Hens drink far more on hot afternoons; a blocked line matters most then. */
 const DRINKERS = "Birds drink more in the heat: check drinkers are flowing.";
 
@@ -151,12 +166,25 @@ export type DayOutlook = { label: string; dayMax: number | null; nightMin: numbe
   /** Likely inside low for the night after this day, shown only when cold (≤ coldNightC); else null. */
   insideMinLikely: number | null;
   /** Highest daylight rain chance (%), or null without rain data. */
-  rainPct: number | null };
+  rainPct: number | null;
+  /** Daylight condition (sunrise–sunset). Most severe WMO code, or rain/cloud when the code is missing. */
+  wx: WeatherCondition | null;
+  /** Daylight precipitation total, millimetres. */
+  precipMm: number | null;
+  /** Highest daylight wind, km/h. */
+  windKmh: number | null;
+  /** Condition from sunset to the next sunrise. Clear and partly cloudy use the moon. */
+  nightWx: WeatherCondition | null;
+  nightRainPct: number | null;
+  nightPrecipMm: number | null;
+  nightWindKmh: number | null; };
 
 export type VentView = {
   /** `warmC`: the warmest sensor's reading, only when it is at least `warmEndMinC` above the average. */
   insideNow: { tempC: number; rhPct: number | null; feltC: number | null; chillEstC: number | null; co2: number | null; at: number; warmC: number | null } | null;
   outsideNow: number | null;
+  /** Condition for the outside hour used as "now", or null when that temperature is missing. */
+  outsideNowWx: WeatherCondition | null;
   /** Time of the newest inside temperature, even when too old for "now" (so a stale sensor can say how old). */
   insideLastAt: number | null;
   today: PeriodRow | null;     // current or next daylight period
@@ -167,6 +195,11 @@ export type VentView = {
 };
 
 const H = 3_600_000;
+/** Hourly outside kept for the page. Suggestions walk 9 days back and 4 ahead. The 3-day
+ *  forecast also needs the night after the third day, so the ahead window is a week.
+ *  Sunrise/sunset are not trimmed: the 30-day chart needs them. */
+export const OUTSIDE_KEEP_BACK_MS = 10 * 24 * H;
+export const OUTSIDE_KEEP_AHEAD_MS = 7 * 24 * H;
 const r0 = (v: number) => Math.round(v);
 const r1 = (v: number) => Math.round(v * 10) / 10;
 const median = (xs: number[]) => {
@@ -199,6 +232,30 @@ export function periods(sun: SunDay[], from: number, to: number, offsetHours: nu
     out.push({ kind: "night", start: d.sunset, end: next, label: `${weekday(d.sunset, offsetHours)} night` });
   }
   return out.filter((p) => p.end > from && p.start < to);
+}
+
+/** Three daylight periods for the forecast tiles. Today stays while at least 2 h of daylight
+ *  remain; after that the next three calendar days are used. Missing sunrise/sunset days are
+ *  filled at 06:00–18:00 local so a short sun list cannot collapse the row to one tile. */
+export function forecastDayPeriods(sun: SunDay[], now: number, offsetHours: number, count = 3): Period[] {
+  const horizon = now + (count + 4) * 24 * H;
+  let days = periods(sun, now - 36 * H, horizon, offsetHours).filter((p) => p.kind === "day" && p.end > now);
+  if (days[0] && days[0].start <= now && days[0].end - now < 2 * H) days = days.slice(1);
+  const have = new Set(days.map((d) => localDate(d.start, offsetHours)));
+  const todayMid = Date.parse(`${localDate(now, offsetHours)}T00:00:00Z`) - offsetHours * H;
+  const filled = days.slice(0, count);
+  for (let i = 0; filled.length < count && i < count + 4; i++) {
+    const mid = todayMid + i * 24 * H;
+    const date = localDate(mid, offsetHours);
+    if (have.has(date)) continue;
+    const start = mid + 6 * H;
+    const end = mid + 18 * H;
+    if (end <= now || (start <= now && end - now < 2 * H)) continue;
+    filled.push({ kind: "day", start, end, label: weekday(start, offsetHours) });
+    have.add(date);
+  }
+  filled.sort((a, b) => a.start - b.start);
+  return filled.slice(0, count);
 }
 
 function rangeOf(vals: number[]): Range {
@@ -377,11 +434,12 @@ export function buildVentilation(input: VentInput): VentView {
   const windNote = (p: Period) => { const g = gainFor(p); return g != null && houseGain != null && Math.abs(g - houseGain) >= 0.5 ? (g > houseGain ? "; calmer than usual forecast, so likely a bit more" : "; windier than usual forecast, so likely a bit less") : ""; };
   const insideMax = (dayMax: number | null, p: Period) => { const g = gainFor(p); return g != null && dayMax != null && dayMax >= t.gainMinOutsideC ? r0(dayMax + g) : null; };
   const outlook: DayOutlook[] = [];
-  for (let i = Math.max(dayIdx, 0); dayIdx >= 0 && i < all.length && outlook.length < 3; i++) {
-    const p = all[i];
-    if (p.kind !== "day") continue;
-    const n = all[i + 1];
-    const dv = outsideIn(hours, p), nv = n ? outsideIn(hours, n) : [];
+  const forecastDays = forecastDayPeriods(input.sun, now, offsetHours);
+  for (let i = 0; i < forecastDays.length; i++) {
+    const p = forecastDays[i];
+    const nightEnd = forecastDays[i + 1]?.start ?? p.start + 24 * H;
+    const nightPeriod: Period = { kind: "night", start: p.end, end: nightEnd, label: "" };
+    const dv = outsideIn(hours, p), nv = outsideIn(hours, nightPeriod);
     const dayMax = dv.length ? r0(Math.max(...dv)) : null;
     const nightMin = nv.length ? r0(Math.min(...nv)) : null;
     // Label by farm-local date: in the evening the next daylight is tomorrow's.
@@ -396,6 +454,9 @@ export function buildVentilation(input: VentInput): VentView {
     const inMax = measured ? r0(Math.max(...soFar)) : insideMax(dv.length ? Math.max(...dv) : null, p);
     const hotSoFar = inside.filter((x) => x.t >= p.start && x.t <= now && x.hotC != null && Number.isFinite(x.hotC)).map((x) => x.hotC as number);
     const warmEndMax = warmEnd == null || inMax == null ? null : measured ? (hotSoFar.length ? r0(Math.max(...hotSoFar)) : null) : r0(inMax + warmEnd);
+    const dayWx = summarizeDayWeather(dayHours, false);
+    const nightHours = hours.filter((h) => h.t >= nightPeriod.start && h.t < nightPeriod.end);
+    const nightSum = summarizeDayWeather(nightHours, true);
     outlook.push({ label: dDate === today0 ? "Today" : dDate === tomorrow0 ? "Tomorrow" : p.label, dayMax, nightMin,
       hot: dayMax != null && dayMax >= t.hotDayC,
       // Cold by the outside forecast or by the house's likely low (same rule as the cold-night prompt).
@@ -403,7 +464,8 @@ export function buildVentilation(input: VentInput): VentView {
       insideMinLikely: nightMin != null && nightOff != null && r0(nightMin + nightOff) <= t.coldNightC ? r0(nightMin + nightOff) : null,
       insideMax: inMax, insideHot: (inMax ?? -Infinity) >= t.insideHotC, insideMeasured: measured,
       warmEndMax: warmEndMax != null && warmEndMax > (inMax ?? Infinity) ? warmEndMax : null,
-      rainPct: (() => { const r = hours.filter((h) => h.t >= p.start && h.t < p.end && h.rainPct != null).map((h) => h.rainPct as number); return r.length ? r0(Math.max(...r)) : null; })() });
+      rainPct: dayWx.rainPct, wx: dayWx.condition, precipMm: dayWx.precipMm, windKmh: dayWx.windKmh,
+      nightWx: nightSum.condition, nightRainPct: nightSum.rainPct, nightPrecipMm: nightSum.precipMm, nightWindKmh: nightSum.windKmh });
   }
 
   // ── Prompts ─────────────────────────────────────────────────────────────────
@@ -551,7 +613,161 @@ export function buildVentilation(input: VentInput): VentView {
 
   const order: Record<Prompt["level"], number> = { act: 0, plan: 1 };
   prompts.sort((a, b) => order[a.level] - order[b.level]);
-  return { insideNow, outsideNow, insideLastAt: last?.t ?? null, today, tonight, outlook, prompts, hasForecast: hours.length > 0 };
+  const covering = all.find((p) => p.start <= now && now < p.end);
+  const hourLocal = ((now / H + offsetHours) % 24 + 24) % 24;
+  const nightNow = covering ? covering.kind === "night" : hourLocal < 6 || hourLocal >= 18;
+  const outsideNowWx = outsideNow != null && nowHour
+    ? describeWeather({ code: nowHour.weatherCode, night: nightNow, rainPct: nowHour.rainPct, precipMm: nowHour.precipMm, cloudPct: nowHour.cloudPct })
+    : null;
+  return { insideNow, outsideNow, outsideNowWx, insideLastAt: last?.t ?? null, today, tonight, outlook, prompts, hasForecast: hours.length > 0 };
+}
+
+const MIN_PERIOD_MS = 2 * H;
+
+/** Average, min and max of inside temperature over one half-open period. Null when the readings span under 2 h. */
+function periodStats(pts: InsidePoint[], start: number, end: number): DayNightStats | null {
+  const rows = pts.filter((x) => x.t >= start && x.t < end && x.tempC != null);
+  if (rows.length < 2 || rows[rows.length - 1].t - rows[0].t < MIN_PERIOD_MS) return null;
+  let min = Infinity, max = -Infinity, sum = 0;
+  for (const x of rows) {
+    const v = x.tempC as number;
+    if (v < min) min = v;
+    if (v > max) max = v;
+    sum += v;
+  }
+  return { avg: r1(sum / rows.length), min: r1(min), max: r1(max) };
+}
+
+/**
+ * Last `dayCount` farm-local days (ending today), oldest first.
+ * Day = sunrise–sunset, night = sunset–next sunrise. Missing sun times use 06:00–18:00 local,
+ * the same fallback as `periods`. A period with under 2 h of inside readings is null.
+ */
+export function insideDayNightTrend(inside: InsidePoint[], sun: SunDay[], now: number, offsetHours: number, dayCount = 30): DayNightTrendPoint[] {
+  const pts = inside
+    .filter((x) => x.tempC != null && x.tempC > -20 && x.tempC < 60 && x.t <= now && Number.isFinite(x.t))
+    .sort((a, b) => a.t - b.t);
+  const byDate = new Map<string, SunDay>();
+  for (const d of sun) {
+    if (Number.isFinite(d.sunrise) && Number.isFinite(d.sunset) && d.sunset > d.sunrise) byDate.set(localDate(d.sunrise, offsetHours), d);
+  }
+  const todayMid = Date.parse(`${localDate(now, offsetHours)}T00:00:00Z`) - offsetHours * H;
+  const out: DayNightTrendPoint[] = [];
+  for (let i = dayCount - 1; i >= 0; i--) {
+    const mid = todayMid - i * 24 * H;
+    const date = localDate(mid, offsetHours);
+    const known = byDate.get(date);
+    const sunrise = known ? known.sunrise : mid + 6 * H;
+    const sunset = known ? known.sunset : mid + 18 * H;
+    const nextMid = mid + 24 * H;
+    const next = byDate.get(localDate(nextMid, offsetHours));
+    const nextSunrise = next ? next.sunrise : nextMid + 6 * H;
+    out.push({ date, day: periodStats(pts, sunrise, sunset), night: periodStats(pts, sunset, nextSunrise) });
+  }
+  return out;
+}
+
+/** Newest plausible inside temperature (°C). Ignores the 8-day suggestion trim, so a reading
+ *  9–30 days old still dates the stale banner. */
+export function latestInsideAt(inside: InsidePoint[]): number | null {
+  let last: number | null = null;
+  for (const x of inside) {
+    if (x.tempC == null || !(x.tempC > -20 && x.tempC < 60) || !Number.isFinite(x.t)) continue;
+    if (last == null || x.t > last) last = x.t;
+  }
+  return last;
+}
+
+/** Drop hourly outside the page does not read. Sun times are left to the caller. */
+export function outsideForPage(hours: OutsideHour[], now: number): OutsideHour[] {
+  const from = now - OUTSIDE_KEEP_BACK_MS, to = now + OUTSIDE_KEEP_AHEAD_MS;
+  return hours.filter((h) => h.t >= from && h.t <= to);
+}
+
+// Display bands only. Suggestion thresholds (stormRainPct and the rest) are unchanged.
+const WMO: Record<number, { icon: WeatherIconName; nightIcon?: WeatherIconName; label: string; rank: number }> = {
+  0: { icon: "sun", nightIcon: "moon", label: "Clear", rank: 0 },
+  1: { icon: "sun", nightIcon: "moon", label: "Mainly clear", rank: 1 },
+  2: { icon: "partly", nightIcon: "partly-night", label: "Partly cloudy", rank: 2 },
+  3: { icon: "cloud", label: "Overcast", rank: 3 },
+  45: { icon: "fog", label: "Fog", rank: 4 },
+  48: { icon: "fog", label: "Fog", rank: 4 },
+  51: { icon: "rain", label: "Light rain", rank: 5 },
+  53: { icon: "rain", label: "Light rain", rank: 5 },
+  56: { icon: "rain", label: "Light freezing rain", rank: 5 },
+  61: { icon: "rain", label: "Light rain", rank: 5 },
+  80: { icon: "rain", label: "Light rain", rank: 5 },
+  71: { icon: "snow", label: "Light snow", rank: 5 },
+  77: { icon: "snow", label: "Light snow", rank: 5 },
+  85: { icon: "snow", label: "Light snow", rank: 5 },
+  55: { icon: "heavy-rain", label: "Rain", rank: 6 },
+  63: { icon: "heavy-rain", label: "Rain", rank: 6 },
+  73: { icon: "snow", label: "Snow", rank: 6 },
+  81: { icon: "heavy-rain", label: "Rain", rank: 6 },
+  57: { icon: "heavy-rain", label: "Freezing rain", rank: 7 },
+  66: { icon: "heavy-rain", label: "Freezing rain", rank: 7 },
+  65: { icon: "heavy-rain", label: "Heavy rain", rank: 8 },
+  67: { icon: "heavy-rain", label: "Heavy freezing rain", rank: 8 },
+  75: { icon: "snow", label: "Heavy snow", rank: 8 },
+  82: { icon: "heavy-rain", label: "Heavy rain", rank: 8 },
+  86: { icon: "snow", label: "Heavy snow", rank: 8 },
+  95: { icon: "thunder", label: "Thunderstorm", rank: 9 },
+  96: { icon: "thunder", label: "Thunderstorm", rank: 9 },
+  97: { icon: "thunder", label: "Thunderstorm", rank: 9 },
+  99: { icon: "thunder", label: "Thunderstorm", rank: 9 },
+};
+
+/** WMO `weather_code` → icon and short label. Null when the code is not one we draw. `night` swaps clear sky for a moon. */
+export function weatherFromCode(code: number, night = false): WeatherCondition | null {
+  const row = WMO[code];
+  if (!row) return null;
+  return { icon: night && row.nightIcon ? row.nightIcon : row.icon, label: row.label };
+}
+
+/** Display-only stand-in when `weather_code` is missing. Not an alert threshold. */
+export function weatherFromProxies(o: { night?: boolean; rainPct?: number | null; precipMm?: number | null; cloudPct?: number | null }): WeatherCondition {
+  const night = !!o.night;
+  const rain = o.rainPct ?? 0;
+  const mm = o.precipMm ?? 0;
+  const cloud = o.cloudPct ?? 0;
+  if (mm >= 10 || rain >= 80) return { icon: "heavy-rain", label: "Heavy rain" };
+  if (mm >= 2 || rain >= 50) return { icon: "heavy-rain", label: "Rain" };
+  if (mm > 0 || rain >= 30) return { icon: "rain", label: "Light rain" };
+  if (cloud >= 80) return { icon: "cloud", label: "Overcast" };
+  if (cloud >= 40) return { icon: night ? "partly-night" : "partly", label: "Partly cloudy" };
+  return { icon: night ? "moon" : "sun", label: "Clear" };
+}
+
+/** Prefer a known WMO code. Otherwise rain, rainfall and cloud cover. */
+export function describeWeather(o: { code?: number | null; night?: boolean; rainPct?: number | null; precipMm?: number | null; cloudPct?: number | null }): WeatherCondition {
+  if (o.code != null && Number.isFinite(o.code)) {
+    const hit = weatherFromCode(o.code, !!o.night);
+    if (hit) return hit;
+  }
+  return weatherFromProxies(o);
+}
+
+/** Most severe code, total rain (mm), highest rain chance and strongest wind (km/h).
+ *  `night` uses the moon for clear and partly cloudy. */
+export function summarizeDayWeather(hours: OutsideHour[], night = false): { condition: WeatherCondition | null; precipMm: number | null; windKmh: number | null; rainPct: number | null } {
+  if (!hours.length) return { condition: null, precipMm: null, windKmh: null, rainPct: null };
+  const codes = hours.map((h) => h.weatherCode).filter((c): c is number => c != null && Number.isFinite(c) && WMO[c] != null);
+  const precips = hours.map((h) => h.precipMm).filter((v): v is number => v != null && Number.isFinite(v));
+  const winds = hours.map((h) => h.windKmh).filter((v): v is number => v != null && Number.isFinite(v));
+  const clouds = hours.map((h) => h.cloudPct).filter((v): v is number => v != null && Number.isFinite(v));
+  const rains = hours.map((h) => h.rainPct).filter((v): v is number => v != null && Number.isFinite(v));
+  const best = codes.reduce<number | null>((top, c) => (top == null || WMO[c].rank > WMO[top].rank ? c : top), null);
+  const rainPct = rains.length ? Math.max(...rains) : null;
+  const precipMm = precips.length ? precips.reduce((a, b) => a + b, 0) : null;
+  const condition = best != null
+    ? weatherFromCode(best, night)
+    : weatherFromProxies({ rainPct, precipMm, cloudPct: clouds.length ? clouds.reduce((a, b) => a + b, 0) / clouds.length : null, night });
+  return {
+    condition,
+    precipMm: precipMm != null ? r1(precipMm) : null,
+    windKmh: winds.length ? r0(Math.max(...winds)) : null,
+    rainPct: rainPct != null ? r0(rainPct) : null,
+  };
 }
 
 /** Parse an Open-Meteo `/v1/forecast` response requested with `timeformat=unixtime`. */
@@ -564,7 +780,11 @@ export function parseOpenMeteo(j: unknown): { outside: OutsideHour[]; sun: SunDa
   h.time.forEach((tt, i) => {
     const ts = num(tt), temp = num(h.temperature_2m[i]);
     if (ts == null || temp == null) return;
-    outside.push({ t: ts * 1000, tempC: temp, rhPct: num(h.relative_humidity_2m?.[i]), rainPct: num(h.precipitation_probability?.[i]), windKmh: num(h.wind_speed_10m?.[i]), gustKmh: num(h.wind_gusts_10m?.[i]) });
+    outside.push({
+      t: ts * 1000, tempC: temp, rhPct: num(h.relative_humidity_2m?.[i]), rainPct: num(h.precipitation_probability?.[i]),
+      windKmh: num(h.wind_speed_10m?.[i]), gustKmh: num(h.wind_gusts_10m?.[i]),
+      weatherCode: num(h.weather_code?.[i]), precipMm: num(h.precipitation?.[i]), cloudPct: num(h.cloud_cover?.[i]),
+    });
   });
   const d = o?.daily;
   const sun: SunDay[] = [];
